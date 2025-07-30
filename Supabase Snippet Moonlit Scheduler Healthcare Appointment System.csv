@@ -1,0 +1,101 @@
+table_name,column_name,data_type,is_nullable,column_default
+appointments,id,uuid,NO,gen_random_uuid()
+appointments,provider_id,uuid,NO,null
+appointments,rendering_provider_id,uuid,YES,null
+appointments,service_instance_id,uuid,NO,null
+appointments,payer_id,uuid,YES,null
+appointments,start_time,timestamp with time zone,NO,null
+appointments,end_time,timestamp with time zone,NO,null
+appointments,timezone,text,YES,'America/Denver'::text
+appointments,patient_info,jsonb,NO,null
+appointments,insurance_info,jsonb,NO,null
+appointments,roi_contacts,jsonb,YES,null
+appointments,appointment_type,text,YES,'telehealth'::text
+appointments,status,text,YES,'scheduled'::text
+appointments,athena_appointment_id,text,YES,null
+appointments,booking_source,text,YES,'widget'::text
+appointments,notes,text,YES,null
+appointments,cancellation_reason,text,YES,null
+appointments,created_at,timestamp with time zone,YES,now()
+appointments,updated_at,timestamp with time zone,YES,now()
+booking_leads,id,uuid,NO,gen_random_uuid()
+booking_leads,email,text,NO,null
+booking_leads,phone,text,YES,null
+booking_leads,preferred_name,text,YES,null
+booking_leads,requested_service_id,uuid,YES,null
+booking_leads,requested_payer_id,uuid,YES,null
+booking_leads,insurance_effective_date,date,YES,null
+booking_leads,reason,text,YES,null
+booking_leads,status,text,YES,'pending'::text
+booking_leads,assigned_to_provider_id,uuid,YES,null
+booking_leads,staff_notes,text,YES,null
+booking_leads,follow_up_date,date,YES,null
+booking_leads,created_at,timestamp with time zone,YES,now()
+booking_leads,updated_at,timestamp with time zone,YES,now()
+calendar_week,iso_year,integer,YES,null
+calendar_week,iso_week,integer,YES,null
+calendar_week,week_start,date,NO,null
+calendar_week,week_end,date,YES,null
+cpt_codes,id,uuid,NO,gen_random_uuid()
+cpt_codes,code,text,NO,null
+cpt_codes,description,text,YES,null
+cpt_codes,price,numeric,YES,null
+cpt_codes,units,integer,YES,1
+cpt_codes,pos,text,YES,null
+cpt_codes,is_combo_code,boolean,YES,false
+cpt_codes,created_at,timestamp without time zone,YES,now()
+eligibility_cache,id,uuid,NO,gen_random_uuid()
+eligibility_cache,payer_name,text,NO,null
+eligibility_cache,member_id,text,YES,null
+eligibility_cache,effective_date,date,YES,null
+eligibility_cache,eligible_provider_ids,ARRAY,YES,null
+eligibility_cache,requires_supervision,boolean,YES,null
+eligibility_cache,cache_expires_at,timestamp with time zone,NO,null
+eligibility_cache,created_at,timestamp with time zone,YES,now()
+housing_status,code,text,NO,null
+housing_status,description,text,NO,null
+payer_reimbursement,id,uuid,NO,gen_random_uuid()
+payer_reimbursement,payer_id,uuid,YES,null
+payer_reimbursement,cpt_code_id,uuid,YES,null
+payer_reimbursement,location,text,YES,null
+payer_reimbursement,provider_type,text,YES,null
+payer_reimbursement,amount,numeric,YES,null
+payer_reimbursement,created_at,timestamp without time zone,YES,now()
+payer_reimbursement_rates,id,uuid,NO,gen_random_uuid()
+payer_reimbursement_rates,payer_id,uuid,NO,null
+payer_reimbursement_rates,service_id,uuid,NO,null
+payer_reimbursement_rates,pos_location_code,text,YES,null
+payer_reimbursement_rates,rate,numeric,NO,null
+payer_reimbursement_rates,effective_date,date,YES,CURRENT_DATE
+payer_reimbursement_rates,notes,text,YES,null
+payer_reimbursement_rates,created_at,timestamp with time zone,YES,now()
+payer_reimbursement_rates,updated_at,timestamp with time zone,YES,now()
+payers,id,uuid,NO,gen_random_uuid()
+payers,name,text,YES,null
+payers,payer_type,text,YES,null
+payers,state,text,YES,null
+payers,effective_date,date,YES,null
+payers,requires_attending,boolean,YES,false
+payers,credentialing_status,text,YES,null
+payers,notes,text,YES,null
+payers,created_at,timestamp without time zone,YES,now()
+payers,projected_effective_date,date,YES,null
+pos_location,code,text,NO,null
+pos_location,long_name,text,NO,null
+provider_availability_cache,id,uuid,NO,gen_random_uuid()
+provider_availability_cache,provider_id,uuid,NO,null
+provider_availability_cache,service_instance_id,uuid,NO,null
+provider_availability_cache,date,date,NO,null
+provider_availability_cache,available_slots,jsonb,NO,null
+provider_availability_cache,last_synced_athena,timestamp with time zone,YES,null
+provider_availability_cache,created_at,timestamp with time zone,YES,now()
+provider_licenses,id,uuid,NO,gen_random_uuid()
+provider_licenses,provider_id,uuid,YES,null
+provider_licenses,license_type,text,YES,null
+provider_licenses,license_number,text,YES,null
+provider_licenses,issuing_state,text,YES,null
+provider_licenses,start_date,date,YES,null
+provider_licenses,expiration_date,date,YES,null
+provider_licenses,created_date,timestamp without time zone,YES,now()
+provider_licenses,license_image_url,text,YES,null
+provider_references,id,uuid,NO,gen_random_uuid()
