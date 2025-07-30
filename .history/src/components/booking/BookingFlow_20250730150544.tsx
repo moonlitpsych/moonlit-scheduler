@@ -129,8 +129,8 @@ export default function BookingFlow() {
         goToStep('insurance-info')
     }
 
-    const handleInsuranceInfoSubmitted = (insuranceInfo: InsuranceInfo, patientInfo: PatientInfo) => {
-        updateState({ insuranceInfo, patientInfo })
+    const handleInsuranceInfoSubmitted = (insuranceInfo: InsuranceInfo) => {
+        updateState({ insuranceInfo })
         goToStep('roi')
     }
 
@@ -165,26 +165,9 @@ export default function BookingFlow() {
                 )
 
             case 'insurance-not-accepted':
-                // Safety check for selectedPayer
-                if (!state.selectedPayer) {
-                    console.error('No payer selected for insurance-not-accepted view')
-                    return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
-                        </div>
-                    )
-                }
                 return (
                     <InsuranceNotAcceptedView
-                        selectedPayer={state.selectedPayer}
+                        selectedPayer={state.selectedPayer!}
                         bookingScenario={state.bookingScenario}
                         onLeadSubmitted={handleLeadSubmitted}
                         onBack={() => goToStep('payer-search')}
@@ -192,26 +175,9 @@ export default function BookingFlow() {
                 )
 
             case 'insurance-future':
-                // Safety check for selectedPayer
-                if (!state.selectedPayer) {
-                    console.error('No payer selected for insurance-future view')
-                    return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
-                        </div>
-                    )
-                }
                 return (
                     <InsuranceFutureView
-                        selectedPayer={state.selectedPayer}
+                        selectedPayer={state.selectedPayer!}
                         bookingScenario={state.bookingScenario}
                         onLeadSubmitted={handleLeadSubmitted}
                         onBack={() => goToStep('payer-search')}
@@ -219,26 +185,9 @@ export default function BookingFlow() {
                 )
 
             case 'calendar':
-                // Safety check for selectedPayer
-                if (!state.selectedPayer) {
-                    console.error('No payer selected for calendar view')
-                    return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
-                        </div>
-                    )
-                }
                 return (
                     <CalendarView
-                        selectedPayer={state.selectedPayer}
+                        selectedPayer={state.selectedPayer!}
                         bookingScenario={state.bookingScenario}
                         onTimeSlotSelected={handleTimeSlotSelected}
                         onBack={() => goToStep('payer-search')}
@@ -246,30 +195,10 @@ export default function BookingFlow() {
                 )
 
             case 'insurance-info':
-                // Safety checks for required state
-                if (!state.selectedPayer || !state.selectedTimeSlot) {
-                    console.error('Missing required state for insurance-info view', {
-                        selectedPayer: !!state.selectedPayer,
-                        selectedTimeSlot: !!state.selectedTimeSlot
-                    })
-                    return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
-                        </div>
-                    )
-                }
                 return (
                     <InsuranceInfoView
-                        selectedPayer={state.selectedPayer}
-                        selectedTimeSlot={state.selectedTimeSlot}
+                        selectedPayer={state.selectedPayer!}
+                        selectedTimeSlot={state.selectedTimeSlot!}
                         bookingScenario={state.bookingScenario}
                         caseManagerInfo={state.caseManagerInfo}
                         communicationPreferences={state.communicationPreferences!}
@@ -283,26 +212,9 @@ export default function BookingFlow() {
                 )
 
             case 'roi':
-                // Safety check for patientInfo
-                if (!state.patientInfo) {
-                    console.error('No patient info available for ROI view')
-                    return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
-                        </div>
-                    )
-                }
                 return (
                     <ROIView
-                        patientInfo={state.patientInfo}
+                        patientInfo={state.patientInfo!}
                         bookingScenario={state.bookingScenario}
                         caseManagerInfo={state.caseManagerInfo}
                         onSubmit={handleROISubmitted}

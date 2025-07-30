@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Payer, TimeSlot, InsuranceInfo, PatientInfo } from '@/types/database'
+import { Payer, TimeSlot, InsuranceInfo } from '@/types/database'
 import { BookingScenario } from './WelcomeView'
 import { ArrowLeft, Mail, Phone, Building2, User, CreditCard, Calendar, Clock, AlertCircle, Check } from 'lucide-react'
 
@@ -25,7 +25,7 @@ interface InsuranceInfoViewProps {
     bookingScenario: BookingScenario
     caseManagerInfo?: CaseManagerInfo
     communicationPreferences: CommunicationPreferences
-    onSubmit: (insuranceInfo: InsuranceInfo, patientInfo: PatientInfo) => void
+    onSubmit: (insuranceInfo: InsuranceInfo) => void
     onUpdateCaseManager: (caseManagerInfo: CaseManagerInfo) => void
     onUpdateCommunicationPrefs: (prefs: Partial<CommunicationPreferences>) => void
     onBack: () => void
@@ -85,16 +85,7 @@ export default function InsuranceInfoView({
             effective_date: insuranceInfo.effective_date
         }
 
-        const finalPatientInfo: PatientInfo = {
-            first_name: patientInfo.first_name,
-            last_name: patientInfo.last_name,
-            date_of_birth: patientInfo.date_of_birth,
-            email: patientInfo.email,
-            phone: patientInfo.phone,
-            preferred_name: patientInfo.preferred_name
-        }
-
-        onSubmit(finalInsuranceInfo, finalPatientInfo)
+        onSubmit(finalInsuranceInfo)
     }
 
     const formatTimeSlot = (timeSlot: TimeSlot) => {
@@ -227,16 +218,6 @@ export default function InsuranceInfoView({
                                         placeholder="(555) 123-4567"
                                     />
                                 </div>
-                            </div>
-
-                            {/* Add another case manager button */}
-                            <div className="mt-6 flex justify-start">
-                                <button
-                                    type="button"
-                                    className="px-4 py-2 border-2 border-[#17DB4E]/30 hover:border-[#17DB4E] text-[#17DB4E] hover:bg-[#17DB4E]/5 rounded-lg transition-colors font-['Newsreader'] text-sm"
-                                >
-                                    + Add Another Case Manager
-                                </button>
                             </div>
 
                             {/* Communication preferences for case manager */}
@@ -397,17 +378,8 @@ export default function InsuranceInfoView({
                         </div>
                     </div>
 
-                    {/* Submit and Back Buttons */}
-                    <div className="flex justify-between items-center">
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            className="flex items-center px-6 py-3 text-[#091747]/60 hover:text-[#091747] transition-colors font-['Newsreader']"
-                        >
-                            <ArrowLeft className="w-5 h-5 mr-2" />
-                            Back to calendar
-                        </button>
-
+                    {/* Submit Button */}
+                    <div className="flex justify-end">
                         <button
                             type="submit"
                             className="px-8 py-4 bg-[#BF9C73] hover:bg-[#B8936A] text-white font-semibold rounded-xl transition-all duration-200 hover:shadow-lg font-['Newsreader']"
