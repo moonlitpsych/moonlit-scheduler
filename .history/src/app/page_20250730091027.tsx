@@ -1,3 +1,10 @@
+// src/app/page.tsx
+import BookingFlow from '@/components/booking/BookingFlow'
+
+export default function HomePage() {
+  return <BookingFlow />
+}
+
 // src/app/layout.tsx
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
