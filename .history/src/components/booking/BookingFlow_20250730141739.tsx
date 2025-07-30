@@ -223,33 +223,33 @@ export default function BookingFlow() {
             {/* Progress indicator (optional) */}
             {state.step !== 'welcome' && state.step !== 'confirmation' && (
                 <div className="fixed top-0 left-0 right-0 z-50">
-                    <div className="bg-white/90 backdrop-blur-sm border-b border-[#BF9C73]/20">
+                    <div className="bg-white/80 backdrop-blur-sm border-b border-stone-200">
                         <div className="max-w-4xl mx-auto px-4 py-3">
-                            <div className="flex items-center justify-between text-sm text-[#091747]/70" style={{ fontFamily: 'Newsreader, serif' }}>
+                            <div className="flex items-center justify-between text-sm text-slate-600">
                                 <div className="flex items-center space-x-4">
                                     <span className={`${['payer-search', 'insurance-not-accepted', 'insurance-future'].includes(state.step)
-                                            ? 'text-[#BF9C73] font-medium'
-                                            : 'text-[#091747]/40'
+                                            ? 'text-orange-500 font-medium'
+                                            : 'text-slate-400'
                                         }`}>
                                         1. Insurance
                                     </span>
                                     <span className={`${state.step === 'calendar'
-                                            ? 'text-[#BF9C73] font-medium'
-                                            : state.selectedTimeSlot ? 'text-[#17DB4E]' : 'text-[#091747]/40'
+                                            ? 'text-orange-500 font-medium'
+                                            : state.selectedTimeSlot ? 'text-emerald-500' : 'text-slate-400'
                                         }`}>
                                         2. Schedule
                                     </span>
                                     <span className={`${['insurance-info', 'roi'].includes(state.step)
-                                            ? 'text-[#BF9C73] font-medium'
-                                            : state.insuranceInfo ? 'text-[#17DB4E]' : 'text-[#091747]/40'
+                                            ? 'text-orange-500 font-medium'
+                                            : state.insuranceInfo ? 'text-emerald-500' : 'text-slate-400'
                                         }`}>
                                         3. Details
                                     </span>
                                 </div>
 
                                 {/* Brand */}
-                                <div className="text-[#091747] font-medium">
-                                    Moonlit
+                                <div className="text-slate-800 font-medium">
+                                    Moonlit Psychiatry
                                 </div>
                             </div>
                         </div>

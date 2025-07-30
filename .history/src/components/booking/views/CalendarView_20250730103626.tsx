@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { format, addDays, startOfWeek, startOfMonth, endOfMonth, startOfWeek as getWeekStart, endOfWeek, isToday, isSameDay, isSameMonth } from 'date-fns'
+import { format, addDays, startOfWeek, isToday, isSameDay } from 'date-fns'
 import { ChevronLeft, ChevronRight, Check, Clock } from 'lucide-react'
 import { TimeSlot, Payer } from '@/types/database'
 
@@ -19,8 +19,8 @@ interface ConsolidatedTimeSlot {
     isSelected: boolean
 }
 
-export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance }: CalendarViewProps) {
-    const [currentMonth, setCurrentMonth] = useState(() => new Date())
+export function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance }: CalendarViewProps) {
+    const [currentWeek, setCurrentWeek] = useState(() => startOfWeek(new Date()))
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
     const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([])
@@ -124,30 +124,12 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         }
     }
 
-    const navigateMonth = (direction: 'prev' | 'next') => {
-        setCurrentMonth(prev => {
-            const newMonth = new Date(prev)
-            if (direction === 'next') {
-                newMonth.setMonth(newMonth.getMonth() + 1)
-            } else {
-                newMonth.setMonth(newMonth.getMonth() - 1)
-            }
-            return newMonth
-        })
+    const navigateWeek = (direction: 'prev' | 'next') => {
+        setCurrentWeek(prev => addDays(prev, direction === 'next' ? 7 : -7))
     }
 
-    const getCalendarDays = () => {
-        const start = getWeekStart(startOfMonth(currentMonth))
-        const end = endOfWeek(endOfMonth(currentMonth))
-        const days = []
-        let current = start
-
-        while (current <= end) {
-            days.push(new Date(current))
-            current = addDays(current, 1)
-        }
-
-        return days
+    const getWeekDays = () => {
+        return Array.from({ length: 7 }, (_, i) => addDays(currentWeek, i))
     }
 
     const dayLabels = ['m', 't', 'w', 't', 'f', 's', 's']
@@ -196,20 +178,20 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-8">
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-xl font-medium text-slate-800">
-                                {format(currentMonth, 'MMMM yyyy')}
+                                {format(currentWeek, 'MMMM yyyy')}
                             </h2>
                             <div className="flex space-x-2">
                                 <button
-                                    onClick={() => navigateMonth('prev')}
+                                    onClick={() => navigateWeek('prev')}
                                     className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                                    aria-label="Previous month"
+                                    aria-label="Previous week"
                                 >
                                     <ChevronLeft className="w-5 h-5 text-slate-600" />
                                 </button>
                                 <button
-                                    onClick={() => navigateMonth('next')}
+                                    onClick={() => navigateWeek('next')}
                                     className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                                    aria-label="Next month"
+                                    aria-label="Next week"
                                 >
                                     <ChevronRight className="w-5 h-5 text-slate-600" />
                                 </button>
@@ -227,20 +209,16 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
                         {/* Calendar Grid */}
                         <div className="grid grid-cols-7 gap-2">
-                            {getCalendarDays().map((day, index) => (
+                            {getWeekDays().map((day, index) => (
                                 <button
                                     key={index}
                                     onClick={() => handleDateClick(day)}
                                     disabled={day < new Date().setHours(0, 0, 0, 0)}
                                     className={`
-                                        aspect-square rounded-xl text-sm font-medium transition-all duration-200 flex items-center justify-center
+                                        aspect-square rounded-xl text-sm font-medium transition-all duration-200
                                         ${day < new Date().setHours(0, 0, 0, 0)
                                             ? 'text-slate-300 cursor-not-allowed'
                                             : 'text-slate-700 hover:bg-orange-100 hover:scale-105'
-                                        }
-                                        ${!isSameMonth(day, currentMonth)
-                                            ? 'text-slate-300'
-                                            : ''
                                         }
                                         ${isToday(day)
                                             ? 'bg-blue-500 text-white shadow-md'
@@ -293,7 +271,12 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                                     }
                                                 `}
                                             >
-                                                {slot.displayTime}
+                                                <div className="flex flex-col items-center">
+                                                    <span className="text-base">{slot.displayTime}</span>
+                                                    <span className="text-xs text-slate-500 mt-1">
+                                                        {slot.availableSlots.length} provider{slot.availableSlots.length > 1 ? 's' : ''} available
+                                                    </span>
+                                                </div>
                                             </button>
                                         ))}
                                     </div>

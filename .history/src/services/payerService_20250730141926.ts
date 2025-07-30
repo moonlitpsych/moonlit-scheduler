@@ -22,6 +22,7 @@ export class PayerService {
         }
     }
 
+    // Add this method to your existing PayerService class in src/services/payerService.ts
 
     /**
      * Check payer acceptance status based on effective dates

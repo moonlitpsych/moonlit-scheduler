@@ -57,13 +57,13 @@ export default function InsuranceInfoView({
 
     return (
         <>
-            <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/20 to-[#FEF8F1]" style={{ fontFamily: 'Newsreader, serif' }}>
+            <div className="min-h-screen bg-gradient-to-br from-stone-50 via-orange-50/30 to-stone-100">
                 <div className="max-w-3xl mx-auto py-16 px-4">
                     <div className="text-center mb-12">
-                        <h1 className="text-4xl font-light text-[#091747] mb-6">
+                        <h1 className="text-4xl font-light text-slate-800 mb-6">
                             Please input your information
                         </h1>
-                        <p className="text-lg text-[#091747]/70">
+                        <p className="text-lg text-slate-600">
                             We'll use this information to verify your insurance and create your appointment.
                         </p>
                     </div>
@@ -72,18 +72,17 @@ export default function InsuranceInfoView({
                         <form onSubmit={handleSubmit} className="space-y-6">
                             {/* Insurance Type Field */}
                             <div>
-                                <label className="block text-sm font-medium text-[#091747] mb-3">
+                                <label className="block text-sm font-medium text-slate-700 mb-3">
                                     Type of insurance
                                 </label>
-                                <div className="flex items-center justify-between bg-[#FEF8F1] border-2 border-[#BF9C73]/30 rounded-xl py-4 px-6">
-                                    <span className="text-[#091747] font-medium" style={{ fontFamily: 'Newsreader, serif' }}>
+                                <div className="flex items-center justify-between bg-stone-50 border-2 border-stone-200 rounded-xl py-4 px-6">
+                                    <span className="text-slate-800 font-medium">
                                         {selectedPayer?.name || 'Cash / Self-pay'}
                                     </span>
                                     <button
                                         type="button"
                                         onClick={() => setShowSwitchModal(true)}
-                                        className="text-[#BF9C73] hover:text-[#BF9C73]/80 font-medium underline transition-colors"
-                                        style={{ fontFamily: 'Newsreader, serif' }}
+                                        className="text-blue-500 hover:text-blue-600 font-medium underline transition-colors"
                                     >
                                         Switch insurance
                                     </button>
@@ -93,7 +92,7 @@ export default function InsuranceInfoView({
                             {/* Name Fields */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-[#091747] mb-3">
+                                    <label className="block text-sm font-medium text-slate-700 mb-3">
                                         First Name *
                                     </label>
                                     <input
@@ -102,17 +101,16 @@ export default function InsuranceInfoView({
                                         onChange={(e) => handleChange('firstName', e.target.value)}
                                         required
                                         className="
-                                            w-full bg-[#FEF8F1] border-2 border-[#BF9C73]/30 rounded-xl 
-                                            py-4 px-6 text-[#091747] placeholder-[#091747]/50 
-                                            focus:outline-none focus:border-[#BF9C73] focus:bg-white
+                                            w-full bg-stone-50 border-2 border-stone-200 rounded-xl 
+                                            py-4 px-6 text-slate-800 placeholder-slate-500 
+                                            focus:outline-none focus:border-orange-300 focus:bg-white
                                             transition-all duration-200
                                         "
-                                        style={{ fontFamily: 'Newsreader, serif' }}
                                         placeholder="Enter your first name"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-[#091747] mb-3">
+                                    <label className="block text-sm font-medium text-slate-700 mb-3">
                                         Last Name *
                                     </label>
                                     <input
@@ -121,12 +119,11 @@ export default function InsuranceInfoView({
                                         onChange={(e) => handleChange('lastName', e.target.value)}
                                         required
                                         className="
-                                            w-full bg-[#FEF8F1] border-2 border-[#BF9C73]/30 rounded-xl 
-                                            py-4 px-6 text-[#091747] placeholder-[#091747]/50 
-                                            focus:outline-none focus:border-[#BF9C73] focus:bg-white
+                                            w-full bg-stone-50 border-2 border-stone-200 rounded-xl 
+                                            py-4 px-6 text-slate-800 placeholder-slate-500 
+                                            focus:outline-none focus:border-orange-300 focus:bg-white
                                             transition-all duration-200
                                         "
-                                        style={{ fontFamily: 'Newsreader, serif' }}
                                         placeholder="Enter your last name"
                                     />
                                 </div>
@@ -134,7 +131,7 @@ export default function InsuranceInfoView({
 
                             {/* Date of Birth */}
                             <div>
-                                <label className="block text-sm font-medium text-[#091747] mb-3">
+                                <label className="block text-sm font-medium text-slate-700 mb-3">
                                     Date of Birth *
                                 </label>
                                 <input
@@ -143,18 +140,17 @@ export default function InsuranceInfoView({
                                     onChange={(e) => handleChange('dateOfBirth', e.target.value)}
                                     required
                                     className="
-                                        w-full bg-[#FEF8F1] border-2 border-[#BF9C73]/30 rounded-xl 
-                                        py-4 px-6 text-[#091747] placeholder-[#091747]/50 
-                                        focus:outline-none focus:border-[#BF9C73] focus:bg-white
+                                        w-full bg-stone-50 border-2 border-stone-200 rounded-xl 
+                                        py-4 px-6 text-slate-800 placeholder-slate-500 
+                                        focus:outline-none focus:border-orange-300 focus:bg-white
                                         transition-all duration-200
                                     "
-                                    style={{ fontFamily: 'Newsreader, serif' }}
                                 />
                             </div>
 
                             {/* Email */}
                             <div>
-                                <label className="block text-sm font-medium text-[#091747] mb-3">
+                                <label className="block text-sm font-medium text-slate-700 mb-3">
                                     Email Address *
                                 </label>
                                 <input
@@ -163,19 +159,18 @@ export default function InsuranceInfoView({
                                     onChange={(e) => handleChange('email', e.target.value)}
                                     required
                                     className="
-                                        w-full bg-[#FEF8F1] border-2 border-[#BF9C73]/30 rounded-xl 
-                                        py-4 px-6 text-[#091747] placeholder-[#091747]/50 
-                                        focus:outline-none focus:border-[#BF9C73] focus:bg-white
+                                        w-full bg-stone-50 border-2 border-stone-200 rounded-xl 
+                                        py-4 px-6 text-slate-800 placeholder-slate-500 
+                                        focus:outline-none focus:border-orange-300 focus:bg-white
                                         transition-all duration-200
                                     "
-                                    style={{ fontFamily: 'Newsreader, serif' }}
                                     placeholder="your.email@example.com"
                                 />
                             </div>
 
                             {/* Phone */}
                             <div>
-                                <label className="block text-sm font-medium text-[#091747] mb-3">
+                                <label className="block text-sm font-medium text-slate-700 mb-3">
                                     Phone Number
                                 </label>
                                 <input
@@ -183,12 +178,11 @@ export default function InsuranceInfoView({
                                     value={formData.phone}
                                     onChange={(e) => handleChange('phone', e.target.value)}
                                     className="
-                                        w-full bg-[#FEF8F1] border-2 border-[#BF9C73]/30 rounded-xl 
-                                        py-4 px-6 text-[#091747] placeholder-[#091747]/50 
-                                        focus:outline-none focus:border-[#BF9C73] focus:bg-white
+                                        w-full bg-stone-50 border-2 border-stone-200 rounded-xl 
+                                        py-4 px-6 text-slate-800 placeholder-slate-500 
+                                        focus:outline-none focus:border-orange-300 focus:bg-white
                                         transition-all duration-200
                                     "
-                                    style={{ fontFamily: 'Newsreader, serif' }}
                                     placeholder="(555) 123-4567"
                                 />
                             </div>
@@ -196,7 +190,7 @@ export default function InsuranceInfoView({
                             {/* Insurance Member ID */}
                             {selectedPayer && (
                                 <div>
-                                    <label className="block text-sm font-medium text-[#091747] mb-3">
+                                    <label className="block text-sm font-medium text-slate-700 mb-3">
                                         Insurance Member ID *
                                     </label>
                                     <input
@@ -205,12 +199,11 @@ export default function InsuranceInfoView({
                                         onChange={(e) => handleChange('memberId', e.target.value)}
                                         required
                                         className="
-                                            w-full bg-[#FEF8F1] border-2 border-[#BF9C73]/30 rounded-xl 
-                                            py-4 px-6 text-[#091747] placeholder-[#091747]/50 
-                                            focus:outline-none focus:border-[#BF9C73] focus:bg-white
+                                            w-full bg-stone-50 border-2 border-stone-200 rounded-xl 
+                                            py-4 px-6 text-slate-800 placeholder-slate-500 
+                                            focus:outline-none focus:border-orange-300 focus:bg-white
                                             transition-all duration-200
                                         "
-                                        style={{ fontFamily: 'Newsreader, serif' }}
                                         placeholder="Enter your member ID from your insurance card"
                                     />
                                 </div>
@@ -219,7 +212,7 @@ export default function InsuranceInfoView({
                             {/* Group Number */}
                             {selectedPayer && (
                                 <div>
-                                    <label className="block text-sm font-medium text-[#091747] mb-3">
+                                    <label className="block text-sm font-medium text-slate-700 mb-3">
                                         Group Number
                                     </label>
                                     <input
@@ -227,12 +220,11 @@ export default function InsuranceInfoView({
                                         value={formData.groupNumber}
                                         onChange={(e) => handleChange('groupNumber', e.target.value)}
                                         className="
-                                            w-full bg-[#FEF8F1] border-2 border-[#BF9C73]/30 rounded-xl 
-                                            py-4 px-6 text-[#091747] placeholder-[#091747]/50 
-                                            focus:outline-none focus:border-[#BF9C73] focus:bg-white
+                                            w-full bg-stone-50 border-2 border-stone-200 rounded-xl 
+                                            py-4 px-6 text-slate-800 placeholder-slate-500 
+                                            focus:outline-none focus:border-orange-300 focus:bg-white
                                             transition-all duration-200
                                         "
-                                        style={{ fontFamily: 'Newsreader, serif' }}
                                         placeholder="Enter group number (if applicable)"
                                     />
                                 </div>
@@ -244,12 +236,11 @@ export default function InsuranceInfoView({
                                     type="button"
                                     onClick={onBack}
                                     className="
-                                        border-2 border-[#BF9C73]/50 hover:border-[#BF9C73] 
-                                        text-[#091747] font-medium py-3 px-8 rounded-xl 
+                                        border-2 border-stone-300 hover:border-stone-400 
+                                        text-slate-700 font-medium py-3 px-8 rounded-xl 
                                         transition-all duration-200 hover:shadow-md
-                                        bg-white hover:bg-[#FEF8F1]
+                                        bg-white hover:bg-stone-50
                                     "
-                                    style={{ fontFamily: 'Newsreader, serif' }}
                                 >
                                     ← Back to calendar
                                 </button>
@@ -257,11 +248,10 @@ export default function InsuranceInfoView({
                                 <button
                                     type="submit"
                                     className="
-                                        bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-[#FEF8F1] 
+                                        bg-orange-300 hover:bg-orange-400 text-slate-800 
                                         font-medium py-3 px-8 rounded-xl transition-all duration-200
                                         hover:shadow-lg hover:scale-105
                                     "
-                                    style={{ fontFamily: 'Newsreader, serif' }}
                                 >
                                     Continue to Care Team →
                                 </button>
@@ -276,18 +266,18 @@ export default function InsuranceInfoView({
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 transform animate-in fade-in-0 zoom-in-95 duration-200">
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-xl font-medium text-[#091747]" style={{ fontFamily: 'Newsreader, serif' }}>
+                            <h3 className="text-xl font-medium text-slate-800">
                                 Switch Insurance
                             </h3>
                             <button
                                 onClick={() => setShowSwitchModal(false)}
-                                className="text-[#091747]/50 hover:text-[#091747] transition-colors"
+                                className="text-slate-400 hover:text-slate-600 transition-colors"
                             >
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
 
-                        <p className="text-[#091747]/70 mb-8" style={{ fontFamily: 'Newsreader, serif' }}>
+                        <p className="text-slate-600 mb-8">
                             Would you like to start over with a new insurance search? This will take you back to the beginning of the process.
                         </p>
 
@@ -295,22 +285,20 @@ export default function InsuranceInfoView({
                             <button
                                 onClick={() => setShowSwitchModal(false)}
                                 className="
-                                    flex-1 py-3 px-6 border-2 border-[#BF9C73]/50 hover:border-[#BF9C73] 
-                                    text-[#091747] font-medium rounded-xl transition-all duration-200
-                                    bg-white hover:bg-[#FEF8F1]
+                                    flex-1 py-3 px-6 border-2 border-stone-300 hover:border-stone-400 
+                                    text-slate-700 font-medium rounded-xl transition-all duration-200
+                                    bg-white hover:bg-stone-50
                                 "
-                                style={{ fontFamily: 'Newsreader, serif' }}
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleSwitchInsurance}
                                 className="
-                                    flex-1 py-3 px-6 bg-[#BF9C73] hover:bg-[#BF9C73]/90 
-                                    text-[#FEF8F1] font-medium rounded-xl transition-all duration-200
+                                    flex-1 py-3 px-6 bg-orange-300 hover:bg-orange-400 
+                                    text-slate-800 font-medium rounded-xl transition-all duration-200
                                     hover:shadow-md
                                 "
-                                style={{ fontFamily: 'Newsreader, serif' }}
                             >
                                 Yes, start over
                             </button>
