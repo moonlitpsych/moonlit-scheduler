@@ -1,0 +1,15 @@
+{
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": true
+  },
+  "files.associations": {
+    "*.env.local": "properties"
+  },
+  "editor.rulers": [80, 120],
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/build": true
+  }
+}

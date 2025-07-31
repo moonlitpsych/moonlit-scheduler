@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "athena:test": "jest tests/integration/athena",
+    "athena:sync": "node scripts/athena-sync.js",
+    "athena:validate": "node scripts/validate-athena-config.js",
+    "db:migrate:athena": "node scripts/run-athena-migrations.js",
+    "athena:monitor": "node scripts/monitor-athena-sync.js"
+  }
+}
