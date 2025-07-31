@@ -6,27 +6,41 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "athena:test": "jest tests/integration/athena",
+    "athena:sync": "node scripts/athena-sync.js",
+    "athena:validate": "node scripts/validate-athena-config.js",
+    "db:migrate:athena": "node scripts/run-athena-migrations.js",
+    "athena:monitor": "node scripts/monitor-athena-sync.js"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.53.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/uuid": "^10.0.0",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.1",
+    "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.534.0",
     "next": "15.4.5",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.19.9",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
+    "@types/supertest": "^6.0.3",
     "autoprefixer": "^10.4.21",
     "eslint": "^9",
     "eslint-config-next": "15.4.5",
+    "jest": "^30.0.5",
     "postcss": "^8.5.6",
+    "supertest": "^7.1.4",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
   }
