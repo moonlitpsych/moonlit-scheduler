@@ -90,7 +90,21 @@ export type Database = {
             foreignKeyName: "appointments_provider_id_fkey"
             columns: ["provider_id"]
             isOneToOne: false
+            referencedRelation: "provider_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
             referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_rendering_provider_id_fkey"
+            columns: ["rendering_provider_id"]
+            isOneToOne: false
+            referencedRelation: "provider_profiles"
             referencedColumns: ["id"]
           },
           {
@@ -159,6 +173,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "booking_leads_assigned_to_provider_id_fkey"
+            columns: ["assigned_to_provider_id"]
+            isOneToOne: false
+            referencedRelation: "provider_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "booking_leads_assigned_to_provider_id_fkey"
             columns: ["assigned_to_provider_id"]
@@ -399,6 +420,63 @@ export type Database = {
         }
         Relationships: []
       }
+      provider_availability: {
+        Row: {
+          created_at: string | null
+          day_of_week: number
+          effective_date: string | null
+          end_time: string
+          expiration_date: string | null
+          id: string
+          is_recurring: boolean | null
+          provider_id: string
+          start_time: string
+          timezone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          day_of_week: number
+          effective_date?: string | null
+          end_time: string
+          expiration_date?: string | null
+          id?: string
+          is_recurring?: boolean | null
+          provider_id: string
+          start_time: string
+          timezone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          day_of_week?: number
+          effective_date?: string | null
+          end_time?: string
+          expiration_date?: string | null
+          id?: string
+          is_recurring?: boolean | null
+          provider_id?: string
+          start_time?: string
+          timezone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_availability_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "provider_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_availability_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       provider_availability_cache: {
         Row: {
           available_slots: Json
@@ -432,6 +510,13 @@ export type Database = {
             foreignKeyName: "provider_availability_cache_provider_id_fkey"
             columns: ["provider_id"]
             isOneToOne: false
+            referencedRelation: "provider_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_availability_cache_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
             referencedRelation: "providers"
             referencedColumns: ["id"]
           },
@@ -440,6 +525,54 @@ export type Database = {
             columns: ["service_instance_id"]
             isOneToOne: false
             referencedRelation: "service_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      provider_availability_exceptions: {
+        Row: {
+          created_at: string | null
+          end_time: string | null
+          exception_date: string
+          exception_type: string
+          id: string
+          provider_id: string
+          reason: string | null
+          start_time: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          end_time?: string | null
+          exception_date: string
+          exception_type: string
+          id?: string
+          provider_id: string
+          reason?: string | null
+          start_time?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          end_time?: string | null
+          exception_date?: string
+          exception_type?: string
+          id?: string
+          provider_id?: string
+          reason?: string | null
+          start_time?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_availability_exceptions_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "provider_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_availability_exceptions_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
             referencedColumns: ["id"]
           },
         ]
@@ -479,6 +612,13 @@ export type Database = {
           start_date?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "provider_licenses_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "provider_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "provider_licenses_provider_id_fkey"
             columns: ["provider_id"]
@@ -528,6 +668,13 @@ export type Database = {
             columns: ["payer_id"]
             isOneToOne: false
             referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_payer_networks_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "provider_profiles"
             referencedColumns: ["id"]
           },
           {
@@ -593,6 +740,13 @@ export type Database = {
             foreignKeyName: "provider_references_provider_id_fkey"
             columns: ["provider_id"]
             isOneToOne: false
+            referencedRelation: "provider_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_references_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
             referencedRelation: "providers"
             referencedColumns: ["id"]
           },
@@ -619,6 +773,13 @@ export type Database = {
             foreignKeyName: "provider_services_provider_id_fkey"
             columns: ["provider_id"]
             isOneToOne: false
+            referencedRelation: "provider_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_services_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
             referencedRelation: "providers"
             referencedColumns: ["id"]
           },
@@ -636,6 +797,7 @@ export type Database = {
           accepts_new_patients: boolean | null
           address: string | null
           athena_provider_id: string | null
+          auth_user_id: string | null
           availability: boolean | null
           bank_account_number: string | null
           bank_routing_number: string | null
@@ -649,7 +811,9 @@ export type Database = {
           fax_number: string | null
           first_name: string | null
           id: string
+          is_active: boolean | null
           languages_spoken: string[] | null
+          last_login_at: string | null
           last_name: string | null
           list_on_provider_page: boolean | null
           location_of_birth: string | null
@@ -662,10 +826,12 @@ export type Database = {
           npi: string | null
           personal_booking_url: string | null
           phone_number: string | null
+          profile_completed: boolean | null
           profile_image_url: string | null
           provider_sex: string | null
           residency_org: string | null
           role: string | null
+          role_id: string | null
           telehealth_enabled: boolean | null
           title: string | null
           user_id: string | null
@@ -676,6 +842,7 @@ export type Database = {
           accepts_new_patients?: boolean | null
           address?: string | null
           athena_provider_id?: string | null
+          auth_user_id?: string | null
           availability?: boolean | null
           bank_account_number?: string | null
           bank_routing_number?: string | null
@@ -689,7 +856,9 @@ export type Database = {
           fax_number?: string | null
           first_name?: string | null
           id?: string
+          is_active?: boolean | null
           languages_spoken?: string[] | null
+          last_login_at?: string | null
           last_name?: string | null
           list_on_provider_page?: boolean | null
           location_of_birth?: string | null
@@ -702,10 +871,12 @@ export type Database = {
           npi?: string | null
           personal_booking_url?: string | null
           phone_number?: string | null
+          profile_completed?: boolean | null
           profile_image_url?: string | null
           provider_sex?: string | null
           residency_org?: string | null
           role?: string | null
+          role_id?: string | null
           telehealth_enabled?: boolean | null
           title?: string | null
           user_id?: string | null
@@ -716,6 +887,7 @@ export type Database = {
           accepts_new_patients?: boolean | null
           address?: string | null
           athena_provider_id?: string | null
+          auth_user_id?: string | null
           availability?: boolean | null
           bank_account_number?: string | null
           bank_routing_number?: string | null
@@ -729,7 +901,9 @@ export type Database = {
           fax_number?: string | null
           first_name?: string | null
           id?: string
+          is_active?: boolean | null
           languages_spoken?: string[] | null
+          last_login_at?: string | null
           last_name?: string | null
           list_on_provider_page?: boolean | null
           location_of_birth?: string | null
@@ -742,17 +916,27 @@ export type Database = {
           npi?: string | null
           personal_booking_url?: string | null
           phone_number?: string | null
+          profile_completed?: boolean | null
           profile_image_url?: string | null
           provider_sex?: string | null
           residency_org?: string | null
           role?: string | null
+          role_id?: string | null
           telehealth_enabled?: boolean | null
           title?: string | null
           user_id?: string | null
           utah_id?: string | null
           what_i_look_for_in_a_patient?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "providers_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       referral_partners: {
         Row: {
@@ -819,6 +1003,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      roles: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          permissions: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          permissions?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          permissions?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       scheduler_audit_logs: {
         Row: {
@@ -1158,6 +1369,68 @@ export type Database = {
           status: string | null
         }
         Relationships: []
+      }
+      provider_profiles: {
+        Row: {
+          accepts_new_patients: boolean | null
+          address: string | null
+          athena_provider_id: string | null
+          auth_created_at: string | null
+          auth_email: string | null
+          auth_user_id: string | null
+          availability: boolean | null
+          bank_account_number: string | null
+          bank_routing_number: string | null
+          booking_buffer_minutes: number | null
+          calendar_source_id: string | null
+          caqh_provider_id: string | null
+          created_date: string | null
+          date_of_birth: string | null
+          email: string | null
+          email_custom: string | null
+          fax_number: string | null
+          first_name: string | null
+          id: string | null
+          is_active: boolean | null
+          languages_spoken: string[] | null
+          last_login_at: string | null
+          last_name: string | null
+          last_sign_in_at: string | null
+          list_on_provider_page: boolean | null
+          location_of_birth: string | null
+          malpractice_insurance_expiration: string | null
+          malpractice_insurance_id: string | null
+          max_daily_appointments: number | null
+          med_school_grad_year: number | null
+          med_school_org: string | null
+          modified_date: string | null
+          npi: string | null
+          personal_booking_url: string | null
+          phone_number: string | null
+          profile_completed: boolean | null
+          profile_image_url: string | null
+          provider_sex: string | null
+          residency_org: string | null
+          role: string | null
+          role_description: string | null
+          role_id: string | null
+          role_name: string | null
+          role_permissions: Json | null
+          telehealth_enabled: boolean | null
+          title: string | null
+          user_id: string | null
+          utah_id: string | null
+          what_i_look_for_in_a_patient: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "providers_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_reimbursement_summary: {
         Row: {

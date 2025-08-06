@@ -1,42 +1,34 @@
 // src/components/booking/views/PayerSearchView.tsx
+// COMPLETE REPLACEMENT - Uses Real Supabase Data
+
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Payer } from '@/types/database'
-import { BookingScenario } from './WelcomeView'
-import { Search, Loader2, Calendar, CheckCircle } from 'lucide-react'
+import { payerService, PayerWithStatus } from '@/lib/services/PayerService'
+import { ArrowRight, CheckCircle, Clock, Loader2, Search, XCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
-interface PayerSearchViewProps {
-    onPayerSelected: (payer: Payer, acceptanceStatus: 'not-accepted' | 'future' | 'active') => void
-    bookingScenario: BookingScenario
-}
-
-// Mock payer search function - replace with actual Supabase query
-const searchPayers = async (query: string): Promise<Payer[]> => {
-    // This would be replaced with actual Supabase search
-    const mockPayers: Payer[] = [
-        { id: '1', name: 'Aetna', requires_attending: false, credentialing_status: 'active' },
-        { id: '2', name: 'Blue Cross Blue Shield', requires_attending: false, credentialing_status: 'active' },
-        { id: '3', name: 'Cigna', requires_attending: true, credentialing_status: 'active' },
-        { id: '4', name: 'United Healthcare', requires_attending: false, credentialing_status: 'active' },
-        // This one will trigger the error for testing
-        { id: '5', name: 'Regence BlueCross BlueShield', requires_attending: false, credentialing_status: 'not_accepted' }
-    ]
-
-    return mockPayers.filter(payer =>
-        payer.name.toLowerCase().includes(query.toLowerCase())
-    )
-}
+// Define BookingScenario locally to avoid import issues
+export type BookingScenario = 'self' | 'referral' | 'case-manager'
 
 interface SearchState {
     query: string
-    results: Payer[]
+    results: PayerWithStatus[]
     loading: boolean
     showResults: boolean
-    processingState: 'idle' | 'celebrating' | 'searching' | 'transitioning'
+    processingState: 'idle' | 'celebrating' | 'transitioning'
 }
 
-export default function PayerSearchView({ onPayerSelected, bookingScenario }: PayerSearchViewProps) {
+interface PayerSearchViewProps {
+    bookingScenario: BookingScenario
+    onPayerSelected: (payer: PayerWithStatus, acceptanceStatus: PayerWithStatus['acceptanceStatus']) => void
+    onBack: () => void
+}
+
+export default function PayerSearchView({ 
+    bookingScenario, 
+    onPayerSelected, 
+    onBack 
+}: PayerSearchViewProps) {
     const [state, setState] = useState<SearchState>({
         query: '',
         results: [],
@@ -45,162 +37,150 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario }: Pa
         processingState: 'idle'
     })
 
-    // Get scenario-specific text
-    const getHeading = () => {
-        switch (bookingScenario) {
-            case 'self':
-                return 'What insurance do you have?'
-            case 'referral':
-            case 'case-manager':
-                return 'What insurance does the patient have?'
-            default:
-                return 'What insurance do you have?'
-        }
-    }
+    const searchTimeoutRef = useRef<NodeJS.Timeout>()
+    const inputRef = useRef<HTMLInputElement>(null)
 
-    const getSubheading = () => {
-        switch (bookingScenario) {
-            case 'self':
-                return 'Tell us about your insurance and we\'ll check if we\'re in-network with your plan.'
-            case 'referral':
-            case 'case-manager':
-                return 'Tell us about the patient\'s insurance and we\'ll check if they\'re in-network with their plan.'
-            default:
-                return 'Tell us about your insurance and we\'ll check if we\'re in-network with your plan.'
-        }
-    }
+    // Focus input on mount
+    useEffect(() => {
+        inputRef.current?.focus()
+    }, [])
 
-    const getCashPaymentText = () => {
-        switch (bookingScenario) {
-            case 'self':
-                return 'I plan to pay out of pocket'
-            case 'referral':
-            case 'case-manager':
-                return 'Patient will pay out of pocket'
-            default:
-                return 'I plan to pay out of pocket'
+    // Real Supabase search function - replaces mock data!
+    const performSearch = async (query: string) => {
+        if (!query || query.length < 2) {
+            setState(prev => ({ ...prev, results: [], showResults: false, loading: false }))
+            return
+        }
+
+        setState(prev => ({ ...prev, loading: true }))
+
+        try {
+            // Use real PayerService instead of mock data
+            const results = await payerService.searchPayers(query)
+            
+            setState(prev => ({
+                ...prev,
+                results,
+                loading: false,
+                showResults: results.length > 0
+            }))
+        } catch (error) {
+            console.error('Search error:', error)
+            setState(prev => ({
+                ...prev,
+                results: [],
+                loading: false,
+                showResults: false
+            }))
         }
     }
 
     // Debounced search
-    useEffect(() => {
-        if (state.query.length < 2) {
-            setState(prev => ({ ...prev, results: [], showResults: false }))
-            return
-        }
-
-        const timeoutId = setTimeout(async () => {
-            setState(prev => ({ ...prev, loading: true }))
-            try {
-                const results = await searchPayers(state.query)
-                setState(prev => ({
-                    ...prev,
-                    results,
-                    loading: false,
-                    showResults: true
-                }))
-            } catch (error) {
-                setState(prev => ({
-                    ...prev,
-                    loading: false,
-                    showResults: false
-                }))
-            }
-        }, 300)
-
-        return () => clearTimeout(timeoutId)
-    }, [state.query])
-
-    const handleInputChange = (value: string) => {
+    const handleSearchChange = (value: string) => {
         setState(prev => ({ ...prev, query: value }))
-    }
 
-    const handlePayerSelect = async (payer: Payer) => {
-        // Start celebration animation
-        setState(prev => ({ ...prev, processingState: 'celebrating' }))
-
-        // Determine acceptance status
-        let acceptanceStatus: 'not-accepted' | 'future' | 'active'
-
-        if (payer.credentialing_status === 'not_accepted') {
-            acceptanceStatus = 'not-accepted'
-        } else if (payer.effective_date && new Date(payer.effective_date) > new Date()) {
-            acceptanceStatus = 'future'
-        } else {
-            acceptanceStatus = 'active'
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current)
         }
 
-        // Show celebration for 2 seconds
+        searchTimeoutRef.current = setTimeout(() => {
+            performSearch(value)
+        }, 300)
+    }
+
+    // Handle payer selection with real status
+    const handlePayerClick = (payer: PayerWithStatus) => {
+        setState(prev => ({ ...prev, processingState: 'celebrating' }))
+        
+        // Use the real acceptance status from PayerService
         setTimeout(() => {
-            setState(prev => ({ ...prev, processingState: 'searching' }))
-
-            // Show searching for 2.5 seconds
+            setState(prev => ({ ...prev, processingState: 'transitioning' }))
             setTimeout(() => {
-                setState(prev => ({ ...prev, processingState: 'transitioning' }))
-
-                // Brief transition state, then call the parent
-                setTimeout(() => {
-                    onPayerSelected(payer, acceptanceStatus)
-                }, 500)
-            }, 2500)
-        }, 2000)
+                onPayerSelected(payer, payer.acceptanceStatus)
+            }, 500)
+        }, 1500)
     }
 
+    // Handle cash payment option
     const handleCashPayment = () => {
-        // Handle cash payment selection
-        console.log('Cash payment selected')
+        const cashPayer: PayerWithStatus = {
+            id: 'cash',
+            name: 'Self-Pay / Cash',
+            payer_type: 'Cash',
+            state: null,
+            effective_date: null,
+            requires_attending: false,
+            credentialing_status: 'N/A',
+            notes: null,
+            created_at: null,
+            projected_effective_date: null,
+            requires_individual_contract: false,
+            acceptanceStatus: 'active',
+            statusMessage: 'Self-pay appointment - no insurance needed.'
+        }
+        
+        handlePayerClick(cashPayer)
     }
 
-    // Animation states
+    // Get status icon for payer
+    const getStatusIcon = (payer: PayerWithStatus) => {
+        switch (payer.acceptanceStatus) {
+            case 'active':
+                return <CheckCircle className="w-5 h-5 text-green-500" />
+            case 'future':
+                return <Clock className="w-5 h-5 text-orange-500" />
+            case 'not-accepted':
+                return <XCircle className="w-5 h-5 text-red-500" />
+        }
+    }
+
+    // Get status color for styling
+    const getStatusColor = (payer: PayerWithStatus) => {
+        switch (payer.acceptanceStatus) {
+            case 'active':
+                return 'border-green-200 bg-green-50 hover:bg-green-100'
+            case 'future':
+                return 'border-orange-200 bg-orange-50 hover:bg-orange-100'
+            case 'not-accepted':
+                return 'border-red-200 bg-red-50 hover:bg-red-100'
+        }
+    }
+
+    const getTitle = () => {
+        switch (bookingScenario) {
+            case 'self':
+                return 'What insurance do you have?'
+            case 'referral':
+                return 'What insurance does the patient have?'
+            case 'case-manager':
+                return 'What insurance does your client have?'
+            default:
+                return 'What insurance do you have?'
+        }
+    }
+
+    const getDescription = () => {
+        switch (bookingScenario) {
+            case 'self':
+                return 'Search for your insurance provider to see if we\'re in network and book an appointment.'
+            case 'referral':
+                return 'Search for the patient\'s insurance to check network status and availability.'
+            case 'case-manager':
+                return 'Search for your client\'s insurance to check coverage and schedule their appointment.'
+            default:
+                return 'Search for your insurance provider below.'
+        }
+    }
+
     if (state.processingState === 'celebrating') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center">
-                <div className="max-w-2xl mx-auto text-center px-4">
-                    <div className="bg-white rounded-3xl shadow-xl p-12 transform scale-105">
-                        <div className="w-20 h-20 bg-[#17DB4E] rounded-full flex items-center justify-center mx-auto mb-6">
-                            <CheckCircle className="w-10 h-10 text-white" />
-                        </div>
-                        <h1 className="text-4xl font-light text-[#091747] mb-4 font-['Newsreader']">
-                            Great news!
-                        </h1>
-                        <p className="text-lg text-[#091747]/70 font-['Newsreader']">
-                            {bookingScenario === 'self'
-                                ? 'We accept your insurance!'
-                                : 'We accept the patient\'s insurance!'
-                            }
-                        </p>
+            <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <CheckCircle className="w-12 h-12 text-white" />
                     </div>
-                </div>
-            </div>
-        )
-    }
-
-    if (state.processingState === 'searching') {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center">
-                <div className="max-w-2xl mx-auto text-center px-4">
-                    <div className="bg-white rounded-3xl shadow-xl p-12">
-                        <div className="w-20 h-20 bg-[#BF9C73] rounded-full flex items-center justify-center mx-auto mb-6">
-                            <Loader2 className="w-10 h-10 text-white animate-spin" />
-                        </div>
-                        <h1 className="text-4xl font-light text-[#091747] mb-4 font-['Newsreader']">
-                            Searching for time slots...
-                        </h1>
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-center space-x-2 text-[#091747]/70 font-['Newsreader']">
-                                <div className="w-2 h-2 bg-[#BF9C73] rounded-full animate-pulse"></div>
-                                <span>Finding available providers</span>
-                            </div>
-                            <div className="flex items-center justify-center space-x-2 text-[#091747]/70 font-['Newsreader']">
-                                <div className="w-2 h-2 bg-[#BF9C73] rounded-full animate-pulse delay-150"></div>
-                                <span>Checking availability</span>
-                            </div>
-                            <div className="flex items-center justify-center space-x-2 text-[#091747]/70 font-['Newsreader']">
-                                <div className="w-2 h-2 bg-[#BF9C73] rounded-full animate-pulse delay-300"></div>
-                                <span>Preparing calendar</span>
-                            </div>
-                        </div>
-                    </div>
+                    <h2 className="text-2xl font-semibold text-green-800 mb-2">Great choice!</h2>
+                    <p className="text-green-600">Processing your selection...</p>
                 </div>
             </div>
         )
@@ -208,139 +188,129 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario }: Pa
 
     if (state.processingState === 'transitioning') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center">
-                <div className="max-w-2xl mx-auto text-center px-4">
-                    <div className="bg-white rounded-3xl shadow-xl p-12 transform scale-105">
-                        <div className="w-20 h-20 bg-[#BF9C73] rounded-full flex items-center justify-center mx-auto mb-6">
-                            <Calendar className="w-10 h-10 text-white" />
-                        </div>
-                        <h1 className="text-4xl font-light text-[#091747] mb-4 font-['Newsreader']">
-                            Perfect!
-                        </h1>
-                        <p className="text-lg text-[#091747]/70 font-['Newsreader']">
-                            Here are your available appointment times
-                        </p>
-                    </div>
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+                <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-4" />
+                    <p className="text-blue-600">Loading calendar...</p>
                 </div>
             </div>
         )
     }
 
-    // Main search interface
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1]">
-            <div className="max-w-3xl mx-auto py-16 px-4">
+        <div className="min-h-screen bg-gradient-to-br from-stone-50 via-orange-50/30 to-stone-100" style={{ fontFamily: 'Newsreader, serif' }}>
+            <div className="max-w-4xl mx-auto py-16 px-4">
                 <div className="text-center mb-12">
-                    <h1 className="text-5xl font-light text-[#091747] mb-6 font-['Newsreader']">
-                        {getHeading()}
+                    <h1 className="text-4xl font-light text-slate-800 mb-6">
+                        {getTitle()}
                     </h1>
-                    <p className="text-xl text-[#091747]/70 max-w-2xl mx-auto leading-relaxed font-['Newsreader']">
-                        {getSubheading()}
+                    <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+                        {getDescription()}
                     </p>
                 </div>
 
+                {/* Search Input */}
                 <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
-                    {/* Search Input */}
-                    <div className="relative mb-6">
-                        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                            <Search className={`h-6 w-6 transition-colors ${state.query
-                                ? 'text-[#BF9C73]'
-                                : 'text-[#091747]/40'
-                                }`} />
-                        </div>
+                    <div className="relative">
+                        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
                         <input
+                            ref={inputRef}
                             type="text"
+                            placeholder="Type your insurance provider name..."
                             value={state.query}
-                            onChange={(e) => handleInputChange(e.target.value)}
-                            placeholder="Type insurance name (e.g., Blue Cross, Aetna, Cigna)"
-                            className="
-                                w-full bg-[#FEF8F1] border-2 border-[#BF9C73]/30 rounded-xl 
-                                py-4 pl-16 pr-6 text-lg text-[#091747] placeholder-[#091747]/50 
-                                focus:outline-none focus:border-[#BF9C73] focus:bg-white
-                                transition-all duration-200 font-['Newsreader']
-                            "
-                            autoFocus
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                            className="w-full pl-12 pr-4 py-4 text-lg border-2 border-slate-200 rounded-xl focus:border-orange-300 focus:outline-none transition-colors"
+                            style={{ fontFamily: 'Newsreader, serif' }}
                         />
-
                         {state.loading && (
-                            <div className="absolute inset-y-0 right-0 pr-6 flex items-center">
-                                <Loader2 className="h-5 w-5 text-[#BF9C73] animate-spin" />
-                            </div>
+                            <Loader2 className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 animate-spin text-slate-400" />
                         )}
                     </div>
-
-                    {/* Search Results */}
-                    {state.showResults && (
-                        <div className="space-y-3 mb-6">
-                            {state.results.length > 0 ? (
-                                <>
-                                    <p className="text-sm text-[#091747]/60 px-2 mb-4 font-['Newsreader']">
-                                        Found {state.results.length} matching insurance plan{state.results.length > 1 ? 's' : ''}
-                                    </p>
-                                    {state.results.map((payer) => (
-                                        <button
-                                            key={payer.id}
-                                            onClick={() => handlePayerSelect(payer)}
-                                            className="
-                                                w-full text-left p-4 border-2 border-[#BF9C73]/20 hover:border-[#BF9C73] 
-                                                rounded-xl transition-all duration-200 hover:shadow-md hover:bg-[#FEF8F1]
-                                                font-['Newsreader']
-                                            "
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <div className="font-semibold text-[#091747]">{payer.name}</div>
-                                                    {payer.state && (
-                                                        <div className="text-sm text-[#091747]/60">{payer.state}</div>
-                                                    )}
-                                                </div>
-                                                <div className="text-[#BF9C73]">
-                                                    <Search className="w-5 h-5" />
-                                                </div>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </>
-                            ) : (
-                                <div className="text-center py-8">
-                                    <p className="text-[#091747]/60 font-['Newsreader']">
-                                        No insurance plans found matching "{state.query}"
-                                    </p>
-                                    <p className="text-sm text-[#091747]/40 font-['Newsreader']">
-                                        Try searching with a different name or contact us directly.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Cash Payment Option */}
-                    <div className="relative">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-[#BF9C73]/20" />
-                        </div>
-                        <div className="relative flex justify-center text-sm">
-                            <span className="px-4 bg-white text-[#091747]/50 font-['Newsreader']">or</span>
-                        </div>
-                    </div>
-
-                    <button
-                        onClick={handleCashPayment}
-                        className="
-                            w-full mt-6 py-4 px-6 border-2 border-[#BF9C73]/30 hover:border-[#BF9C73] 
-                            text-[#091747] font-medium rounded-xl transition-all duration-200 
-                            bg-white hover:bg-[#FEF8F1] hover:shadow-md font-['Newsreader']
-                        "
-                    >
-                        {getCashPaymentText()}
-                    </button>
                 </div>
 
-                {/* Help Text */}
-                <div className="text-center">
-                    <p className="text-[#091747]/50 font-['Newsreader']">
-                        Don't see the insurance? <button className="text-[#BF9C73] hover:text-[#B8936A] underline">Contact us</button> and we'll help you out.
-                    </p>
+                {/* Search Results */}
+                {state.showResults && (
+                    <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+                        <h3 className="text-xl font-semibold text-slate-800 mb-6">Search Results</h3>
+                        <div className="space-y-3">
+                            {state.results.map((payer) => (
+                                <button
+                                    key={payer.id}
+                                    onClick={() => handlePayerClick(payer)}
+                                    className={`
+                                        w-full p-4 rounded-xl border-2 text-left transition-all duration-200
+                                        ${getStatusColor(payer)}
+                                        hover:scale-[1.02] hover:shadow-md
+                                    `}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-3">
+                                            {getStatusIcon(payer)}
+                                            <div>
+                                                <h4 className="font-medium text-slate-800">
+                                                    {payer.name}
+                                                </h4>
+                                                <p className="text-sm text-slate-600">
+                                                    {payer.statusMessage}
+                                                </p>
+                                                {payer.payer_type && (
+                                                    <span className="inline-block mt-1 px-2 py-1 bg-slate-100 text-xs text-slate-600 rounded">
+                                                        {payerService.getPayerTypeDescription(payer)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <ArrowRight className="w-5 h-5 text-slate-400" />
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* No Results */}
+                {state.query.length >= 2 && !state.loading && state.results.length === 0 && (
+                    <div className="bg-white rounded-2xl shadow-xl p-8 mb-8 text-center">
+                        <h3 className="text-xl font-semibold text-slate-800 mb-4">No results found</h3>
+                        <p className="text-slate-600 mb-6">
+                            We couldn't find "{state.query}" in our database. You can still book as self-pay 
+                            or submit a request for us to consider this insurance.
+                        </p>
+                        <button
+                            onClick={handleCashPayment}
+                            className="bg-orange-300 hover:bg-orange-400 text-slate-800 font-medium py-3 px-6 rounded-xl transition-colors"
+                        >
+                            Continue as Self-Pay
+                        </button>
+                    </div>
+                )}
+
+                {/* Cash Payment Option */}
+                <div className="bg-white rounded-2xl shadow-xl p-8">
+                    <div className="text-center">
+                        <h3 className="text-xl font-semibold text-slate-800 mb-4">
+                            Don't have insurance or prefer to pay directly?
+                        </h3>
+                        <p className="text-slate-600 mb-6">
+                            You can book a self-pay appointment without insurance verification.
+                        </p>
+                        <button
+                            onClick={handleCashPayment}
+                            className="border-2 border-orange-300 hover:bg-orange-50 text-slate-800 font-medium py-3 px-8 rounded-xl transition-colors"
+                        >
+                            I plan to pay out of pocket
+                        </button>
+                    </div>
+                </div>
+
+                {/* Back Button */}
+                <div className="text-center mt-8">
+                    <button
+                        onClick={onBack}
+                        className="text-slate-600 hover:text-slate-800 underline transition-colors"
+                    >
+                        ← Go back
+                    </button>
                 </div>
             </div>
         </div>

@@ -7,13 +7,16 @@ interface WelcomeViewProps {
     onSelection: (scenario: BookingScenario) => void
 }
 
+console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+console.log('Supabase Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
 export default function WelcomeView({ onSelection }: WelcomeViewProps) {
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
             <div className="max-w-4xl mx-auto py-20">
                 <div className="text-center mb-16">
                     <h1 className="text-5xl font-light text-[#091747] mb-6 font-['Newsreader']">
-                        Welcome! Who are you booking for?
+                        Who will this appointment be for?
                     </h1>
                     <p className="text-xl text-[#091747]/70 max-w-3xl mx-auto leading-relaxed font-['Newsreader']">
                         Please select the option that best describes your situation so we can provide the right support.

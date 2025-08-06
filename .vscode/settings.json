@@ -1,7 +1,7 @@
 {
   "typescript.preferences.includePackageJsonAutoImports": "on",
   "editor.codeActionsOnSave": {
-    "source.organizeImports": true
+    "source.organizeImports": "explicit"
   },
   "files.associations": {
     "*.env.local": "properties"
