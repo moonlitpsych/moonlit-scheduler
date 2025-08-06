@@ -18,7 +18,7 @@ export default function ExceptionManager({
   onRemoveException 
 }: ExceptionManagerProps) {
   const [showAddForm, setShowAddForm] = useState(false)
-  const [loading, setLoading] = useState<string | null>(null) // ID of exception being processed
+  const [loading, setLoading] = useState<string | null>(null)
   const [newException, setNewException] = useState({
     exception_date: '',
     exception_type: 'unavailable' as const,
@@ -34,7 +34,6 @@ export default function ExceptionManager({
       setLoading('adding')
       await onAddException(newException)
       
-      // Reset form
       setNewException({
         exception_date: '',
         exception_type: 'unavailable',
@@ -44,7 +43,6 @@ export default function ExceptionManager({
       })
       setShowAddForm(false)
     } catch (error) {
-      // Error handling is done by parent component
       console.error('Failed to add exception:', error)
     } finally {
       setLoading(null)
@@ -56,7 +54,6 @@ export default function ExceptionManager({
       setLoading(exceptionId)
       await onRemoveException(exceptionId)
     } catch (error) {
-      // Error handling is done by parent component
       console.error('Failed to remove exception:', error)
     } finally {
       setLoading(null)
@@ -85,12 +82,10 @@ export default function ExceptionManager({
     })
   }
 
-  // Sort exceptions by date
   const sortedExceptions = [...exceptions].sort((a, b) => 
     new Date(a.exception_date).getTime() - new Date(b.exception_date).getTime()
   )
 
-  // Group exceptions by past/upcoming
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   
@@ -103,7 +98,6 @@ export default function ExceptionManager({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
@@ -123,13 +117,11 @@ export default function ExceptionManager({
         </button>
       </div>
 
-      {/* Add Exception Form */}
       {showAddForm && (
         <div className="bg-[#F6B398]/10 border border-[#BF9C73]/30 rounded-lg p-6">
           <h4 className="font-medium text-[#091747] mb-4">Add Schedule Exception</h4>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Date */}
             <div>
               <label htmlFor="exception-date" className="block text-sm font-medium text-[#091747] mb-2">
                 Date
@@ -139,12 +131,11 @@ export default function ExceptionManager({
                 type="date"
                 value={newException.exception_date}
                 onChange={(e) => setNewException(prev => ({ ...prev, exception_date: e.target.value }))}
-                min={new Date().toISOString().split('T')[0]} // Can't add exceptions in the past
+                min={new Date().toISOString().split('T')[0]}
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
               />
             </div>
 
-            {/* Exception Type */}
             <div>
               <label htmlFor="exception-type" className="block text-sm font-medium text-[#091747] mb-2">
                 Exception Type
@@ -163,7 +154,6 @@ export default function ExceptionManager({
               </select>
             </div>
 
-            {/* Custom Hours (only show if custom_hours selected) */}
             {newException.exception_type === 'custom_hours' && (
               <>
                 <div>
@@ -194,7 +184,6 @@ export default function ExceptionManager({
               </>
             )}
 
-            {/* Reason */}
             <div className="md:col-span-2">
               <label htmlFor="reason" className="block text-sm font-medium text-[#091747] mb-2">
                 Reason (Optional)
@@ -238,7 +227,6 @@ export default function ExceptionManager({
         </div>
       )}
 
-      {/* Upcoming Exceptions */}
       {upcomingExceptions.length > 0 && (
         <div>
           <h4 className="font-medium text-[#091747] mb-4 flex items-center gap-2">
@@ -304,7 +292,6 @@ export default function ExceptionManager({
         </div>
       )}
 
-      {/* Past Exceptions */}
       {pastExceptions.length > 0 && (
         <div>
           <h4 className="font-medium text-[#091747]/70 mb-4 flex items-center gap-2">
@@ -347,7 +334,6 @@ export default function ExceptionManager({
         </div>
       )}
 
-      {/* Empty State */}
       {exceptions.length === 0 && (
         <div className="text-center py-12">
           <div className="w-16 h-16 bg-[#BF9C73]/10 rounded-full flex items-center justify-center mx-auto mb-4">
