@@ -10,7 +10,7 @@ const supabase = createClient(
 
 // UHIN Configuration
 const UHIN_CONFIG = {
-    endpoint: 'https://ws.uhin.org/webservices/core/soaptype4.asmx/ProcessX12',
+    endpoint: 'https://ws.uhin.org/webservices/core/soaptype4.asmx',
     tradingPartner: 'HT009582-001',
     receiverID: 'HT000004-001',
     username: process.env.UHIN_USERNAME,
@@ -190,14 +190,15 @@ function getCurrentX12Time() {
     return hours + minutes;
 }
 
-// Replace createSOAPEnvelope function with SOAP 1.1:
+// Create SOAP envelope for UHIN - Try Basic Auth instead of WS-Security
 function createSOAPEnvelope(x12Content: string) {
+    // First, try a simpler SOAP envelope without WS-Security
     return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:core="http://ws.uhin.org/webservices/core">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:uhin="http://ws.uhin.org/webservices/core">
     <soap:Body>
-        <core:ProcessX12>
-            <core:x12Input>${Buffer.from(x12Content).toString('base64')}</core:x12Input>
-        </core:ProcessX12>
+        <uhin:ProcessX12>
+            <uhin:x12Input>${Buffer.from(x12Content).toString('base64')}</uhin:x12Input>
+        </uhin:ProcessX12>
     </soap:Body>
 </soap:Envelope>`;
 }
@@ -205,20 +206,15 @@ function createSOAPEnvelope(x12Content: string) {
 // Parse SOAP response to extract X12 271
 function parseSOAPResponse(soapResponse: string): string {
     try {
-        // Try both SOAP 1.1 and 1.2 response formats
-        let match = soapResponse.match(/<ProcessX12Result>(.*?)<\/ProcessX12Result>/s);
-        if (!match || !match[1]) {
-            // Try with namespace prefix
-            match = soapResponse.match(/<.*:ProcessX12Result>(.*?)<\/.*:ProcessX12Result>/s);
-        }
-
+        // Extract base64 content between ProcessX12Result tags
+        const match = soapResponse.match(/<ProcessX12Result>(.*?)<\/ProcessX12Result>/s);
         if (match && match[1]) {
             // Decode base64 to get X12 271 response
             return Buffer.from(match[1], 'base64').toString('utf-8');
         }
 
         // Check for SOAP fault
-        const faultMatch = soapResponse.match(/<.*:Text.*?>(.*?)<\/.*:Text>/s);
+        const faultMatch = soapResponse.match(/<faultstring>(.*?)<\/faultstring>/s);
         if (faultMatch && faultMatch[1]) {
             throw new Error(`SOAP Fault: ${faultMatch[1]}`);
         }
@@ -290,13 +286,13 @@ export async function POST(request: NextRequest) {
                 // Create Basic Auth header
                 const auth = Buffer.from(`${UHIN_CONFIG.username}:${UHIN_CONFIG.password}`).toString('base64');
 
-                // And the fetch call:
+                // Send to UHIN with different auth approaches
                 const response = await fetch(UHIN_CONFIG.endpoint, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'text/xml; charset=utf-8',  // SOAP 1.1
-                        'SOAPAction': 'http://ws.uhin.org/webservices/core/ProcessX12',  // Full URL
-                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'text/xml; charset=utf-8',
+                        'SOAPAction': '"http://ws.uhin.org/webservices/core/ProcessX12"',
+                        'Authorization': `Basic ${auth}`,  // Try Basic Auth
                     },
                     body: soapEnvelope
                 });

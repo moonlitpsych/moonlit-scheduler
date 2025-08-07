@@ -10,7 +10,7 @@ const supabase = createClient(
 
 // UHIN Configuration
 const UHIN_CONFIG = {
-    endpoint: 'https://ws.uhin.org/webservices/core/soaptype4.asmx/ProcessX12',
+    endpoint: 'https://ws.uhin.org/webservices/core/soaptype4.asmx',
     tradingPartner: 'HT009582-001',
     receiverID: 'HT000004-001',
     username: process.env.UHIN_USERNAME,
@@ -190,14 +190,22 @@ function getCurrentX12Time() {
     return hours + minutes;
 }
 
-// Replace createSOAPEnvelope function with SOAP 1.1:
+// Create SOAP envelope for UHIN
 function createSOAPEnvelope(x12Content: string) {
     return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:core="http://ws.uhin.org/webservices/core">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Header>
+        <wsse:Security xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+            <wsse:UsernameToken>
+                <wsse:Username>${UHIN_CONFIG.username}</wsse:Username>
+                <wsse:Password>${UHIN_CONFIG.password}</wsse:Password>
+            </wsse:UsernameToken>
+        </wsse:Security>
+    </soap:Header>
     <soap:Body>
-        <core:ProcessX12>
-            <core:x12Input>${Buffer.from(x12Content).toString('base64')}</core:x12Input>
-        </core:ProcessX12>
+        <ProcessX12 xmlns="http://ws.uhin.org/webservices/core">
+            <x12Input>${Buffer.from(x12Content).toString('base64')}</x12Input>
+        </ProcessX12>
     </soap:Body>
 </soap:Envelope>`;
 }
@@ -205,27 +213,14 @@ function createSOAPEnvelope(x12Content: string) {
 // Parse SOAP response to extract X12 271
 function parseSOAPResponse(soapResponse: string): string {
     try {
-        // Try both SOAP 1.1 and 1.2 response formats
-        let match = soapResponse.match(/<ProcessX12Result>(.*?)<\/ProcessX12Result>/s);
-        if (!match || !match[1]) {
-            // Try with namespace prefix
-            match = soapResponse.match(/<.*:ProcessX12Result>(.*?)<\/.*:ProcessX12Result>/s);
-        }
-
+        // Extract base64 content between ProcessX12Result tags
+        const match = soapResponse.match(/<ProcessX12Result>(.*?)<\/ProcessX12Result>/s);
         if (match && match[1]) {
             // Decode base64 to get X12 271 response
             return Buffer.from(match[1], 'base64').toString('utf-8');
         }
-
-        // Check for SOAP fault
-        const faultMatch = soapResponse.match(/<.*:Text.*?>(.*?)<\/.*:Text>/s);
-        if (faultMatch && faultMatch[1]) {
-            throw new Error(`SOAP Fault: ${faultMatch[1]}`);
-        }
-
         throw new Error('Could not extract X12 response from SOAP envelope');
     } catch (error) {
-        console.error('SOAP Response:', soapResponse);
         console.error('Error parsing SOAP response:', error);
         throw error;
     }
@@ -241,6 +236,17 @@ export async function POST(request: NextRequest) {
         const { first, last, dob, ssn, medicaidId } = body;
 
         console.log(`🔍 Checking Medicaid eligibility for ${first} ${last}`);
+
+        // At the very top of your POST function in route.ts
+        console.log('🔐 Direct ENV Check:', {
+            UHIN_USER_RAW: process.env.UHIN_USERNAME || 'NOT_SET',
+            UHIN_PASS_EXISTS: !!process.env.UHIN_PASSWORD,
+            ALL_ENV_VARS: Object.keys(process.env).filter(k =>
+                k.includes('SUPABASE') ||
+                k.includes('UHIN') ||
+                k.includes('PROVIDER')
+            )
+        });
 
         // Input validation
         if (!first || !last || !dob) {
@@ -278,43 +284,27 @@ export async function POST(request: NextRequest) {
                     medicaidId
                 });
 
-                console.log('📝 X12 270 Request Length:', x12Request.length);
-                console.log('📝 First 200 chars of X12:', x12Request.substring(0, 200));
-
                 // Wrap in SOAP envelope
                 const soapEnvelope = createSOAPEnvelope(x12Request);
 
-                console.log('📦 SOAP Envelope Length:', soapEnvelope.length);
-                console.log('📦 SOAP Auth Method: Basic (via Authorization header)');
-
-                // Create Basic Auth header
-                const auth = Buffer.from(`${UHIN_CONFIG.username}:${UHIN_CONFIG.password}`).toString('base64');
-
-                // And the fetch call:
+                // Send to UHIN
                 const response = await fetch(UHIN_CONFIG.endpoint, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'text/xml; charset=utf-8',  // SOAP 1.1
-                        'SOAPAction': 'http://ws.uhin.org/webservices/core/ProcessX12',  // Full URL
-                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'text/xml; charset=utf-8',
+                        'SOAPAction': 'http://ws.uhin.org/webservices/core/ProcessX12'
                     },
                     body: soapEnvelope
                 });
 
-                console.log('📡 UHIN Response Status:', response.status, response.statusText);
-                console.log('📡 UHIN Response Headers:', Object.fromEntries(response.headers.entries()));
-
-                const responseText = await response.text();
-                console.log('📡 UHIN Response Length:', responseText.length);
-                console.log('📡 First 500 chars of response:', responseText.substring(0, 500));
-
                 if (!response.ok) {
-                    console.error('❌ UHIN Error Response:', responseText);
                     throw new Error(`UHIN API error: ${response.status} ${response.statusText}`);
                 }
 
+                const soapResponse = await response.text();
+
                 // Extract X12 271 from SOAP response
-                const x12Response = parseSOAPResponse(responseText);
+                const x12Response = parseSOAPResponse(soapResponse);
 
                 // Parse X12 271 to get enrollment status and plan
                 const eligibilityData = parseX12_271WithPlan(x12Response);
@@ -340,7 +330,7 @@ export async function POST(request: NextRequest) {
                 };
 
             } catch (uhinError: any) {
-                console.error('UHIN API Error:', uhinError.message);
+                console.error('UHIN API Error:', uhinError);
 
                 // Fall back to simulation mode if UHIN fails
                 console.log('⚠️ UHIN failed, falling back to simulation mode');

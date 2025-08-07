@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moonlit - Test Medicaid Eligibility</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 p-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800 mb-2">🏥 Moonlit Medicaid Eligibility Tester</h1>
+                <p class="text-gray-600">Test real-time eligibility verification via UHIN</p>
+                <div id="mode-indicator" class="mt-2 inline-block px-3 py-1 rounded-full text-sm font-semibold"></div>
+            </div>
+
+            <form id="eligibilityForm" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+                        <input type="text" id="firstName" required
+                            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                        <input type="text" id="lastName" required
+                            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Date of Birth *</label>
+                    <input type="date" id="dob" required
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">SSN (Last 4 digits)</label>
+                    <input type="text" id="ssn" placeholder="1234" maxlength="4" pattern="[0-9]{4}"
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Medicaid ID</label>
+                    <input type="text" id="medicaidId" placeholder="Optional if SSN provided"
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <!-- Test Scenarios Quick Fill -->
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <p class="text-sm font-semibold text-blue-900 mb-2">Quick Test Scenarios:</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="fillTestData('FFS')"
+                            class="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm">
+                            Test FFS (✅ Accepted)
+                        </button>
+                        <button type="button" onclick="fillTestData('SelectHealth')"
+                            class="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm">
+                            Test SelectHealth (❌ Not Accepted)
+                        </button>
+                        <button type="button" onclick="fillTestData('Molina')"
+                            class="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm">
+                            Test Molina (✅ Accepted)
+                        </button>
+                        <button type="button" onclick="fillTestData('NoInsurance')"
+                            class="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm">
+                            Test No Coverage
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" id="submitBtn"
+                    class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 transition-colors">
+                    Check Eligibility
+                </button>
+            </form>
+
+            <!-- Results Section -->
+            <div id="results" class="mt-8 hidden">
+                <div class="border-t pt-6">
+                    <h3 class="text-lg font-semibold mb-4">Results:</h3>
+                    <div id="resultContent"></div>
+                </div>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                <div class="bg-white p-6 rounded-lg">
+                    <div
+                        class="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto">
+                    </div>
+                    <p class="mt-4 text-gray-600">Checking with UHIN...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs Section -->
+        <div class="mt-8 bg-white rounded-lg shadow-lg p-6">
+            <h3 class="text-lg font-semibold mb-4">📋 Test Log:</h3>
+            <div id="testLog" class="space-y-2 text-sm">
+                <p class="text-gray-500">No tests run yet...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let testCount = 0;
+
+        // Check if we're in production or simulation mode
+        async function checkMode() {
+            const indicator = document.getElementById('mode-indicator');
+            // We'll know based on the response if it's simulation or real
+            indicator.textContent = '🔄 Mode will be detected on first check';
+            indicator.className = 'mt-2 inline-block px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 text-gray-700';
+        }
+
+        // Fill test data
+        function fillTestData(scenario) {
+            const firstName = document.getElementById('firstName');
+            const lastName = document.getElementById('lastName');
+            const dob = document.getElementById('dob');
+            const ssn = document.getElementById('ssn');
+            const medicaidId = document.getElementById('medicaidId');
+
+            // Base test data
+            firstName.value = 'Test';
+            lastName.value = scenario;
+            dob.value = '1990-01-01';
+            ssn.value = '1234';
+            medicaidId.value = '';
+
+            // Add note about what we're testing
+            addLog(`📝 Filled test data for ${scenario} scenario`, 'info');
+        }
+
+        // Add to test log
+        function addLog(message, type = 'info') {
+            const log = document.getElementById('testLog');
+            const time = new Date().toLocaleTimeString();
+
+            const colors = {
+                'info': 'text-gray-600',
+                'success': 'text-green-600',
+                'error': 'text-red-600',
+                'warning': 'text-yellow-600'
+            };
+
+            const entry = document.createElement('div');
+            entry.className = `${colors[type]} flex justify-between`;
+            entry.innerHTML = `
+                <span>${message}</span>
+                <span class="text-gray-400">${time}</span>
+            `;
+
+            if (testCount === 0) {
+                log.innerHTML = ''; // Clear initial message
+            }
+
+            log.appendChild(entry);
+            testCount++;
+        }
+
+        // Handle form submission
+        document.getElementById('eligibilityForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = {
+                first: document.getElementById('firstName').value,
+                last: document.getElementById('lastName').value,
+                dob: document.getElementById('dob').value,
+                ssn: document.getElementById('ssn').value,
+                medicaidId: document.getElementById('medicaidId').value
+            };
+
+            // Show loading
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('results').classList.add('hidden');
+
+            addLog(`🔍 Checking eligibility for ${formData.first} ${formData.last}...`, 'info');
+
+            try {
+                const response = await fetch('http://localhost:3000/api/medicaid/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                // Update mode indicator
+                const indicator = document.getElementById('mode-indicator');
+                if (data.simulationMode) {
+                    indicator.textContent = '⚠️ SIMULATION MODE';
+                    indicator.className = 'mt-2 inline-block px-3 py-1 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-700';
+                } else {
+                    indicator.textContent = '✅ LIVE UHIN MODE';
+                    indicator.className = 'mt-2 inline-block px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-700';
+                }
+
+                // Display results
+                displayResults(data);
+
+                // Log result
+                if (data.enrolled) {
+                    if (data.isAccepted) {
+                        addLog(`✅ ENROLLED - ${data.currentPlan} (ACCEPTED)`, 'success');
+                    } else {
+                        addLog(`⚠️ ENROLLED - ${data.currentPlan} (NOT ACCEPTED)`, 'warning');
+                    }
+                } else {
+                    addLog(`❌ NOT ENROLLED - No active coverage`, 'error');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                displayError(error.message || 'Failed to check eligibility');
+                addLog(`❌ Error: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        });
+
+        // Display results
+        function displayResults(data) {
+            const results = document.getElementById('results');
+            const content = document.getElementById('resultContent');
+
+            let html = '';
+
+            if (data.enrolled) {
+                const statusColor = data.isAccepted ? 'green' : 'yellow';
+                const statusIcon = data.isAccepted ? '✅' : '⚠️';
+
+                html = `
+                    <div class="bg-${statusColor}-50 border border-${statusColor}-200 rounded-lg p-4">
+                        <div class="flex items-start">
+                            <span class="text-2xl mr-3">${statusIcon}</span>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-${statusColor}-900">
+                                    ${data.isAccepted ? 'Coverage Accepted!' : 'Coverage Not Accepted'}
+                                </h4>
+                                <p class="mt-1 text-${statusColor}-700">${data.message}</p>
+                                
+                                <div class="mt-3 space-y-1 text-sm">
+                                    <p><strong>Enrolled:</strong> Yes</p>
+                                    <p><strong>Current Plan:</strong> ${data.currentPlan}</p>
+                                    ${data.effectiveDate ? `<p><strong>Effective Date:</strong> ${data.effectiveDate}</p>` : ''}
+                                    ${data.memberInfo?.memberId ? `<p><strong>Member ID:</strong> ${data.memberInfo.memberId}</p>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                html = `
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div class="flex items-start">
+                            <span class="text-2xl mr-3">❌</span>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-red-900">No Active Coverage</h4>
+                                <p class="mt-1 text-red-700">${data.message || 'Patient does not have active Medicaid coverage'}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Add raw response for debugging
+            html += `
+                <details class="mt-4">
+                    <summary class="cursor-pointer text-sm text-gray-600 hover:text-gray-800">
+                        View Raw Response (for debugging)
+                    </summary>
+                    <pre class="mt-2 p-3 bg-gray-100 rounded text-xs overflow-x-auto">
+${JSON.stringify(data, null, 2)}
+                    </pre>
+                </details>
+            `;
+
+            content.innerHTML = html;
+            results.classList.remove('hidden');
+        }
+
+        // Display error
+        function displayError(message) {
+            const results = document.getElementById('results');
+            const content = document.getElementById('resultContent');
+
+            content.innerHTML = `
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div class="flex items-start">
+                        <span class="text-2xl mr-3">⚠️</span>
+                        <div class="flex-1">
+                            <h4 class="font-semibold text-red-900">Error</h4>
+                            <p class="mt-1 text-red-700">${message}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            results.classList.remove('hidden');
+        }
+
+        // Initialize
+        checkMode();
+    </script>
+</body>
+
+</html>

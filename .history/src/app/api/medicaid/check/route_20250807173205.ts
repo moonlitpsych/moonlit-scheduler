@@ -290,12 +290,12 @@ export async function POST(request: NextRequest) {
                 // Create Basic Auth header
                 const auth = Buffer.from(`${UHIN_CONFIG.username}:${UHIN_CONFIG.password}`).toString('base64');
 
-                // And the fetch call:
+                // Send to UHIN with SOAP 1.2 format AND quoted SOAPAction
                 const response = await fetch(UHIN_CONFIG.endpoint, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'text/xml; charset=utf-8',  // SOAP 1.1
-                        'SOAPAction': 'http://ws.uhin.org/webservices/core/ProcessX12',  // Full URL
+                        'Content-Type': 'application/soap+xml; charset=utf-8',
+                        'SOAPAction': '""',
                         'Authorization': `Basic ${auth}`,
                     },
                     body: soapEnvelope

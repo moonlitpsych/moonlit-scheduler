@@ -10,7 +10,7 @@ const supabase = createClient(
 
 // UHIN Configuration
 const UHIN_CONFIG = {
-    endpoint: 'https://ws.uhin.org/webservices/core/soaptype4.asmx/ProcessX12',
+    endpoint: 'https://ws.uhin.org/webservices/core/soaptype4.asmx',
     tradingPartner: 'HT009582-001',
     receiverID: 'HT000004-001',
     username: process.env.UHIN_USERNAME,
@@ -190,16 +190,17 @@ function getCurrentX12Time() {
     return hours + minutes;
 }
 
-// Replace createSOAPEnvelope function with SOAP 1.1:
+// Create SOAP envelope for UHIN - Try Basic Auth instead of WS-Security
 function createSOAPEnvelope(x12Content: string) {
+    // Use SOAP 1.2 format (notice the different namespace)
     return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:core="http://ws.uhin.org/webservices/core">
-    <soap:Body>
+<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope" xmlns:core="http://ws.uhin.org/webservices/core">
+    <soap12:Body>
         <core:ProcessX12>
             <core:x12Input>${Buffer.from(x12Content).toString('base64')}</core:x12Input>
         </core:ProcessX12>
-    </soap:Body>
-</soap:Envelope>`;
+    </soap12:Body>
+</soap12:Envelope>`;
 }
 
 // Parse SOAP response to extract X12 271
@@ -290,12 +291,12 @@ export async function POST(request: NextRequest) {
                 // Create Basic Auth header
                 const auth = Buffer.from(`${UHIN_CONFIG.username}:${UHIN_CONFIG.password}`).toString('base64');
 
-                // And the fetch call:
+                // Send to UHIN with SOAP 1.2 format AND SOAPAction header
                 const response = await fetch(UHIN_CONFIG.endpoint, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'text/xml; charset=utf-8',  // SOAP 1.1
-                        'SOAPAction': 'http://ws.uhin.org/webservices/core/ProcessX12',  // Full URL
+                        'Content-Type': 'application/soap+xml; charset=utf-8',
+                        'SOAPAction': 'http://ws.uhin.org/webservices/core/ProcessX12',  // Full URL, no quotes
                         'Authorization': `Basic ${auth}`,
                     },
                     body: soapEnvelope
