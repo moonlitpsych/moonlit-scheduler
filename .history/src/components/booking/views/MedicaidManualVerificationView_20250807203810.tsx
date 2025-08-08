@@ -92,7 +92,7 @@ export default function MedicaidManualVerificationView({
 
     // Create a new case when patient selects Medicaid
     const createVerificationCase = async () => {
-        if (caseCreated || !payerInfo) return // Prevent duplicate creation
+        if (caseCreated) return // Prevent duplicate creation
 
         setLoading(true)
         try {
@@ -106,9 +106,9 @@ export default function MedicaidManualVerificationView({
                     medicaid_id: patientInfo?.medicaidId
                 },
                 {
-                    payer_id: payerInfo.id,
-                    payer_name: payerInfo.name,
-                    plan_type: payerInfo.planType || 'Unknown'
+                    payer_id: payerInfo?.id || '',
+                    payer_name: payerInfo?.name || 'Utah Medicaid',
+                    plan_type: payerInfo?.planType || 'Unknown'
                 }
             )
 
