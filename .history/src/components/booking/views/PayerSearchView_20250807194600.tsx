@@ -1,99 +1,141 @@
 // src/components/booking/views/PayerSearchView.tsx
 'use client'
 
-import { payerService, PayerWithStatus } from '@/lib/services/PayerService'
-import { AlertCircle, Check, ChevronRight, Clock, CreditCard, Loader2, Search, X } from 'lucide-react'
+import { supabase } from '@/lib/supabase'; // Use the existing singleton!
+import type { Payer } from '@/types/database'
+import { AlertCircle, ChevronRight, CreditCard, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import MedicaidManualVerificationView from './MedicaidManualVerificationView'
 
 interface PayerSearchViewProps {
-    onPayerSelected: (payer: PayerWithStatus | null) => void
+    onPayerSelected: (payer: Payer | null) => void
     onBackToStart?: () => void
 }
 
 // Set this to true to use manual verification mode for Medicaid
+// Change to false when UHIN credentials are working
 const USE_MANUAL_MEDICAID_MODE = true
+
+// Mock payers for development/testing when database is empty
+const MOCK_PAYERS = [
+    { id: '1', name: 'Utah Medicaid', payer_type: 'medicaid', state: 'UT', requires_attending: false },
+    { id: '2', name: 'Blue Cross Blue Shield of Utah', payer_type: 'commercial', state: 'UT', requires_attending: false },
+    { id: '3', name: 'Aetna', payer_type: 'commercial', state: 'UT', requires_attending: false },
+    { id: '4', name: 'United Healthcare', payer_type: 'commercial', state: 'UT', requires_attending: false },
+    { id: '5', name: 'Cigna', payer_type: 'commercial', state: 'UT', requires_attending: false },
+    { id: '6', name: 'SelectHealth', payer_type: 'commercial', state: 'UT', requires_attending: false },
+    { id: '7', name: 'Molina Healthcare', payer_type: 'medicaid_mco', state: 'UT', requires_attending: false },
+    { id: '8', name: 'University of Utah Health Plans', payer_type: 'medicaid_mco', state: 'UT', requires_attending: false },
+    { id: '9', name: 'Optum', payer_type: 'medicaid_mco', state: 'UT', requires_attending: false },
+    { id: '10', name: 'PEHP (Public Employees Health Program)', payer_type: 'commercial', state: 'UT', requires_attending: false }
+]
 
 export default function PayerSearchView({
     onPayerSelected,
     onBackToStart
 }: PayerSearchViewProps) {
     const [searchQuery, setSearchQuery] = useState('')
-    const [searchResults, setSearchResults] = useState<PayerWithStatus[]>([])
+    const [searchResults, setSearchResults] = useState<Payer[]>([])
     const [loading, setLoading] = useState(false)
     const [showMedicaidManual, setShowMedicaidManual] = useState(false)
-    const [selectedPayer, setSelectedPayer] = useState<PayerWithStatus | null>(null)
-    const [acceptedPayers, setAcceptedPayers] = useState<PayerWithStatus[]>([])
+    const [selectedPayer, setSelectedPayer] = useState<Payer | null>(null)
+    const [allPayers, setAllPayers] = useState<Payer[]>([])
+    const [popularPayers, setPopularPayers] = useState<Payer[]>([])
     const [patientInfo, setPatientInfo] = useState<any>({})
-    const [initialLoadComplete, setInitialLoadComplete] = useState(false)
+    const [useMockData, setUseMockData] = useState(false)
 
-    // Load accepted payers on mount for quick selection
+    // Fetch all payers on mount
     useEffect(() => {
-        loadAcceptedPayers()
+        fetchPayers()
     }, [])
 
-    const loadAcceptedPayers = async () => {
-        try {
-            const accepted = await payerService.getAcceptedPayers()
-            setAcceptedPayers(accepted)
-            setInitialLoadComplete(true)
-            console.log(`Loaded ${accepted.length} accepted payers`)
-        } catch (error) {
-            console.error('Error loading accepted payers:', error)
-            setInitialLoadComplete(true)
-        }
-    }
-
-    // Search payers using the service
-    useEffect(() => {
-        const searchTimeout = setTimeout(() => {
-            if (searchQuery.length >= 2) {
-                performSearch(searchQuery)
-            } else if (searchQuery.length === 0) {
-                setSearchResults([])
-            }
-        }, 300) // Debounce for 300ms
-
-        return () => clearTimeout(searchTimeout)
-    }, [searchQuery])
-
-    const performSearch = async (query: string) => {
+    const fetchPayers = async () => {
+        console.log('Fetching payers from Supabase...')
         setLoading(true)
+
         try {
-            const results = await payerService.searchPayers(query)
-            setSearchResults(results)
-            console.log(`Found ${results.length} payers matching "${query}"`)
+            const { data, error } = await supabase
+                .from('payers')
+                .select('*')
+                .order('name')
+
+            if (error) {
+                console.error('Supabase error:', error)
+                throw error
+            }
+
+            if (data && data.length > 0) {
+                console.log(`✅ Loaded ${data.length} payers from database`)
+                setAllPayers(data)
+
+                // Set popular payers - prioritize certain names
+                const popularNames = ['Blue Cross Blue Shield', 'Aetna', 'United Healthcare', 'Utah Medicaid', 'SelectHealth']
+                const popularList = data.filter(p =>
+                    popularNames.some(name => p.name?.toLowerCase().includes(name.toLowerCase()))
+                )
+
+                // If we found popular ones, use them, otherwise just take first 5
+                setPopularPayers(popularList.length > 0 ? popularList.slice(0, 5) : data.slice(0, 5))
+                setUseMockData(false)
+            } else {
+                console.log('⚠️ No payers in database, using mock data')
+                setAllPayers(MOCK_PAYERS as any)
+                setPopularPayers(MOCK_PAYERS.slice(0, 5) as any)
+                setUseMockData(true)
+            }
         } catch (error) {
-            console.error('Search error:', error)
-            setSearchResults([])
+            console.error('❌ Error fetching payers, falling back to mock data:', error)
+            // Use mock data as fallback
+            setAllPayers(MOCK_PAYERS as any)
+            setPopularPayers(MOCK_PAYERS.slice(0, 5) as any)
+            setUseMockData(true)
         } finally {
             setLoading(false)
         }
     }
 
-    const handlePayerSelect = async (payer: PayerWithStatus) => {
-        console.log('Selected payer:', payer.name, '- Status:', payer.acceptanceStatus)
+    // Search functionality - immediate search as user types
+    useEffect(() => {
+        if (searchQuery.length > 0) {
+            performSearch(searchQuery)
+        } else {
+            setSearchResults([])
+        }
+    }, [searchQuery, allPayers])
 
-        // Check if this is Medicaid
-        const isMedicaid = payer.payer_type?.toLowerCase() === 'medicaid' ||
-            payer.name?.toLowerCase().includes('medicaid')
+    const performSearch = (query: string) => {
+        const searchLower = query.toLowerCase()
+
+        const filtered = allPayers.filter(payer => {
+            const payerName = payer.name?.toLowerCase() || ''
+            const payerType = payer.payer_type?.toLowerCase() || ''
+
+            // Search in both name and type fields
+            return payerName.includes(searchLower) || payerType.includes(searchLower)
+        })
+
+        console.log(`Search "${query}": found ${filtered.length} results`)
+        setSearchResults(filtered)
+    }
+
+    const handlePayerSelect = async (payer: Payer) => {
+        console.log('Selected payer:', payer)
+
+        // Check if this is Utah Medicaid or any Medicaid plan
+        const isMedicaid = payer.name?.toLowerCase().includes('medicaid') ||
+            payer.payer_type?.toLowerCase() === 'medicaid' ||
+            payer.payer_type?.toLowerCase() === 'medicaid_mco'
 
         if (isMedicaid && USE_MANUAL_MEDICAID_MODE) {
-            // Use manual verification for Medicaid
+            // Use manual verification mode
             setSelectedPayer(payer)
             setShowMedicaidManual(true)
-        } else if (payer.acceptanceStatus === 'active') {
-            // Active payer - proceed directly
-            onPayerSelected(payer)
-        } else if (payer.acceptanceStatus === 'future') {
-            // Future payer - show waitlist option
-            if (confirm(`${payer.name} will be accepted soon. ${payer.statusMessage}\n\nWould you like to join our waitlist?`)) {
-                // TODO: Implement waitlist capture
-                console.log('Add to waitlist for:', payer.name)
-            }
+        } else if (isMedicaid) {
+            // When UHIN credentials are working, show automatic verification
+            alert('Automatic Medicaid verification will be enabled once UHIN credentials are active')
         } else {
-            // Not accepted - show message
-            alert(`${payer.statusMessage}\n\nPlease choose a different insurance or select self-pay.`)
+            // For non-Medicaid, proceed directly
+            onPayerSelected(payer)
         }
     }
 
@@ -101,19 +143,21 @@ export default function PayerSearchView({
         console.log('Manual Medicaid verification result:', result)
 
         if (result.selfPay) {
+            // User chose self-pay
             onPayerSelected(null)
-        } else if (result.manualOverride && selectedPayer) {
-            // Staff override - enhance payer with verification info
-            const verifiedPayer: PayerWithStatus = {
-                ...selectedPayer,
-                acceptanceStatus: 'active',
-                statusMessage: 'Manually verified by staff',
+        } else if (result.manualOverride) {
+            // Staff override - proceed with booking
+            const enhancedPayer = {
+                ...selectedPayer!,
+                medicaidPlan: result.currentPlan,
                 medicaidVerified: true,
-                medicaidPlan: result.currentPlan
-            } as any
-            onPayerSelected(verifiedPayer)
+                medicaidAccepted: true,
+                manuallyVerified: true
+            }
+            onPayerSelected(enhancedPayer as any)
         }
 
+        // Reset states
         setShowMedicaidManual(false)
         setSelectedPayer(null)
     }
@@ -132,33 +176,7 @@ export default function PayerSearchView({
         )
     }
 
-    // Get status badge color
-    const getStatusBadge = (status: 'active' | 'future' | 'not-accepted') => {
-        switch (status) {
-            case 'active':
-                return (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                        <Check className="h-3 w-3 mr-1" />
-                        Accepted
-                    </span>
-                )
-            case 'future':
-                return (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Coming Soon
-                    </span>
-                )
-            default:
-                return (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                        <X className="h-3 w-3 mr-1" />
-                        Not Accepted
-                    </span>
-                )
-        }
-    }
-
+    // Main search view
     return (
         <div className="max-w-2xl mx-auto">
             <div className="bg-white rounded-lg shadow-lg p-6">
@@ -170,6 +188,11 @@ export default function PayerSearchView({
                     <p className="text-gray-600">
                         We accept many insurance plans and offer self-pay options.
                     </p>
+                    {useMockData && (
+                        <p className="text-xs text-orange-600 mt-1">
+                            (Using sample data - database connection pending)
+                        </p>
+                    )}
                 </div>
 
                 {/* Search Box */}
@@ -186,15 +209,11 @@ export default function PayerSearchView({
                                      focus:ring-2 focus:ring-blue-500 focus:border-transparent
                                      transition-all duration-200"
                         />
-                        {loading && (
-                            <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 
-                                              h-5 w-5 animate-spin text-blue-500" />
-                        )}
                     </div>
                 </div>
 
                 {/* Search Results */}
-                {searchResults.length > 0 && (
+                {searchQuery && searchResults.length > 0 && (
                     <div className="mb-6">
                         <h3 className="text-sm font-semibold text-gray-700 mb-2">
                             Search Results ({searchResults.length})
@@ -204,33 +223,24 @@ export default function PayerSearchView({
                                 <button
                                     key={payer.id}
                                     onClick={() => handlePayerSelect(payer)}
-                                    className={`w-full text-left p-3 border rounded-lg transition-all duration-200 
-                                              ${payer.acceptanceStatus === 'active'
-                                            ? 'border-green-200 hover:bg-green-50 hover:border-green-400'
-                                            : payer.acceptanceStatus === 'future'
-                                                ? 'border-yellow-200 hover:bg-yellow-50 hover:border-yellow-400'
-                                                : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`}
+                                    className="w-full text-left p-3 border border-gray-200 rounded-lg
+                                             hover:bg-gray-50 hover:border-blue-500 transition-all
+                                             duration-200 group"
                                 >
                                     <div className="flex items-center justify-between">
-                                        <div className="flex-1">
+                                        <div>
                                             <p className="font-medium text-gray-800">
                                                 {payer.name}
                                             </p>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                {getStatusBadge(payer.acceptanceStatus)}
-                                                {payer.payer_type && (
-                                                    <span className="text-xs text-gray-500">
-                                                        {payer.payer_type}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {payer.statusMessage && (
-                                                <p className="text-xs text-gray-600 mt-1">
-                                                    {payer.statusMessage}
+                                            {payer.payer_type && (
+                                                <p className="text-xs text-gray-500">
+                                                    Type: {payer.payer_type}
                                                 </p>
                                             )}
                                         </div>
-                                        <ChevronRight className="h-5 w-5 text-gray-400" />
+                                        <ChevronRight className="h-5 w-5 text-gray-400 
+                                                                group-hover:text-blue-500
+                                                                transition-colors" />
                                     </div>
                                 </button>
                             ))}
@@ -239,7 +249,7 @@ export default function PayerSearchView({
                 )}
 
                 {/* No results message */}
-                {searchQuery.length >= 2 && searchResults.length === 0 && !loading && (
+                {searchQuery && searchResults.length === 0 && (
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                         <p className="text-gray-600">
                             No insurance plans found matching "{searchQuery}".
@@ -248,47 +258,34 @@ export default function PayerSearchView({
                     </div>
                 )}
 
-                {/* Currently Accepted Insurance (when not searching) */}
-                {!searchQuery && acceptedPayers.length > 0 && (
+                {/* Popular Insurance Options (when not searching) */}
+                {!searchQuery && popularPayers.length > 0 && (
                     <div className="mb-6">
                         <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                            Currently Accepted Insurance
+                            Popular Insurance Plans
                         </h3>
                         <div className="space-y-2">
-                            {acceptedPayers.slice(0, 5).map((payer) => (
+                            {popularPayers.map((payer) => (
                                 <button
                                     key={payer.id}
                                     onClick={() => handlePayerSelect(payer)}
-                                    className="w-full text-left p-3 border border-green-200 rounded-lg
-                                             hover:bg-green-50 hover:border-green-400 transition-all
+                                    className="w-full text-left p-3 border border-gray-200 rounded-lg
+                                             hover:bg-gray-50 hover:border-blue-500 transition-all
                                              duration-200 group"
                                 >
                                     <div className="flex items-center justify-between">
-                                        <div className="flex-1">
+                                        <div>
                                             <p className="font-medium text-gray-800">
                                                 {payer.name}
                                             </p>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                {getStatusBadge('active')}
-                                                {payer.requires_attending && (
-                                                    <span className="text-xs text-purple-600">
-                                                        Supervised Care
-                                                    </span>
-                                                )}
-                                            </div>
                                         </div>
                                         <ChevronRight className="h-5 w-5 text-gray-400 
-                                                                group-hover:text-green-600
+                                                                group-hover:text-blue-500
                                                                 transition-colors" />
                                     </div>
                                 </button>
                             ))}
                         </div>
-                        {acceptedPayers.length > 5 && (
-                            <p className="text-sm text-gray-500 mt-2 text-center">
-                                + {acceptedPayers.length - 5} more accepted plans (search above)
-                            </p>
-                        )}
                     </div>
                 )}
 

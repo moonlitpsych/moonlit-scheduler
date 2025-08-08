@@ -1,17 +1,25 @@
 // src/components/booking/views/PayerSearchView.tsx
 'use client'
 
-import { payerService, PayerWithStatus } from '@/lib/services/PayerService'
-import { AlertCircle, Check, ChevronRight, Clock, CreditCard, Loader2, Search, X } from 'lucide-react'
+import type { Payer } from '@/types/database'
+import { createClient } from '@supabase/supabase-js'
+import { AlertCircle, ChevronRight, CreditCard, Loader2, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import MedicaidManualVerificationView from './MedicaidManualVerificationView'
 
+// Initialize Supabase client
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 interface PayerSearchViewProps {
-    onPayerSelected: (payer: PayerWithStatus | null) => void
+    onPayerSelected: (payer: Payer | null) => void
     onBackToStart?: () => void
 }
 
-// Set this to true to use manual verification mode for Medicaid
+// Set this to true to use manual verification mode
+// Change to false when UHIN credentials are working
 const USE_MANUAL_MEDICAID_MODE = true
 
 export default function PayerSearchView({
@@ -19,81 +27,95 @@ export default function PayerSearchView({
     onBackToStart
 }: PayerSearchViewProps) {
     const [searchQuery, setSearchQuery] = useState('')
-    const [searchResults, setSearchResults] = useState<PayerWithStatus[]>([])
+    const [searchResults, setSearchResults] = useState<Payer[]>([])
     const [loading, setLoading] = useState(false)
     const [showMedicaidManual, setShowMedicaidManual] = useState(false)
-    const [selectedPayer, setSelectedPayer] = useState<PayerWithStatus | null>(null)
-    const [acceptedPayers, setAcceptedPayers] = useState<PayerWithStatus[]>([])
+    const [showVerificationResult, setShowVerificationResult] = useState(false)
+    const [selectedPayer, setSelectedPayer] = useState<Payer | null>(null)
+    const [allPayers, setAllPayers] = useState<Payer[]>([])
+    const [popularPayers, setPopularPayers] = useState<Payer[]>([])
+    const [medicaidVerificationResult, setMedicaidVerificationResult] = useState<any>(null)
     const [patientInfo, setPatientInfo] = useState<any>({})
-    const [initialLoadComplete, setInitialLoadComplete] = useState(false)
 
-    // Load accepted payers on mount for quick selection
+    // Fetch all payers on mount
     useEffect(() => {
-        loadAcceptedPayers()
+        fetchPayers()
     }, [])
 
-    const loadAcceptedPayers = async () => {
+    const fetchPayers = async () => {
         try {
-            const accepted = await payerService.getAcceptedPayers()
-            setAcceptedPayers(accepted)
-            setInitialLoadComplete(true)
-            console.log(`Loaded ${accepted.length} accepted payers`)
+            const { data, error } = await supabase
+                .from('payers')
+                .select('*')
+                .order('name')
+
+            if (error) throw error
+
+            if (data) {
+                setAllPayers(data)
+                // Set popular payers (first 5 or specific ones)
+                setPopularPayers(data.slice(0, 5))
+            }
         } catch (error) {
-            console.error('Error loading accepted payers:', error)
-            setInitialLoadComplete(true)
+            console.error('Error fetching payers:', error)
+            // Fall back to mock data if database is not available
+            const mockPayers = [
+                { id: '1', name: 'Utah Medicaid', payer_type: 'medicaid', requires_attending: false },
+                { id: '2', name: 'Blue Cross Blue Shield', payer_type: 'commercial', requires_attending: false },
+                { id: '3', name: 'Aetna', payer_type: 'commercial', requires_attending: false },
+                { id: '4', name: 'United Healthcare', payer_type: 'commercial', requires_attending: false },
+                { id: '5', name: 'Cigna', payer_type: 'commercial', requires_attending: false },
+            ]
+            setAllPayers(mockPayers as any)
+            setPopularPayers(mockPayers.slice(0, 3) as any)
         }
     }
 
-    // Search payers using the service
+    // Search functionality with debouncing
     useEffect(() => {
-        const searchTimeout = setTimeout(() => {
-            if (searchQuery.length >= 2) {
+        const delayDebounce = setTimeout(() => {
+            if (searchQuery.length > 1) {
                 performSearch(searchQuery)
             } else if (searchQuery.length === 0) {
                 setSearchResults([])
             }
-        }, 300) // Debounce for 300ms
+        }, 300)
 
-        return () => clearTimeout(searchTimeout)
+        return () => clearTimeout(delayDebounce)
     }, [searchQuery])
 
     const performSearch = async (query: string) => {
         setLoading(true)
         try {
-            const results = await payerService.searchPayers(query)
-            setSearchResults(results)
-            console.log(`Found ${results.length} payers matching "${query}"`)
+            const filtered = allPayers.filter(payer =>
+                payer.name?.toLowerCase().includes(query.toLowerCase())
+            )
+            setSearchResults(filtered)
         } catch (error) {
             console.error('Search error:', error)
-            setSearchResults([])
         } finally {
             setLoading(false)
         }
     }
 
-    const handlePayerSelect = async (payer: PayerWithStatus) => {
-        console.log('Selected payer:', payer.name, '- Status:', payer.acceptanceStatus)
+    const handlePayerSelect = async (payer: Payer) => {
+        console.log('Selected payer:', payer)
 
-        // Check if this is Medicaid
-        const isMedicaid = payer.payer_type?.toLowerCase() === 'medicaid' ||
-            payer.name?.toLowerCase().includes('medicaid')
+        // Check if this is Utah Medicaid or any Medicaid plan
+        const isMedicaid = payer.name?.toLowerCase().includes('medicaid') ||
+            payer.payer_type?.toLowerCase() === 'medicaid'
 
         if (isMedicaid && USE_MANUAL_MEDICAID_MODE) {
-            // Use manual verification for Medicaid
+            // Use manual verification mode
             setSelectedPayer(payer)
             setShowMedicaidManual(true)
-        } else if (payer.acceptanceStatus === 'active') {
-            // Active payer - proceed directly
-            onPayerSelected(payer)
-        } else if (payer.acceptanceStatus === 'future') {
-            // Future payer - show waitlist option
-            if (confirm(`${payer.name} will be accepted soon. ${payer.statusMessage}\n\nWould you like to join our waitlist?`)) {
-                // TODO: Implement waitlist capture
-                console.log('Add to waitlist for:', payer.name)
-            }
+        } else if (isMedicaid) {
+            // Use automatic mode (when UHIN credentials are working)
+            // This would show the original MedicaidChecker component
+            alert('Automatic Medicaid verification will be enabled once UHIN credentials are active')
         } else {
-            // Not accepted - show message
-            alert(`${payer.statusMessage}\n\nPlease choose a different insurance or select self-pay.`)
+            // For non-Medicaid, proceed directly
+            onPayerSelected(payer)
         }
     }
 
@@ -101,19 +123,21 @@ export default function PayerSearchView({
         console.log('Manual Medicaid verification result:', result)
 
         if (result.selfPay) {
+            // User chose self-pay
             onPayerSelected(null)
-        } else if (result.manualOverride && selectedPayer) {
-            // Staff override - enhance payer with verification info
-            const verifiedPayer: PayerWithStatus = {
-                ...selectedPayer,
-                acceptanceStatus: 'active',
-                statusMessage: 'Manually verified by staff',
+        } else if (result.manualOverride) {
+            // Staff override - proceed with booking
+            const enhancedPayer = {
+                ...selectedPayer!,
+                medicaidPlan: result.currentPlan,
                 medicaidVerified: true,
-                medicaidPlan: result.currentPlan
-            } as any
-            onPayerSelected(verifiedPayer)
+                medicaidAccepted: true,
+                manuallyVerified: true
+            }
+            onPayerSelected(enhancedPayer as any)
         }
 
+        // Reset states
         setShowMedicaidManual(false)
         setSelectedPayer(null)
     }
@@ -132,33 +156,7 @@ export default function PayerSearchView({
         )
     }
 
-    // Get status badge color
-    const getStatusBadge = (status: 'active' | 'future' | 'not-accepted') => {
-        switch (status) {
-            case 'active':
-                return (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                        <Check className="h-3 w-3 mr-1" />
-                        Accepted
-                    </span>
-                )
-            case 'future':
-                return (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Coming Soon
-                    </span>
-                )
-            default:
-                return (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                        <X className="h-3 w-3 mr-1" />
-                        Not Accepted
-                    </span>
-                )
-        }
-    }
-
+    // Default search view
     return (
         <div className="max-w-2xl mx-auto">
             <div className="bg-white rounded-lg shadow-lg p-6">
@@ -181,14 +179,14 @@ export default function PayerSearchView({
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search for your insurance (e.g., Aetna, Blue Cross, Medicaid)..."
+                            placeholder="Search for your insurance..."
                             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg 
                                      focus:ring-2 focus:ring-blue-500 focus:border-transparent
                                      transition-all duration-200"
                         />
                         {loading && (
                             <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 
-                                              h-5 w-5 animate-spin text-blue-500" />
+                                             h-5 w-5 animate-spin text-blue-500" />
                         )}
                     </div>
                 </div>
@@ -197,98 +195,66 @@ export default function PayerSearchView({
                 {searchResults.length > 0 && (
                     <div className="mb-6">
                         <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                            Search Results ({searchResults.length})
+                            Search Results
                         </h3>
-                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                        <div className="space-y-2">
                             {searchResults.map((payer) => (
                                 <button
                                     key={payer.id}
                                     onClick={() => handlePayerSelect(payer)}
-                                    className={`w-full text-left p-3 border rounded-lg transition-all duration-200 
-                                              ${payer.acceptanceStatus === 'active'
-                                            ? 'border-green-200 hover:bg-green-50 hover:border-green-400'
-                                            : payer.acceptanceStatus === 'future'
-                                                ? 'border-yellow-200 hover:bg-yellow-50 hover:border-yellow-400'
-                                                : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex-1">
-                                            <p className="font-medium text-gray-800">
-                                                {payer.name}
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                {getStatusBadge(payer.acceptanceStatus)}
-                                                {payer.payer_type && (
-                                                    <span className="text-xs text-gray-500">
-                                                        {payer.payer_type}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {payer.statusMessage && (
-                                                <p className="text-xs text-gray-600 mt-1">
-                                                    {payer.statusMessage}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <ChevronRight className="h-5 w-5 text-gray-400" />
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* No results message */}
-                {searchQuery.length >= 2 && searchResults.length === 0 && !loading && (
-                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                        <p className="text-gray-600">
-                            No insurance plans found matching "{searchQuery}".
-                            Try searching differently or choose self-pay below.
-                        </p>
-                    </div>
-                )}
-
-                {/* Currently Accepted Insurance (when not searching) */}
-                {!searchQuery && acceptedPayers.length > 0 && (
-                    <div className="mb-6">
-                        <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                            Currently Accepted Insurance
-                        </h3>
-                        <div className="space-y-2">
-                            {acceptedPayers.slice(0, 5).map((payer) => (
-                                <button
-                                    key={payer.id}
-                                    onClick={() => handlePayerSelect(payer)}
-                                    className="w-full text-left p-3 border border-green-200 rounded-lg
-                                             hover:bg-green-50 hover:border-green-400 transition-all
+                                    className="w-full text-left p-3 border border-gray-200 rounded-lg
+                                             hover:bg-gray-50 hover:border-blue-500 transition-all
                                              duration-200 group"
                                 >
                                     <div className="flex items-center justify-between">
-                                        <div className="flex-1">
+                                        <div>
                                             <p className="font-medium text-gray-800">
                                                 {payer.name}
                                             </p>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                {getStatusBadge('active')}
-                                                {payer.requires_attending && (
-                                                    <span className="text-xs text-purple-600">
-                                                        Supervised Care
-                                                    </span>
-                                                )}
-                                            </div>
+                                            {payer.payer_type && (
+                                                <p className="text-sm text-gray-500">
+                                                    {payer.payer_type}
+                                                </p>
+                                            )}
                                         </div>
                                         <ChevronRight className="h-5 w-5 text-gray-400 
-                                                                group-hover:text-green-600
+                                                                group-hover:text-blue-500
                                                                 transition-colors" />
                                     </div>
                                 </button>
                             ))}
                         </div>
-                        {acceptedPayers.length > 5 && (
-                            <p className="text-sm text-gray-500 mt-2 text-center">
-                                + {acceptedPayers.length - 5} more accepted plans (search above)
-                            </p>
-                        )}
+                    </div>
+                )}
+
+                {/* Popular Insurance Options (when not searching) */}
+                {!searchQuery && popularPayers.length > 0 && (
+                    <div className="mb-6">
+                        <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                            Popular Insurance Plans
+                        </h3>
+                        <div className="space-y-2">
+                            {popularPayers.map((payer) => (
+                                <button
+                                    key={payer.id}
+                                    onClick={() => handlePayerSelect(payer)}
+                                    className="w-full text-left p-3 border border-gray-200 rounded-lg
+                                             hover:bg-gray-50 hover:border-blue-500 transition-all
+                                             duration-200 group"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-medium text-gray-800">
+                                                {payer.name}
+                                            </p>
+                                        </div>
+                                        <ChevronRight className="h-5 w-5 text-gray-400 
+                                                                group-hover:text-blue-500
+                                                                transition-colors" />
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
 
