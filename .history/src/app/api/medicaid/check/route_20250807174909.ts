@@ -1,8 +1,4 @@
-// Log credentials for debugging (remove in production!)
-console.log('🔐 Debug - Full username:', UHIN_CONFIG.username);
-console.log('🔐 Debug - Password first 3 chars:', UHIN_CONFIG.password?.substring(0, 3) + '...');
-console.log('🔐 Debug - Trading Partner:', UHIN_CONFIG.tradingPartner);
-console.log('🔐 Debug - Receiver ID:', UHIN_CONFIG.receiverID);// src/app/api/medicaid/check/route.ts
+// src/app/api/medicaid/check/route.ts
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -22,13 +18,6 @@ const UHIN_CONFIG = {
     providerNPI: process.env.PROVIDER_NPI || '1275348807',
     providerName: process.env.PROVIDER_NAME || 'MOONLIT_PLLC'
 };
-
-// Debug: Log credential status (not the actual values for security)
-console.log('🔐 Credential Check:');
-console.log('  - Username exists:', !!UHIN_CONFIG.username);
-console.log('  - Password exists:', !!UHIN_CONFIG.password);
-console.log('  - Username length:', UHIN_CONFIG.username?.length || 0);
-console.log('  - Password length:', UHIN_CONFIG.password?.length || 0);
 
 // Accepted Medicaid Plans Configuration
 const ACCEPTED_MEDICAID_PLANS: Record<string, any> = {
@@ -227,27 +216,9 @@ function generatePayloadID() {
     return uuid;
 }
 
-// Helper function to escape XML special characters
-function escapeXML(str: string): string {
-    if (!str) return '';
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-}
-
 // FIXED: Create CORE-compliant SOAP envelope with WS-Security
 function createSOAPEnvelope(x12Content: string, payloadID: string) {
     const timestamp = getISOTimestamp();
-
-    // Don't escape the credentials - send them raw
-    const username = UHIN_CONFIG.username || '';
-    const password = UHIN_CONFIG.password || '';
-
-    console.log('🔒 Using WS-Security with username:', username);
-    console.log('🔑 Password has special chars (#,@):', password.includes('#'), password.includes('@'));
 
     return `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" 
@@ -257,8 +228,8 @@ function createSOAPEnvelope(x12Content: string, payloadID: string) {
                       xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
             <wsse:UsernameToken wsu:Id="UsernameToken-${Date.now()}" 
                                xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
-                <wsse:Username>${username}</wsse:Username>
-                <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${password}</wsse:Password>
+                <wsse:Username>${UHIN_CONFIG.username}</wsse:Username>
+                <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${UHIN_CONFIG.password}</wsse:Password>
             </wsse:UsernameToken>
         </wsse:Security>
     </soap:Header>
@@ -344,24 +315,11 @@ export async function POST(request: NextRequest) {
         // Check if we have UHIN credentials
         const hasCredentials = UHIN_CONFIG.username && UHIN_CONFIG.password;
 
-        // Debug: Log credential status (remove in production!)
-        console.log('🔐 Credential Check:');
-        console.log('  - Username exists:', !!UHIN_CONFIG.username);
-        console.log('  - Password exists:', !!UHIN_CONFIG.password);
-        console.log('  - Username length:', UHIN_CONFIG.username?.length || 0);
-        console.log('  - Password length:', UHIN_CONFIG.password?.length || 0);
-
         let result: any;
 
         if (hasCredentials) {
             // REAL UHIN MODE
             console.log('✅ Using REAL UHIN integration with CORE envelope');
-
-            // Debug credentials (remove in production!)
-            console.log('🔐 Debug - Full username:', UHIN_CONFIG.username);
-            console.log('🔐 Debug - Password first 3 chars:', UHIN_CONFIG.password?.substring(0, 3) + '...');
-            console.log('🔐 Debug - Trading Partner:', UHIN_CONFIG.tradingPartner);
-            console.log('🔐 Debug - Receiver ID:', UHIN_CONFIG.receiverID);
 
             try {
                 // Generate X12 270 request

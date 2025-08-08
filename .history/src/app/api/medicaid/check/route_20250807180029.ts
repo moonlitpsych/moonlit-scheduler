@@ -344,13 +344,6 @@ export async function POST(request: NextRequest) {
         // Check if we have UHIN credentials
         const hasCredentials = UHIN_CONFIG.username && UHIN_CONFIG.password;
 
-        // Debug: Log credential status (remove in production!)
-        console.log('🔐 Credential Check:');
-        console.log('  - Username exists:', !!UHIN_CONFIG.username);
-        console.log('  - Password exists:', !!UHIN_CONFIG.password);
-        console.log('  - Username length:', UHIN_CONFIG.username?.length || 0);
-        console.log('  - Password length:', UHIN_CONFIG.password?.length || 0);
-
         let result: any;
 
         if (hasCredentials) {

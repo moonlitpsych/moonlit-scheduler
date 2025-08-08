@@ -1,8 +1,4 @@
-// Log credentials for debugging (remove in production!)
-console.log('🔐 Debug - Full username:', UHIN_CONFIG.username);
-console.log('🔐 Debug - Password first 3 chars:', UHIN_CONFIG.password?.substring(0, 3) + '...');
-console.log('🔐 Debug - Trading Partner:', UHIN_CONFIG.tradingPartner);
-console.log('🔐 Debug - Receiver ID:', UHIN_CONFIG.receiverID);// src/app/api/medicaid/check/route.ts
+// src/app/api/medicaid/check/route.ts
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -22,13 +18,6 @@ const UHIN_CONFIG = {
     providerNPI: process.env.PROVIDER_NPI || '1275348807',
     providerName: process.env.PROVIDER_NAME || 'MOONLIT_PLLC'
 };
-
-// Debug: Log credential status (not the actual values for security)
-console.log('🔐 Credential Check:');
-console.log('  - Username exists:', !!UHIN_CONFIG.username);
-console.log('  - Password exists:', !!UHIN_CONFIG.password);
-console.log('  - Username length:', UHIN_CONFIG.username?.length || 0);
-console.log('  - Password length:', UHIN_CONFIG.password?.length || 0);
 
 // Accepted Medicaid Plans Configuration
 const ACCEPTED_MEDICAID_PLANS: Record<string, any> = {
@@ -60,8 +49,8 @@ function generateX12_270(params: {
     const formattedDob = dob.replace(/-/g, '');
 
     // Generate unique control numbers
-    const controlNumber = Date.now().toString().slice(-9).padStart(9, '0');
-    const traceNumber = `${controlNumber}-MOONLIT`;  // Unique trace number
+    const controlNumber = Date.now().toString().slice(-9);
+    const traceNumber = `MNL${Date.now().toString().slice(-7)}`;
 
     // Build X12 270 segments - matching UHIN documentation format
     const segments = [
@@ -75,7 +64,6 @@ function generateX12_270(params: {
         `NM1*1P*1*${UHIN_CONFIG.providerName.split('_').join(' ')}*****XX*${UHIN_CONFIG.providerNPI}~`,
         `HL*3*2*22*0~`,
         `TRN*1*${traceNumber}*${UHIN_CONFIG.tradingPartner}~`,
-        `TRN*1*${controlNumber}*9MOONLIT*REALTIME~`,  // Second TRN for REALTIME as per UHIN docs
         `NM1*IL*1*${lastName.toUpperCase()}*${firstName.toUpperCase()}****MI*${medicaidId || ''}~`,
         `DMG*D8*${formattedDob}~`
     ];
@@ -94,7 +82,7 @@ function generateX12_270(params: {
     const segmentCount = segments.length - 2; // Exclude ISA and GS
     segments.push(`SE*${segmentCount}*0001~`);
     segments.push(`GE*1*${controlNumber}~`);
-    segments.push(`IEA*1*${controlNumber.padStart(9, '0')}~`);  // Ensure control number is 9 digits
+    segments.push(`IEA*1*${controlNumber}~`);
 
     return segments.join('');
 }
@@ -216,38 +204,15 @@ function getISOTimestamp() {
     return new Date().toISOString();
 }
 
-// Generate UUID-format payload ID for CORE envelope (36 characters required)
+// Generate payload ID for CORE envelope
 function generatePayloadID() {
-    // Generate a UUID v4 format string
-    const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-    return uuid;
-}
-
-// Helper function to escape XML special characters
-function escapeXML(str: string): string {
-    if (!str) return '';
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
+    return `MOONLIT_UHIN_${Date.now()}`;
 }
 
 // FIXED: Create CORE-compliant SOAP envelope with WS-Security
-function createSOAPEnvelope(x12Content: string, payloadID: string) {
+function createSOAPEnvelope(x12Content: string) {
     const timestamp = getISOTimestamp();
-
-    // Don't escape the credentials - send them raw
-    const username = UHIN_CONFIG.username || '';
-    const password = UHIN_CONFIG.password || '';
-
-    console.log('🔒 Using WS-Security with username:', username);
-    console.log('🔑 Password has special chars (#,@):', password.includes('#'), password.includes('@'));
+    const payloadID = generatePayloadID();
 
     return `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" 
@@ -257,8 +222,8 @@ function createSOAPEnvelope(x12Content: string, payloadID: string) {
                       xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
             <wsse:UsernameToken wsu:Id="UsernameToken-${Date.now()}" 
                                xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
-                <wsse:Username>${username}</wsse:Username>
-                <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${password}</wsse:Password>
+                <wsse:Username>${UHIN_CONFIG.username}</wsse:Username>
+                <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${UHIN_CONFIG.password}</wsse:Password>
             </wsse:UsernameToken>
         </wsse:Security>
     </soap:Header>
@@ -344,24 +309,11 @@ export async function POST(request: NextRequest) {
         // Check if we have UHIN credentials
         const hasCredentials = UHIN_CONFIG.username && UHIN_CONFIG.password;
 
-        // Debug: Log credential status (remove in production!)
-        console.log('🔐 Credential Check:');
-        console.log('  - Username exists:', !!UHIN_CONFIG.username);
-        console.log('  - Password exists:', !!UHIN_CONFIG.password);
-        console.log('  - Username length:', UHIN_CONFIG.username?.length || 0);
-        console.log('  - Password length:', UHIN_CONFIG.password?.length || 0);
-
         let result: any;
 
         if (hasCredentials) {
             // REAL UHIN MODE
             console.log('✅ Using REAL UHIN integration with CORE envelope');
-
-            // Debug credentials (remove in production!)
-            console.log('🔐 Debug - Full username:', UHIN_CONFIG.username);
-            console.log('🔐 Debug - Password first 3 chars:', UHIN_CONFIG.password?.substring(0, 3) + '...');
-            console.log('🔐 Debug - Trading Partner:', UHIN_CONFIG.tradingPartner);
-            console.log('🔐 Debug - Receiver ID:', UHIN_CONFIG.receiverID);
 
             try {
                 // Generate X12 270 request
@@ -376,12 +328,8 @@ export async function POST(request: NextRequest) {
                 console.log('📝 X12 270 Request Length:', x12Request.length);
                 console.log('📝 First 200 chars of X12:', x12Request.substring(0, 200));
 
-                // Generate a UUID-format PayloadID (36 characters required by UHIN)
-                const payloadID = generatePayloadID();
-                console.log('📝 PayloadID (UUID):', payloadID, `(${payloadID.length} chars)`);
-
                 // Wrap in CORE-compliant SOAP envelope with WS-Security
-                const soapEnvelope = createSOAPEnvelope(x12Request, payloadID);
+                const soapEnvelope = createSOAPEnvelope(x12Request);
 
                 console.log('📦 SOAP Envelope Length:', soapEnvelope.length);
                 console.log('📦 Using CORE envelope with WS-Security authentication');
