@@ -6,15 +6,13 @@ import { AlertCircle, Check, ChevronRight, Clock, CreditCard, Loader2, Search, X
 import { useEffect, useState } from 'react'
 
 interface PayerSearchViewProps {
-    onPayerSelected: (payer: PayerWithStatus | null, acceptanceStatus?: 'active' | 'future' | 'not-accepted') => void
+    onPayerSelected: (payer: PayerWithStatus | null) => void
     onBackToStart?: () => void
-    bookingScenario?: any // Added for compatibility with BookingFlow
 }
 
 export default function PayerSearchView({
     onPayerSelected,
-    onBackToStart,
-    bookingScenario
+    onBackToStart
 }: PayerSearchViewProps) {
     const [searchQuery, setSearchQuery] = useState('')
     const [searchResults, setSearchResults] = useState<PayerWithStatus[]>([])
@@ -72,25 +70,22 @@ export default function PayerSearchView({
         // SIMPLIFIED: Treat all insurance the same, including Medicaid
         if (payer.acceptanceStatus === 'active') {
             // Active payer - proceed directly
-            console.log('Calling onPayerSelected with active status')
-            onPayerSelected(payer, 'active')
+            onPayerSelected(payer)
         } else if (payer.acceptanceStatus === 'future') {
             // Future payer - show waitlist option
             if (confirm(`${payer.name} will be accepted soon. ${payer.statusMessage}\n\nWould you like to join our waitlist?`)) {
                 // TODO: Implement waitlist capture
                 console.log('Add to waitlist for:', payer.name)
-                onPayerSelected(payer, 'future')
             }
         } else {
             // Not accepted - show message
             alert(`${payer.statusMessage}\n\nPlease choose a different insurance or select self-pay.`)
-            // Could optionally still pass it along: onPayerSelected(payer, 'not-accepted')
         }
     }
 
     const handleSelfPay = () => {
         console.log('Self-pay selected')
-        onPayerSelected(null, 'active') // null indicates self-pay, 'active' means proceed
+        onPayerSelected(null) // null indicates self-pay
     }
 
     const getStatusBadge = (status: string) => {

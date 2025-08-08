@@ -6,15 +6,13 @@ import { AlertCircle, Check, ChevronRight, Clock, CreditCard, Loader2, Search, X
 import { useEffect, useState } from 'react'
 
 interface PayerSearchViewProps {
-    onPayerSelected: (payer: PayerWithStatus | null, acceptanceStatus?: 'active' | 'future' | 'not-accepted') => void
+    onPayerSelected: (payer: PayerWithStatus | null) => void
     onBackToStart?: () => void
-    bookingScenario?: any // Added for compatibility with BookingFlow
 }
 
 export default function PayerSearchView({
     onPayerSelected,
-    onBackToStart,
-    bookingScenario
+    onBackToStart
 }: PayerSearchViewProps) {
     const [searchQuery, setSearchQuery] = useState('')
     const [searchResults, setSearchResults] = useState<PayerWithStatus[]>([])
@@ -69,59 +67,29 @@ export default function PayerSearchView({
     const handlePayerSelect = async (payer: PayerWithStatus) => {
         console.log('Selected payer:', payer.name, '- Status:', payer.acceptanceStatus)
 
-        // SIMPLIFIED: Treat all insurance the same, including Medicaid
+        // SIMPLIFIED: Treat Medicaid like any other insurance
         if (payer.acceptanceStatus === 'active') {
             // Active payer - proceed directly
-            console.log('Calling onPayerSelected with active status')
-            onPayerSelected(payer, 'active')
+            onPayerSelected(payer)
         } else if (payer.acceptanceStatus === 'future') {
             // Future payer - show waitlist option
             if (confirm(`${payer.name} will be accepted soon. ${payer.statusMessage}\n\nWould you like to join our waitlist?`)) {
                 // TODO: Implement waitlist capture
                 console.log('Add to waitlist for:', payer.name)
-                onPayerSelected(payer, 'future')
             }
         } else {
             // Not accepted - show message
             alert(`${payer.statusMessage}\n\nPlease choose a different insurance or select self-pay.`)
-            // Could optionally still pass it along: onPayerSelected(payer, 'not-accepted')
         }
     }
 
     const handleSelfPay = () => {
-        console.log('Self-pay selected')
-        onPayerSelected(null, 'active') // null indicates self-pay, 'active' means proceed
-    }
-
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'active':
-                return (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        <Check className="w-3 h-3 mr-1" />
-                        Accepted
-                    </span>
-                )
-            case 'future':
-                return (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        <Clock className="w-3 h-3 mr-1" />
-                        Coming Soon
-                    </span>
-                )
-            default:
-                return (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        <X className="w-3 h-3 mr-1" />
-                        Not Accepted
-                    </span>
-                )
-        }
+        onPayerSelected(null) // null indicates self-pay
     }
 
     return (
         <div className="max-w-4xl mx-auto p-6">
-            <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                 {/* Header */}
                 <div className="mb-6">
                     <h2 className="text-2xl font-bold text-gray-800 mb-2">
@@ -153,14 +121,13 @@ export default function PayerSearchView({
                     )}
                 </div>
 
-                {/* Loading State */}
+                {/* Search Results */}
                 {loading && (
                     <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                     </div>
                 )}
 
-                {/* Search Results */}
                 {!loading && searchResults.length > 0 && (
                     <div className="space-y-2 mb-6">
                         <h3 className="text-sm font-semibold text-gray-700 mb-2">
@@ -190,16 +157,6 @@ export default function PayerSearchView({
                                 </div>
                             </button>
                         ))}
-                    </div>
-                )}
-
-                {/* No Results Message */}
-                {!loading && searchQuery.length >= 2 && searchResults.length === 0 && (
-                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                        <p className="text-gray-600">
-                            No insurance plans found matching "{searchQuery}".
-                            Try searching differently or choose self-pay below.
-                        </p>
                     </div>
                 )}
 
@@ -258,7 +215,7 @@ export default function PayerSearchView({
             </div>
 
             {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-start space-x-3">
                     <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
                     <div className="text-sm text-blue-800">
