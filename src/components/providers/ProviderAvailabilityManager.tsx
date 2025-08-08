@@ -1,5 +1,5 @@
-import { createClient } from '@/supabase/client';
 import { format } from 'date-fns';
+import { createClient } from '../../supabase/client';
 
 export interface TimeBlock {
   start_time: string;

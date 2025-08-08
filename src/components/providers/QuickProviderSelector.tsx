@@ -1,9 +1,9 @@
 'use client';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createClient } from '@/supabase/client';
 import { User } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { createClient } from '../../../supabase/client';
 
 interface Provider {
   id: string;
