@@ -21,24 +21,43 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClientComponentClient<Database>()
 
+ // TEMPORARILY DISABLED TO STOP LOOP
+// useEffect(() => {
+//   const checkAuth = async () => {
+//     const { data: { user } } = await supabase.auth.getUser()
+//     if (user) {
+//       console.log('User already logged in, redirecting...', user.email)
+//       router.push('/dashboard/availability')
+//     }
+//   }
+//   checkAuth()
+// }, [router, supabase.auth])
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
+    console.log('Attempting login for:', email)
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
+        console.error('Login error:', error)
         setError(error.message)
-      } else {
-        router.push('/dashboard/availability')
-        router.refresh()
+      } else if (data.user) {
+        console.log('Login successful! User:', data.user.email)
+        console.log('Redirecting to dashboard...')
+        
+        // Force a hard redirect
+        window.location.href = '/dashboard/availability'
       }
     } catch (err) {
+      console.error('Unexpected error:', err)
       setError('An unexpected error occurred')
     } finally {
       setLoading(false)
@@ -91,25 +110,34 @@ export default function LoginPage() {
         {/* Form Card */}
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <h2 className="text-2xl font-semibold text-[#091747] mb-6 font-['Newsreader']">
-            {isSignUp ? 'Create Provider Account' : 'Sign In'}
+            {isSignUp ? 'Create Account' : 'Sign In'}
           </h2>
 
           {/* Success Message */}
-          {signUpSuccess && !isSignUp && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-              Account created! Please check your email to confirm your account, then sign in.
+          {signUpSuccess && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-green-800 text-sm">
+                Account created successfully! Please check your email for confirmation, then sign in below.
+              </p>
             </div>
           )}
 
           {/* Error Message */}
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              {error}
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-800 text-sm">{error}</p>
             </div>
           )}
 
-          {/* Sign Up Form */}
+          {/* Debug Info - Remove in production */}
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-blue-800 text-xs">
+              🔧 Debug: Test credentials - practitioner@trymoonlit.com / testpassword123
+            </p>
+          </div>
+
           {isSignUp ? (
+            /* Sign Up Form */
             <form onSubmit={handleSignUp} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -123,7 +151,7 @@ export default function LoginPage() {
                     onChange={(e) => setFirstName(e.target.value)}
                     required
                     className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent transition-colors"
-                    placeholder="John"
+                    placeholder="First name"
                   />
                 </div>
                 <div>
@@ -137,40 +165,40 @@ export default function LoginPage() {
                     onChange={(e) => setLastName(e.target.value)}
                     required
                     className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent transition-colors"
-                    placeholder="Doe"
+                    placeholder="Last name"
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="signUpEmail" className="block text-sm font-medium text-[#091747] mb-2">
+                <label htmlFor="email" className="block text-sm font-medium text-[#091747] mb-2">
                   Email Address
                 </label>
                 <input
-                  id="signUpEmail"
+                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent transition-colors"
-                  placeholder="provider@moonlitpsychiatry.com"
+                  placeholder="Enter your email"
                 />
               </div>
 
               <div>
-                <label htmlFor="signUpPassword" className="block text-sm font-medium text-[#091747] mb-2">
+                <label htmlFor="password" className="block text-sm font-medium text-[#091747] mb-2">
                   Password
                 </label>
                 <div className="relative">
                   <input
-                    id="signUpPassword"
+                    id="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={6}
                     className="w-full px-4 py-3 pr-12 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent transition-colors"
-                    placeholder="Minimum 6 characters"
+                    placeholder="Create a password (min 6 chars)"
                   />
                   <button
                     type="button"
@@ -189,20 +217,20 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#BF9C73] hover:bg-[#BF9C73]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                className="w-full bg-[#BF9C73] hover:bg-[#BF9C73]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
               >
                 {loading ? (
-                  <span>Creating Account...</span>
+                  'Creating Account...'
                 ) : (
                   <>
-                    <UserPlus className="h-5 w-5" />
-                    <span>Create Account</span>
+                    <UserPlus className="w-5 h-5 mr-2" />
+                    Create Account
                   </>
                 )}
               </button>
             </form>
           ) : (
-            // Sign In Form
+            /* Sign In Form */
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-[#091747] mb-2">

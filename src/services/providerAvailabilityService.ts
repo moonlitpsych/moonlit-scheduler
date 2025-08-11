@@ -24,6 +24,18 @@ export interface WeeklySchedule {
   [key: number]: DaySchedule;
 }
 
+export interface AvailabilityException {
+  id?: string;
+  provider_id: string;
+  exception_date: string;
+  exception_type: 'unavailable' | 'custom_hours';
+  start_time?: string;
+  end_time?: string;
+  reason?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ScheduleException {
   id?: string;
   provider_id: string;
@@ -91,90 +103,87 @@ class ProviderAvailabilityService {
         throw blocksError;
       }
 
-      // Convert to WeeklySchedule format
-      const schedule: WeeklySchedule = {};
+      // Build the weekly schedule object
+      const weeklySchedule: WeeklySchedule = {};
       
       // Initialize all days as unavailable
       for (let day = 0; day <= 6; day++) {
-        schedule[day] = {
+        weeklySchedule[day] = {
           day_of_week: day,
           is_available: false,
           time_blocks: []
         };
       }
 
-      // Group blocks by day and build schedule
-      blocks?.forEach(block => {
-        const daySchedule = schedule[block.day_of_week];
-        if (daySchedule) {
-          daySchedule.is_available = true;
+      // Group blocks by day
+      if (blocks) {
+        blocks.forEach(block => {
+          const daySchedule = weeklySchedule[block.day_of_week];
+          if (!daySchedule.is_available) {
+            daySchedule.is_available = true;
+          }
           daySchedule.time_blocks.push({
             id: block.id,
             start_time: block.start_time,
             end_time: block.end_time
           });
-        }
-      });
+        });
+      }
 
-      return schedule;
+      return weeklySchedule;
     } catch (error) {
       console.error('Error getting weekly schedule:', error);
-      return this.getDefaultWeeklySchedule();
+      throw error;
     }
   }
 
   async saveWeeklySchedule(providerId: string, schedule: WeeklySchedule): Promise<void> {
     try {
-      // Get or create provider schedule record
-      let { data: scheduleRecord, error: getError } = await supabase
+      // First, get or create the provider schedule record
+      let { data: scheduleData, error: scheduleError } = await supabase
         .from('provider_schedules')
-        .select('*')
+        .select('id')
         .eq('provider_id', providerId)
         .single();
 
-      if (getError && getError.code !== 'PGRST116') {
-        throw getError;
-      }
-
-      // Create schedule record if it doesn't exist
-      if (!scheduleRecord) {
+      if (scheduleError && scheduleError.code === 'PGRST116') {
+        // Schedule doesn't exist, create it
         const { data: newSchedule, error: createError } = await supabase
           .from('provider_schedules')
-          .insert({
-            provider_id: providerId,
-            schedule_name: 'Default Schedule',
-            is_active: true
-          })
-          .select()
+          .insert({ provider_id: providerId })
+          .select('id')
           .single();
 
         if (createError) throw createError;
-        scheduleRecord = newSchedule;
+        scheduleData = newSchedule;
+      } else if (scheduleError) {
+        throw scheduleError;
       }
 
-      // Delete existing blocks for this schedule
+      const scheduleId = scheduleData!.id;
+
+      // Delete existing availability blocks
       const { error: deleteError } = await supabase
         .from('availability_blocks')
         .delete()
-        .eq('schedule_id', scheduleRecord.id);
+        .eq('schedule_id', scheduleId);
 
       if (deleteError) throw deleteError;
 
-      // Insert new blocks
+      // Insert new availability blocks
       const blocksToInsert = [];
-      
-      for (const [dayNum, daySchedule] of Object.entries(schedule)) {
+      Object.values(schedule).forEach(daySchedule => {
         if (daySchedule.is_available && daySchedule.time_blocks.length > 0) {
-          for (const block of daySchedule.time_blocks) {
+          daySchedule.time_blocks.forEach(block => {
             blocksToInsert.push({
-              schedule_id: scheduleRecord.id,
-              day_of_week: parseInt(dayNum),
+              schedule_id: scheduleId,
+              day_of_week: daySchedule.day_of_week,
               start_time: block.start_time,
               end_time: block.end_time
             });
-          }
+          });
         }
-      }
+      });
 
       if (blocksToInsert.length > 0) {
         const { error: insertError } = await supabase
@@ -184,13 +193,11 @@ class ProviderAvailabilityService {
         if (insertError) throw insertError;
       }
 
-      // Update schedule's updated_at timestamp
-      const { error: updateError } = await supabase
-        .from('provider_schedules')
+      // Update the provider's updated_at timestamp if the column exists
+      await supabase
+        .from('providers')
         .update({ updated_at: new Date().toISOString() })
-        .eq('id', scheduleRecord.id);
-
-      if (updateError) throw updateError;
+        .eq('id', providerId);
 
     } catch (error) {
       console.error('Error saving weekly schedule:', error);
@@ -198,51 +205,74 @@ class ProviderAvailabilityService {
     }
   }
 
-  // ========== EXCEPTION MANAGEMENT ==========
+  // ========== EXCEPTION METHODS ==========
 
-  async getExceptions(providerId: string, startDate?: Date, endDate?: Date): Promise<ScheduleException[]> {
+  async getExceptions(providerId: string, startDate?: Date, endDate?: Date): Promise<AvailabilityException[]> {
     try {
       let query = supabase
         .from('availability_exceptions')
         .select('*')
-        .eq('provider_id', providerId)
-        .order('exception_date', { ascending: true });
+        .eq('provider_id', providerId);
 
       if (startDate) {
-        query = query.gte('exception_date', format(startDate, 'yyyy-MM-dd'));
+        query = query.gte('exception_date', startDate.toISOString().split('T')[0]);
       }
 
       if (endDate) {
-        query = query.lte('exception_date', format(endDate, 'yyyy-MM-dd'));
+        query = query.lte('exception_date', endDate.toISOString().split('T')[0]);
       }
 
-      const { data, error } = await query;
+      const { data, error } = await query.order('exception_date', { ascending: true });
 
       if (error) throw error;
       return data || [];
     } catch (error) {
       console.error('Error getting exceptions:', error);
-      return [];
-    }
-  }
-
-  async saveException(exception: Omit<ScheduleException, 'id' | 'created_at'>): Promise<string> {
-    try {
-      const { data, error } = await supabase
-        .from('availability_exceptions')
-        .insert(exception)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data.id;
-    } catch (error) {
-      console.error('Error saving exception:', error);
       throw error;
     }
   }
 
-  async deleteException(exceptionId: string): Promise<void> {
+  async addException(exception: Omit<AvailabilityException, 'id' | 'created_at' | 'updated_at'>): Promise<AvailabilityException> {
+    try {
+      const { data, error } = await supabase
+        .from('availability_exceptions')
+        .insert([{
+          ...exception,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error adding exception:', error);
+      throw error;
+    }
+  }
+
+  async updateException(exceptionId: string, updates: Partial<AvailabilityException>): Promise<AvailabilityException> {
+    try {
+      const { data, error } = await supabase
+        .from('availability_exceptions')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', exceptionId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating exception:', error);
+      throw error;
+    }
+  }
+
+  async removeException(exceptionId: string): Promise<void> {
     try {
       const { error } = await supabase
         .from('availability_exceptions')
@@ -251,12 +281,12 @@ class ProviderAvailabilityService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error deleting exception:', error);
+      console.error('Error removing exception:', error);
       throw error;
     }
   }
 
-  // ========== BOOKING SETTINGS ==========
+  // ========== BOOKING SETTINGS METHODS ==========
 
   async getBookingSettings(providerId: string): Promise<BookingSettings> {
     try {
@@ -266,13 +296,18 @@ class ProviderAvailabilityService {
         .eq('provider_id', providerId)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
+      if (error && error.code === 'PGRST116') {
+        // No settings found, return defaults and create them
+        const defaultSettings = this.getDefaultBookingSettings(providerId);
+        await this.saveBookingSettings(defaultSettings);
+        return defaultSettings;
       }
 
-      return data || this.getDefaultBookingSettings(providerId);
+      if (error) throw error;
+      return data;
     } catch (error) {
       console.error('Error getting booking settings:', error);
+      // Return defaults on error
       return this.getDefaultBookingSettings(providerId);
     }
   }
@@ -357,8 +392,78 @@ class ProviderAvailabilityService {
 
       return slots;
     } catch (error) {
-      console.error('Error generating available slots:', error);
-      return [];
+      console.error('Error getting available slots:', error);
+      throw error;
+    }
+  }
+
+  // Enhanced slot generation that considers exceptions
+  async getAvailableSlotsWithExceptions(
+    providerId: string,
+    startDate: Date,
+    endDate: Date,
+    appointmentDuration: number = 60
+  ): Promise<Array<{ startTime: Date; endTime: Date; isAvailable: boolean }>> {
+    try {
+      // Get weekly schedule
+      const weeklySchedule = await this.getWeeklySchedule(providerId);
+      
+      // Get exceptions for the date range
+      const exceptions = await this.getExceptions(providerId, startDate, endDate);
+      
+      // Get booking settings
+      const bookingSettings = await this.getBookingSettings(providerId);
+
+      const slots = [];
+      const currentDate = new Date(startDate);
+
+      while (currentDate <= endDate) {
+        const dayOfWeek = currentDate.getDay();
+        const dateString = format(currentDate, 'yyyy-MM-dd');
+        
+        // Check if there's an exception for this date
+        const exception = exceptions.find(ex => ex.exception_date === dateString);
+        
+        if (exception) {
+          if (exception.exception_type === 'unavailable') {
+            // Skip this day entirely
+            currentDate.setDate(currentDate.getDate() + 1);
+            continue;
+          } else if (exception.exception_type === 'custom_hours' && exception.start_time && exception.end_time) {
+            // Use custom hours for this day
+            const daySlots = this.generateDaySlots(
+              currentDate,
+              exception.start_time,
+              exception.end_time,
+              appointmentDuration,
+              bookingSettings.booking_buffer_minutes
+            );
+            slots.push(...daySlots);
+          }
+        } else {
+          // Use regular weekly schedule
+          const daySchedule = weeklySchedule[dayOfWeek];
+          if (daySchedule && daySchedule.is_available) {
+            for (const timeBlock of daySchedule.time_blocks) {
+              const daySlots = this.generateDaySlots(
+                currentDate,
+                timeBlock.start_time,
+                timeBlock.end_time,
+                appointmentDuration,
+                bookingSettings.booking_buffer_minutes
+              );
+              slots.push(...daySlots);
+            }
+          }
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      return slots;
+    } catch (error) {
+      console.error('Error getting available slots with exceptions:', error);
+      throw error;
     }
   }
 
@@ -370,33 +475,27 @@ class ProviderAvailabilityService {
     bufferMinutes: number
   ): Array<{ startTime: Date; endTime: Date; isAvailable: boolean }> {
     const slots = [];
-    
-    // Parse start and end times
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin] = endTime.split(':').map(Number);
-    
-    // Create start and end Date objects
-    const slotStart = new Date(date);
-    slotStart.setHours(startHour, startMin, 0, 0);
-    
-    const endDateTime = new Date(date);
-    endDateTime.setHours(endHour, endMin, 0, 0);
-    
-    let currentSlotStart = new Date(slotStart);
-    
-    while (currentSlotStart < endDateTime) {
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const [endHour, endMinute] = endTime.split(':').map(Number);
+
+    const currentSlotStart = new Date(date);
+    currentSlotStart.setHours(startHour, startMinute, 0, 0);
+
+    const dayEnd = new Date(date);
+    dayEnd.setHours(endHour, endMinute, 0, 0);
+
+    while (currentSlotStart < dayEnd) {
       const slotEnd = new Date(currentSlotStart);
       slotEnd.setMinutes(slotEnd.getMinutes() + appointmentDuration);
-      
-      // Check if this slot fits within the available time
-      if (slotEnd <= endDateTime) {
+
+      if (slotEnd <= dayEnd) {
         slots.push({
           startTime: new Date(currentSlotStart),
           endTime: new Date(slotEnd),
           isAvailable: true
         });
       }
-      
+
       // Move to next slot (appointment duration + buffer)
       currentSlotStart.setMinutes(currentSlotStart.getMinutes() + appointmentDuration + bufferMinutes);
     }

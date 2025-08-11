@@ -3,14 +3,13 @@
 import { Database } from '@/types/database'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import {
-    Calendar,
-    Home,
-    LogOut,
-    Menu,
-    Settings,
-    User,
-    Users,
-    X
+  Calendar,
+  LogOut,
+  Menu,
+  Settings,
+  User,
+  Users,
+  X
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -39,7 +38,7 @@ export default function DashboardLayout({
         // Get provider info
         const { data: providerData } = await supabase
           .from('providers')
-          .select(`*, roles (name)`)
+          .select('*')
           .eq('auth_user_id', user.id)
           .single()
         
@@ -49,18 +48,24 @@ export default function DashboardLayout({
     getUser()
   }, [supabase])
 
+  // Redirect /dashboard to /dashboard/availability
+  useEffect(() => {
+    if (pathname === '/dashboard') {
+      router.replace('/dashboard/availability')
+    }
+  }, [pathname, router])
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/auth/login')
   }
 
-  const isAdmin = provider?.roles?.name === 'admin'
-  const isPractitioner = provider?.roles?.name && ['practitioner', 'psychiatrist', 'psychiatry_resident'].includes(provider.roles.name)
+  const isAdmin = provider?.role === 'admin'
+  const isPractitioner = provider && ['practitioner', 'psychiatrist', 'psychiatry_resident'].includes(provider.role)
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: Home, show: true },
-    { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
     { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner },
+    { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
     { name: 'Manage Providers', href: '/dashboard/admin/providers', icon: Users, show: isAdmin },
     { name: 'System Settings', href: '/dashboard/admin/settings', icon: Settings, show: isAdmin },
   ].filter(item => item.show)
@@ -87,7 +92,7 @@ export default function DashboardLayout({
               <h1 className="text-2xl font-bold text-[#091747] font-['Newsreader']">
                 Moonlit
               </h1>
-              <p className="text-sm text-[#BF9C73]">Dashboard</p>
+              <p className="text-sm text-[#BF9C73]">Provider Dashboard</p>
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -116,7 +121,7 @@ export default function DashboardLayout({
                   }
                 </p>
                 <p className="text-sm text-[#BF9C73] capitalize truncate">
-                  {provider?.roles?.name?.replace('_', ' ') || 'User'}
+                  {provider?.role?.replace('_', ' ') || 'User'}
                 </p>
               </div>
             </div>
@@ -184,9 +189,7 @@ export default function DashboardLayout({
 
         {/* Page content */}
         <main className="flex-1 overflow-auto bg-[#FEF8F1]">
-          <div className="p-8">
-            {children}
-          </div>
+          {children}
         </main>
       </div>
     </div>
