@@ -35,11 +35,12 @@ export default function DashboardLayout({
       setUser(user)
       
       if (user) {
-        // Get provider info
+        // FIXED: Add is_active filter to only get active provider records
         const { data: providerData } = await supabase
           .from('providers')
           .select('*')
           .eq('auth_user_id', user.id)
+          .eq('is_active', true)  // ← This is the key fix!
           .single()
         
         setProvider(providerData)
@@ -144,51 +145,66 @@ export default function DashboardLayout({
                   `}
                   onClick={() => setSidebarOpen(false)}
                 >
-                  <item.icon className={`mr-4 h-5 w-5 transition-transform duration-200 ${isActive ? 'scale-110' : 'group-hover:scale-105'}`} />
-                  <span className="font-['Newsreader']">{item.name}</span>
+                  <item.icon className={`mr-4 h-5 w-5 transition-transform duration-200 ${isActive ? 'text-white' : 'text-[#BF9C73] group-hover:scale-110'}`} />
+                  <span className={`font-medium ${isActive ? 'text-white' : 'text-[#091747]'}`}>
+                    {item.name}
+                  </span>
                   {isActive && (
-                    <div className="ml-auto w-2 h-2 bg-white rounded-full animate-pulse" />
+                    <div className="ml-auto w-2 h-2 bg-white rounded-full opacity-80" />
                   )}
                 </Link>
               )
             })}
           </nav>
 
-          {/* Footer with logout */}
-          <div className="px-4 pb-6">
-            <div className="pt-4 border-t border-stone-200">
-              <button
-                onClick={handleLogout}
-                className="flex items-center w-full px-4 py-3 text-sm font-medium text-stone-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group"
-              >
-                <LogOut className="mr-4 h-5 w-5 group-hover:scale-105 transition-transform duration-200" />
-                <span className="font-['Newsreader']">Sign Out</span>
-              </button>
-            </div>
+          {/* Bottom section */}
+          <div className="px-4 py-6 border-t border-stone-200">
+            <button
+              onClick={handleLogout}
+              className="flex items-center w-full px-4 py-3 text-sm font-medium text-stone-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group"
+            >
+              <LogOut className="mr-4 h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
+              <span>Sign Out</span>
+            </button>
           </div>
         </div>
       </div>
 
+      {/* Mobile sidebar button */}
+      <div className="lg:hidden">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="fixed top-4 left-4 z-30 p-2 bg-white rounded-lg shadow-lg border border-stone-200"
+        >
+          <Menu className="h-6 w-6 text-[#091747]" />
+        </button>
+      </div>
+
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile top bar */}
-        <header className="bg-white shadow-sm border-b border-stone-200 lg:hidden h-16">
-          <div className="flex items-center justify-between h-full px-4">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-            <h1 className="text-xl font-bold text-[#091747] font-['Newsreader']">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar for mobile */}
+        <div className="lg:hidden bg-white border-b border-stone-200 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
               Moonlit Dashboard
             </h1>
-            <div className="w-10" /> {/* Spacer for centering */}
+            {provider && (
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-[#BF9C73] to-[#F6B398] rounded-full flex items-center justify-center">
+                  <span className="text-white font-medium text-sm">
+                    {`${provider.first_name?.[0] || ''}${provider.last_name?.[0] || ''}`}
+                  </span>
+                </div>
+                <span className="text-sm font-medium text-[#091747]">
+                  {provider.first_name}
+                </span>
+              </div>
+            )}
           </div>
-        </header>
+        </div>
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto bg-[#FEF8F1]">
+        <main className="flex-1 overflow-y-auto">
           {children}
         </main>
       </div>

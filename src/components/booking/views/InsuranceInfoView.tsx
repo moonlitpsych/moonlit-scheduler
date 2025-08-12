@@ -1,34 +1,28 @@
-// src/components/booking/views/InsuranceInfoView.tsx
 'use client'
 
+import { InsuranceInfo, Payer, TimeSlot } from '@/types/database'
 import { useState } from 'react'
-import { Payer, TimeSlot, InsuranceInfo, PatientInfo } from '@/types/database'
 import { BookingScenario } from './WelcomeView'
-import { ArrowLeft, Mail, Phone, Building2, User, CreditCard, Calendar, Clock, AlertCircle, Check } from 'lucide-react'
-
-interface CaseManagerInfo {
-    name: string
-    email: string
-    phone?: string
-    organization?: string
-}
-
-interface CommunicationPreferences {
-    sendToPatient: boolean
-    sendToCaseManager: boolean
-    patientHasEmail: boolean
-}
 
 interface InsuranceInfoViewProps {
     selectedPayer: Payer
     selectedTimeSlot: TimeSlot
     bookingScenario: BookingScenario
-    caseManagerInfo?: CaseManagerInfo
-    communicationPreferences: CommunicationPreferences
-    onSubmit: (insuranceInfo: InsuranceInfo, patientInfo: PatientInfo) => void
-    onUpdateCaseManager: (caseManagerInfo: CaseManagerInfo) => void
-    onUpdateCommunicationPrefs: (prefs: Partial<CommunicationPreferences>) => void
+    caseManagerInfo?: {
+        name: string
+        email: string
+        phone?: string
+        organization?: string
+    }
+    communicationPreferences: {
+        sendToPatient: boolean
+        sendToCaseManager: boolean
+        patientHasEmail: boolean
+    }
+    onSubmit: (insuranceInfo: InsuranceInfo) => void
     onBack: () => void
+    onChangeAppointment?: () => void // NEW: Quick change appointment
+    onChangeInsurance?: () => void  // NEW: Quick change insurance
 }
 
 export default function InsuranceInfoView({
@@ -38,384 +32,498 @@ export default function InsuranceInfoView({
     caseManagerInfo,
     communicationPreferences,
     onSubmit,
-    onUpdateCaseManager,
-    onUpdateCommunicationPrefs,
-    onBack
+    onBack,
+    onChangeAppointment,
+    onChangeInsurance
 }: InsuranceInfoViewProps) {
-    // Form state
-    const [patientInfo, setPatientInfo] = useState({
-        first_name: '',
-        last_name: '',
-        date_of_birth: '',
-        email: '',
+    const [formData, setFormData] = useState({
+        // Patient Information
+        firstName: '',
+        lastName: '',
+        dateOfBirth: '',
         phone: '',
-        preferred_name: ''
+        email: '',
+        address: '',
+        city: '',
+        state: 'UT',
+        zipCode: '',
+        
+        // Insurance Information
+        memberId: '',
+        groupNumber: '',
+        subscriberName: '',
+        subscriberDateOfBirth: '',
+        relationshipToSubscriber: 'self',
+        
+        // Emergency Contact
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+        emergencyContactRelationship: '',
+        
+        // Medical Information
+        primaryCarePhysician: '',
+        reasonForVisit: '',
+        currentMedications: '',
+        allergies: '',
+        previousPsychiatricTreatment: false,
+        previousPsychiatricDetails: ''
     })
 
-    const [insuranceInfo, setInsuranceInfo] = useState({
-        member_id: '',
-        group_number: '',
-        effective_date: ''
-    })
+    const [errors, setErrors] = useState<Record<string, string>>({})
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
-    const [localCaseManagerInfo, setLocalCaseManagerInfo] = useState<CaseManagerInfo>(
-        caseManagerInfo || {
-            name: '',
-            email: '',
-            phone: '',
-            organization: ''
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+        const { name, value, type } = e.target
+        
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+        }))
+
+        // Clear error when user starts typing
+        if (errors[name]) {
+            setErrors(prev => ({
+                ...prev,
+                [name]: ''
+            }))
         }
-    )
+    }
 
-    const [showCommunicationOptions, setShowCommunicationOptions] = useState(false)
+    const validateForm = () => {
+        const newErrors: Record<string, string> = {}
 
-    // Handle form submission
-    const handleSubmit = (e: React.FormEvent) => {
+        // Required fields
+        if (!formData.firstName.trim()) newErrors.firstName = 'First name is required'
+        if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required'
+        if (!formData.dateOfBirth) newErrors.dateOfBirth = 'Date of birth is required'
+        if (!formData.phone.trim()) newErrors.phone = 'Phone number is required'
+        if (!formData.memberId.trim()) newErrors.memberId = 'Member ID is required'
+        
+        // Email validation (only if patient has email in communication preferences)
+        if (communicationPreferences.patientHasEmail && !formData.email.trim()) {
+            newErrors.email = 'Email is required'
+        } else if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
+            newErrors.email = 'Valid email is required'
+        }
+
+        // Emergency contact
+        if (!formData.emergencyContactName.trim()) newErrors.emergencyContactName = 'Emergency contact name is required'
+        if (!formData.emergencyContactPhone.trim()) newErrors.emergencyContactPhone = 'Emergency contact phone is required'
+
+        setErrors(newErrors)
+        return Object.keys(newErrors).length === 0
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-
-        // Update case manager info if in case manager scenario
-        if (bookingScenario === 'case-manager') {
-            onUpdateCaseManager(localCaseManagerInfo)
+        
+        if (!validateForm()) {
+            return
         }
 
-        const finalInsuranceInfo: InsuranceInfo = {
-            payer_id: selectedPayer.id,
-            member_id: insuranceInfo.member_id,
-            group_number: insuranceInfo.group_number,
-            effective_date: insuranceInfo.effective_date
-        }
+        setIsSubmitting(true)
 
-        const finalPatientInfo: PatientInfo = {
-            first_name: patientInfo.first_name,
-            last_name: patientInfo.last_name,
-            date_of_birth: patientInfo.date_of_birth,
-            email: patientInfo.email,
-            phone: patientInfo.phone,
-            preferred_name: patientInfo.preferred_name
-        }
+        try {
+            const insuranceInfo: InsuranceInfo = {
+                patient: {
+                    firstName: formData.firstName,
+                    lastName: formData.lastName,
+                    dateOfBirth: formData.dateOfBirth,
+                    phone: formData.phone,
+                    email: formData.email,
+                    address: {
+                        street: formData.address,
+                        city: formData.city,
+                        state: formData.state,
+                        zipCode: formData.zipCode
+                    }
+                },
+                insurance: {
+                    payerId: selectedPayer.id,
+                    payerName: selectedPayer.name,
+                    memberId: formData.memberId,
+                    groupNumber: formData.groupNumber,
+                    subscriberName: formData.subscriberName || `${formData.firstName} ${formData.lastName}`,
+                    subscriberDateOfBirth: formData.subscriberDateOfBirth || formData.dateOfBirth,
+                    relationshipToSubscriber: formData.relationshipToSubscriber as 'self' | 'spouse' | 'child' | 'other'
+                },
+                emergencyContact: {
+                    name: formData.emergencyContactName,
+                    phone: formData.emergencyContactPhone,
+                    relationship: formData.emergencyContactRelationship
+                },
+                medical: {
+                    primaryCarePhysician: formData.primaryCarePhysician,
+                    reasonForVisit: formData.reasonForVisit,
+                    currentMedications: formData.currentMedications,
+                    allergies: formData.allergies,
+                    previousPsychiatricTreatment: formData.previousPsychiatricTreatment,
+                    previousPsychiatricDetails: formData.previousPsychiatricDetails
+                }
+            }
 
-        onSubmit(finalInsuranceInfo, finalPatientInfo)
+            onSubmit(insuranceInfo)
+        } catch (error) {
+            console.error('Error submitting insurance info:', error)
+        } finally {
+            setIsSubmitting(false)
+        }
     }
 
-    const formatTimeSlot = (timeSlot: TimeSlot) => {
-        const start = new Date(timeSlot.start_time)
-        const end = new Date(timeSlot.end_time)
-        return {
-            date: start.toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            }),
-            time: `${start.toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            })} - ${end.toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            })}`
-        }
+    const formatDateTime = (date: string, startTime: string) => {
+        const dateObj = new Date(date)
+        const [hours, minutes] = startTime.split(':')
+        dateObj.setHours(parseInt(hours), parseInt(minutes))
+        
+        return dateObj.toLocaleString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        })
     }
-
-    const timeSlotFormatted = formatTimeSlot(selectedTimeSlot)
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1]">
-            <div className="max-w-4xl mx-auto py-12 px-4">
+        <div className="min-h-screen bg-gradient-to-br from-[#1a2c5b] to-[#2d4a7c]">
+            <div className="container mx-auto px-4 py-8">
                 {/* Header */}
-                <div className="mb-8">
-                    <button
-                        onClick={onBack}
-                        className="flex items-center text-[#091747]/60 hover:text-[#091747] transition-colors mb-6 font-['Newsreader']"
-                    >
-                        <ArrowLeft className="w-5 h-5 mr-2" />
-                        Back to calendar
-                    </button>
+                <div className="text-white text-center mb-8">
+                    <h1 className="text-4xl font-bold mb-4">Patient Information</h1>
+                    <p className="text-xl opacity-90 mb-6">
+                        Please provide your information to complete your booking
+                    </p>
 
-                    <h1 className="text-4xl font-light text-[#091747] mb-4 font-['Newsreader']">
-                        {bookingScenario === 'case-manager'
-                            ? 'Please provide your information and your client\'s details'
-                            : 'Please input your information'
-                        }
-                    </h1>
-
-                    <div className="bg-white rounded-2xl p-6 shadow-lg mb-8">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-4">
-                                <div className="w-12 h-12 bg-[#17DB4E]/10 rounded-xl flex items-center justify-center">
-                                    <Calendar className="w-6 h-6 text-[#17DB4E]" />
+                    {/* Appointment Summary */}
+                    <div className="bg-white/10 rounded-2xl p-6 max-w-2xl mx-auto mb-6">
+                        <div className="text-left">
+                            <h3 className="text-lg font-semibold mb-4">Your Appointment</h3>
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <span className="opacity-80">Date & Time:</span>
+                                    <span className="font-medium">
+                                        {formatDateTime(selectedTimeSlot.date, selectedTimeSlot.start_time)}
+                                    </span>
                                 </div>
-                                <div>
-                                    <p className="text-[#091747] font-semibold font-['Newsreader']">{timeSlotFormatted.date}</p>
-                                    <p className="text-[#091747]/70 font-['Newsreader']">{timeSlotFormatted.time}</p>
+                                {selectedTimeSlot.provider_name && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="opacity-80">Provider:</span>
+                                        <span className="font-medium">{selectedTimeSlot.provider_name}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between items-center">
+                                    <span className="opacity-80">Insurance:</span>
+                                    <span className="font-medium">{selectedPayer.name}</span>
                                 </div>
                             </div>
-                            <div className="text-right">
-                                <p className="text-[#091747] font-semibold font-['Newsreader']">{selectedPayer.name}</p>
-                                <p className="text-[#091747]/70 text-sm font-['Newsreader']">Insurance accepted</p>
+                            
+                            {/* Quick Change Options */}
+                            <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-white/20">
+                                {onChangeAppointment && (
+                                    <button
+                                        type="button"
+                                        onClick={onChangeAppointment}
+                                        className="text-sm text-white/80 hover:text-white transition-colors"
+                                    >
+                                        Change Appointment
+                                    </button>
+                                )}
+                                {onChangeInsurance && (
+                                    <button
+                                        type="button"
+                                        onClick={onChangeInsurance}
+                                        className="text-sm text-white/80 hover:text-white transition-colors"
+                                    >
+                                        Change Insurance
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-8">
-                    {/* Case Manager Information (if applicable) */}
-                    {bookingScenario === 'case-manager' && (
-                        <div className="bg-white rounded-2xl p-8 shadow-lg">
-                            <div className="flex items-center space-x-3 mb-6">
-                                <div className="w-10 h-10 bg-[#17DB4E]/10 rounded-lg flex items-center justify-center">
-                                    <User className="w-5 h-5 text-[#17DB4E]" />
-                                </div>
-                                <h2 className="text-2xl font-semibold text-[#091747] font-['Newsreader']">
-                                    Your Information (Case Manager)
-                                </h2>
-                            </div>
-
+                {/* Form */}
+                <div className="max-w-4xl mx-auto">
+                    <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-8 shadow-lg">
+                        
+                        {/* Patient Information Section */}
+                        <div className="mb-8">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Patient Information</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                        Your Full Name *
+                                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
+                                        First Name *
                                     </label>
                                     <input
                                         type="text"
-                                        required
-                                        value={localCaseManagerInfo.name}
-                                        onChange={(e) => setLocalCaseManagerInfo(prev => ({ ...prev, name: e.target.value }))}
-                                        className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                        placeholder="Your name"
+                                        id="firstName"
+                                        name="firstName"
+                                        value={formData.firstName}
+                                        onChange={handleInputChange}
+                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
+                                            errors.firstName ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     />
+                                    {errors.firstName && <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                        Organization
+                                    <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Last Name *
                                     </label>
                                     <input
                                         type="text"
-                                        value={localCaseManagerInfo.organization}
-                                        onChange={(e) => setLocalCaseManagerInfo(prev => ({ ...prev, organization: e.target.value }))}
-                                        className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                        placeholder="Organization or agency"
+                                        id="lastName"
+                                        name="lastName"
+                                        value={formData.lastName}
+                                        onChange={handleInputChange}
+                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
+                                            errors.lastName ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     />
+                                    {errors.lastName && <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                        Your Email Address *
+                                    <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Date of Birth *
                                     </label>
                                     <input
-                                        type="email"
-                                        required
-                                        value={localCaseManagerInfo.email}
-                                        onChange={(e) => setLocalCaseManagerInfo(prev => ({ ...prev, email: e.target.value }))}
-                                        className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                        placeholder="your.email@example.com"
+                                        type="date"
+                                        id="dateOfBirth"
+                                        name="dateOfBirth"
+                                        value={formData.dateOfBirth}
+                                        onChange={handleInputChange}
+                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
+                                            errors.dateOfBirth ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     />
+                                    {errors.dateOfBirth && <p className="text-red-500 text-sm mt-1">{errors.dateOfBirth}</p>}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                        Your Phone Number
+                                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Phone Number *
                                     </label>
                                     <input
                                         type="tel"
-                                        value={localCaseManagerInfo.phone}
-                                        onChange={(e) => setLocalCaseManagerInfo(prev => ({ ...prev, phone: e.target.value }))}
-                                        className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
+                                        id="phone"
+                                        name="phone"
+                                        value={formData.phone}
+                                        onChange={handleInputChange}
                                         placeholder="(555) 123-4567"
+                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
+                                            errors.phone ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     />
+                                    {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
                                 </div>
-                            </div>
 
-                            {/* Add another case manager button */}
-                            <div className="mt-6 flex justify-start">
-                                <button
-                                    type="button"
-                                    className="px-4 py-2 border-2 border-[#17DB4E]/30 hover:border-[#17DB4E] text-[#17DB4E] hover:bg-[#17DB4E]/5 rounded-lg transition-colors font-['Newsreader'] text-sm"
-                                >
-                                    + Add Another Case Manager
-                                </button>
-                            </div>
-
-                            {/* Communication preferences for case manager */}
-                            <div className="mt-6 p-4 bg-[#17DB4E]/5 rounded-xl">
-                                <div className="flex items-start space-x-3">
-                                    <Check className="w-5 h-5 text-[#17DB4E] mt-0.5" />
+                                {communicationPreferences.patientHasEmail && (
                                     <div>
-                                        <p className="text-[#091747] font-semibold font-['Newsreader']">
-                                            You'll receive all appointment communications
-                                        </p>
-                                        <p className="text-[#091747]/70 text-sm font-['Newsreader']">
-                                            Booking confirmation, intake forms, and meeting links will be sent to your email.
-                                        </p>
+                                        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                                            Email Address *
+                                        </label>
+                                        <input
+                                            type="email"
+                                            id="email"
+                                            name="email"
+                                            value={formData.email}
+                                            onChange={handleInputChange}
+                                            className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
+                                                errors.email ? 'border-red-500' : 'border-gray-300'
+                                            }`}
+                                        />
+                                        {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Patient Information */}
-                    <div className="bg-white rounded-2xl p-8 shadow-lg">
-                        <div className="flex items-center space-x-3 mb-6">
-                            <div className="w-10 h-10 bg-[#BF9C73]/10 rounded-lg flex items-center justify-center">
-                                <User className="w-5 h-5 text-[#BF9C73]" />
-                            </div>
-                            <h2 className="text-2xl font-semibold text-[#091747] font-['Newsreader']">
-                                {bookingScenario === 'case-manager' ? 'Client Information' : 'Your Information'}
-                            </h2>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                    First Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={patientInfo.first_name}
-                                    onChange={(e) => setPatientInfo(prev => ({ ...prev, first_name: e.target.value }))}
-                                    className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                    Last Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={patientInfo.last_name}
-                                    onChange={(e) => setPatientInfo(prev => ({ ...prev, last_name: e.target.value }))}
-                                    className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                    Date of Birth *
-                                </label>
-                                <input
-                                    type="date"
-                                    required
-                                    value={patientInfo.date_of_birth}
-                                    onChange={(e) => setPatientInfo(prev => ({ ...prev, date_of_birth: e.target.value }))}
-                                    className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                    Phone Number
-                                </label>
-                                <input
-                                    type="tel"
-                                    value={patientInfo.phone}
-                                    onChange={(e) => setPatientInfo(prev => ({ ...prev, phone: e.target.value }))}
-                                    className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                />
-                            </div>
-
-                            {/* Patient email - conditional based on scenario */}
-                            <div className="md:col-span-2">
-                                <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                    {bookingScenario === 'case-manager' ? 'Client Email Address' : 'Email Address'}
-                                    {bookingScenario !== 'case-manager' && ' *'}
-                                </label>
-                                <input
-                                    type="email"
-                                    required={bookingScenario !== 'case-manager'}
-                                    value={patientInfo.email}
-                                    onChange={(e) => {
-                                        setPatientInfo(prev => ({ ...prev, email: e.target.value }))
-                                        // Update communication preferences based on whether patient has email
-                                        if (bookingScenario === 'case-manager') {
-                                            const hasEmail = e.target.value.trim().length > 0
-                                            onUpdateCommunicationPrefs({
-                                                patientHasEmail: hasEmail,
-                                                sendToPatient: hasEmail
-                                            })
-                                        }
-                                    }}
-                                    className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                    placeholder={bookingScenario === 'case-manager' ? 'Optional - only if client has email access' : 'your.email@example.com'}
-                                />
-
-                                {bookingScenario === 'case-manager' && (
-                                    <p className="text-[#091747]/60 text-sm mt-2 font-['Newsreader']">
-                                        Leave blank if your client doesn't have email or device access.
-                                        You'll receive all communications as the case manager.
-                                    </p>
                                 )}
                             </div>
                         </div>
-                    </div>
 
-                    {/* Insurance Information */}
-                    <div className="bg-white rounded-2xl p-8 shadow-lg">
-                        <div className="flex items-center space-x-3 mb-6">
-                            <div className="w-10 h-10 bg-[#BF9C73]/10 rounded-lg flex items-center justify-center">
-                                <CreditCard className="w-5 h-5 text-[#BF9C73]" />
+                        {/* Insurance Information Section */}
+                        <div className="mb-8">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Insurance Information</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label htmlFor="memberId" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Member ID *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="memberId"
+                                        name="memberId"
+                                        value={formData.memberId}
+                                        onChange={handleInputChange}
+                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
+                                            errors.memberId ? 'border-red-500' : 'border-gray-300'
+                                        }`}
+                                    />
+                                    {errors.memberId && <p className="text-red-500 text-sm mt-1">{errors.memberId}</p>}
+                                </div>
+
+                                <div>
+                                    <label htmlFor="groupNumber" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Group Number
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="groupNumber"
+                                        name="groupNumber"
+                                        value={formData.groupNumber}
+                                        onChange={handleInputChange}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="relationshipToSubscriber" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Relationship to Subscriber
+                                    </label>
+                                    <select
+                                        id="relationshipToSubscriber"
+                                        name="relationshipToSubscriber"
+                                        value={formData.relationshipToSubscriber}
+                                        onChange={handleInputChange}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
+                                    >
+                                        <option value="self">Self</option>
+                                        <option value="spouse">Spouse</option>
+                                        <option value="child">Child</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
                             </div>
-                            <h2 className="text-2xl font-semibold text-[#091747] font-['Newsreader']">
-                                Insurance Information
-                            </h2>
                         </div>
 
-                        <div className="mb-4 p-4 bg-[#BF9C73]/5 rounded-xl">
-                            <p className="text-[#091747] font-semibold font-['Newsreader']">Selected Insurance: {selectedPayer.name}</p>
+                        {/* Emergency Contact Section */}
+                        <div className="mb-8">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Emergency Contact</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label htmlFor="emergencyContactName" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Name *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="emergencyContactName"
+                                        name="emergencyContactName"
+                                        value={formData.emergencyContactName}
+                                        onChange={handleInputChange}
+                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
+                                            errors.emergencyContactName ? 'border-red-500' : 'border-gray-300'
+                                        }`}
+                                    />
+                                    {errors.emergencyContactName && <p className="text-red-500 text-sm mt-1">{errors.emergencyContactName}</p>}
+                                </div>
+
+                                <div>
+                                    <label htmlFor="emergencyContactPhone" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Phone Number *
+                                    </label>
+                                    <input
+                                        type="tel"
+                                        id="emergencyContactPhone"
+                                        name="emergencyContactPhone"
+                                        value={formData.emergencyContactPhone}
+                                        onChange={handleInputChange}
+                                        placeholder="(555) 123-4567"
+                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
+                                            errors.emergencyContactPhone ? 'border-red-500' : 'border-gray-300'
+                                        }`}
+                                    />
+                                    {errors.emergencyContactPhone && <p className="text-red-500 text-sm mt-1">{errors.emergencyContactPhone}</p>}
+                                </div>
+
+                                <div>
+                                    <label htmlFor="emergencyContactRelationship" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Relationship
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="emergencyContactRelationship"
+                                        name="emergencyContactRelationship"
+                                        value={formData.emergencyContactRelationship}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g., Spouse, Parent, Sibling"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                    Member ID *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={insuranceInfo.member_id}
-                                    onChange={(e) => setInsuranceInfo(prev => ({ ...prev, member_id: e.target.value }))}
-                                    className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                />
-                            </div>
+                        {/* Medical Information Section */}
+                        <div className="mb-8">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Medical Information</h2>
+                            <div className="space-y-6">
+                                <div>
+                                    <label htmlFor="reasonForVisit" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Reason for Visit
+                                    </label>
+                                    <textarea
+                                        id="reasonForVisit"
+                                        name="reasonForVisit"
+                                        value={formData.reasonForVisit}
+                                        onChange={handleInputChange}
+                                        rows={3}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
+                                        placeholder="Please describe your main concerns or symptoms..."
+                                    />
+                                </div>
 
-                            <div>
-                                <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                    Group Number
-                                </label>
-                                <input
-                                    type="text"
-                                    value={insuranceInfo.group_number}
-                                    onChange={(e) => setInsuranceInfo(prev => ({ ...prev, group_number: e.target.value }))}
-                                    className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                />
+                                <div>
+                                    <label htmlFor="currentMedications" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Current Medications
+                                    </label>
+                                    <textarea
+                                        id="currentMedications"
+                                        name="currentMedications"
+                                        value={formData.currentMedications}
+                                        onChange={handleInputChange}
+                                        rows={3}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
+                                        placeholder="List all medications, dosages, and frequencies..."
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="allergies" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Allergies
+                                    </label>
+                                    <textarea
+                                        id="allergies"
+                                        name="allergies"
+                                        value={formData.allergies}
+                                        onChange={handleInputChange}
+                                        rows={2}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
+                                        placeholder="List any known allergies or enter 'None'..."
+                                    />
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Submit and Back Buttons */}
-                    <div className="flex justify-between items-center">
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            className="flex items-center px-6 py-3 text-[#091747]/60 hover:text-[#091747] transition-colors font-['Newsreader']"
-                        >
-                            <ArrowLeft className="w-5 h-5 mr-2" />
-                            Back to calendar
-                        </button>
+                        {/* Form Actions */}
+                        <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+                            <button
+                                type="button"
+                                onClick={onBack}
+                                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+                            >
+                                Back to Calendar
+                            </button>
 
-                        <button
-                            type="submit"
-                            className="px-8 py-4 bg-[#BF9C73] hover:bg-[#B8936A] text-white font-semibold rounded-xl transition-all duration-200 hover:shadow-lg font-['Newsreader']"
-                        >
-                            Continue to Release of Information
-                        </button>
-                    </div>
-                </form>
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="px-8 py-3 bg-[#BF9C73] text-white rounded-xl font-medium hover:bg-[#A8865F] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSubmitting ? 'Submitting...' : 'Continue to ROI'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     )

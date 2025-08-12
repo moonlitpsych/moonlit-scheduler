@@ -1,45 +1,27 @@
-// src/components/booking/views/ConfirmationView.tsx
 'use client'
 
-import { eligibilityService } from '@/lib/services/EligibilityService'
-import { supabase } from '@/lib/supabase'
 import { PatientInfo, TimeSlot } from '@/types/database'
-import { AlertCircle, Building2, Calendar, CheckCircle, Clock, CreditCard, Loader2, Mail, Phone, Repeat, Shield, User, X } from 'lucide-react'
-import { useState } from 'react'
 import { BookingScenario } from './WelcomeView'
-
-interface CaseManagerInfo {
-    name: string
-    email: string
-    phone?: string
-    organization?: string
-}
-
-interface CommunicationPreferences {
-    sendToPatient: boolean
-    sendToCaseManager: boolean
-    patientHasEmail: boolean
-}
 
 interface ConfirmationViewProps {
     appointmentId?: string
     patientInfo?: PatientInfo
     selectedTimeSlot?: TimeSlot
     bookingScenario: BookingScenario
-    caseManagerInfo?: CaseManagerInfo
-    communicationPreferences?: CommunicationPreferences
+    caseManagerInfo?: {
+        name: string
+        email: string
+        phone?: string
+        organization?: string
+    }
+    communicationPreferences?: {
+        sendToPatient: boolean
+        sendToCaseManager: boolean
+        patientHasEmail: boolean
+    }
     onStartOver: () => void
-    // New props for eligibility checking
-    insuranceInfo?: {
-        payerId: string
-        payerName: string
-        payerType?: string
-        memberId?: string
-        ssnLast4?: string
-    } | null
-    providerId?: string
-    serviceId?: string
-    onConfirmationComplete?: (appointmentId: string) => void
+    onChangeAppointment?: () => void // NEW: Quick change appointment
+    onChangeInsurance?: () => void  // NEW: Quick change insurance
 }
 
 export default function ConfirmationView({
@@ -50,483 +32,336 @@ export default function ConfirmationView({
     caseManagerInfo,
     communicationPreferences,
     onStartOver,
-    insuranceInfo,
-    providerId,
-    serviceId,
-    onConfirmationComplete
+    onChangeAppointment,
+    onChangeInsurance
 }: ConfirmationViewProps) {
-    // State for eligibility checking
-    const [isProcessing, setIsProcessing] = useState(false)
-    const [eligibilityStatus, setEligibilityStatus] = useState<'checking' | 'passed' | 'failed' | null>(null)
-    const [eligibilityMessage, setEligibilityMessage] = useState('')
-    const [bookingError, setBookingError] = useState('')
-    const [isConfirmed, setIsConfirmed] = useState(!!appointmentId)
-
-    const formatTimeSlot = (timeSlot: TimeSlot) => {
-        const start = new Date(timeSlot.start_time)
-        const end = new Date(timeSlot.end_time)
-        return {
-            date: start.toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            }),
-            time: `${start.toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            })} - ${end.toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            })}`
-        }
+    const formatDateTime = (date: string, startTime: string) => {
+        const dateObj = new Date(date)
+        const [hours, minutes] = startTime.split(':')
+        dateObj.setHours(parseInt(hours), parseInt(minutes))
+        
+        return dateObj.toLocaleString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        })
     }
 
-    const timeSlotFormatted = selectedTimeSlot ? formatTimeSlot(selectedTimeSlot) : null
-
-    const getConfirmationTitle = () => {
-        if (!isConfirmed && !appointmentId) {
-            return 'Please confirm your appointment'
-        }
-
+    const getScenarioTitle = () => {
         switch (bookingScenario) {
             case 'self':
-                return 'Thank you for booking with Moonlit!'
+                return 'Your Appointment is Confirmed!'
             case 'referral':
-                return 'Appointment successfully booked!'
+                return 'Referral Appointment Confirmed!'
             case 'case-manager':
-                return 'Client appointment confirmed!'
+                return 'Patient Appointment Confirmed!'
             default:
-                return 'Booking confirmed!'
+                return 'Appointment Confirmed!'
         }
     }
 
-    const getConfirmationMessage = () => {
-        if (!isConfirmed && !appointmentId) {
-            return 'Review your appointment details and click confirm to complete your booking.'
-        }
-
+    const getScenarioMessage = () => {
         switch (bookingScenario) {
             case 'self':
-                return 'Your appointment has been scheduled. You\'ll receive a confirmation email shortly with all the details.'
+                return 'Thank you for booking with Moonlit Psychiatry. We look forward to seeing you!'
             case 'referral':
-                return 'The appointment has been scheduled successfully. The patient will receive confirmation and appointment details.'
+                return 'The referral has been successfully submitted. The patient will receive confirmation details.'
             case 'case-manager':
-                return `${patientInfo?.first_name}'s appointment has been scheduled. As the case manager, you'll receive all communications and can coordinate their care.`
+                return 'The appointment has been booked for your patient. Confirmation details will be sent according to your preferences.'
             default:
-                return 'The appointment has been booked successfully.'
-        }
-    }
-
-    const handleConfirmAppointment = async () => {
-        if (!patientInfo || !selectedTimeSlot) return
-
-        setIsProcessing(true)
-        setBookingError('')
-
-        try {
-            // Step 1: Check eligibility if insurance is provided and it's Medicaid
-            if (insuranceInfo) {
-                const isMedicaid = insuranceInfo.payerType?.toLowerCase() === 'medicaid' ||
-                    insuranceInfo.payerName?.toLowerCase().includes('medicaid')
-
-                if (isMedicaid && eligibilityService.isEligibilityCheckEnabled()) {
-                    setEligibilityStatus('checking')
-                    setEligibilityMessage('Verifying insurance eligibility...')
-
-                    const eligibilityResult = await eligibilityService.checkEligibility(
-                        {
-                            firstName: patientInfo.first_name,
-                            lastName: patientInfo.last_name,
-                            dob: patientInfo.date_of_birth,
-                            email: patientInfo.email,
-                            phone: patientInfo.phone
-                        },
-                        insuranceInfo
-                    )
-
-                    if (!eligibilityResult.eligible) {
-                        setEligibilityStatus('failed')
-                        setEligibilityMessage(
-                            eligibilityResult.message || 'Insurance eligibility could not be verified'
-                        )
-                        setIsProcessing(false)
-                        return
-                    }
-
-                    setEligibilityStatus('passed')
-                    setEligibilityMessage(eligibilityResult.message || 'Insurance verified')
-                    await new Promise(resolve => setTimeout(resolve, 1000))
-                }
-            }
-
-            // Step 2: Create the appointment
-            setEligibilityMessage('Creating your appointment...')
-
-            const appointmentData = {
-                provider_id: providerId || selectedTimeSlot.provider_id,
-                service_instance_id: serviceId || selectedTimeSlot.service_instance_id,
-                payer_id: insuranceInfo?.payerId || null,
-                start_time: selectedTimeSlot.start_time,
-                end_time: selectedTimeSlot.end_time,
-                timezone: 'America/Denver',
-                patient_info: patientInfo,
-                insurance_info: insuranceInfo ? {
-                    payer_id: insuranceInfo.payerId,
-                    payer_name: insuranceInfo.payerName,
-                    member_id: insuranceInfo.memberId,
-                    ssn_last_4: insuranceInfo.ssnLast4
-                } : null,
-                roi_contacts: null,
-                appointment_type: 'telehealth' as const,
-                status: 'scheduled',
-                booking_source: 'widget',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            }
-
-            const { data: appointment, error } = await supabase
-                .from('appointments')
-                .insert(appointmentData)
-                .select()
-                .single()
-
-            if (error) {
-                console.error('Error creating appointment:', error)
-                throw new Error('Failed to create appointment')
-            }
-
-            if (appointment && appointment.id) {
-                setIsConfirmed(true)
-                setEligibilityStatus('passed')
-                setEligibilityMessage('Appointment confirmed!')
-
-                await new Promise(resolve => setTimeout(resolve, 500))
-
-                if (onConfirmationComplete) {
-                    onConfirmationComplete(appointment.id)
-                }
-            } else {
-                throw new Error('Failed to create appointment')
-            }
-
-        } catch (error: any) {
-            console.error('Booking error:', error)
-            setEligibilityStatus('failed')
-            setBookingError(error.message || 'Failed to confirm appointment. Please try again.')
-        } finally {
-            setIsProcessing(false)
+                return 'Your appointment has been successfully booked.'
         }
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-            <div className="max-w-4xl mx-auto py-12">
-                {/* Header */}
-                <div className="text-center mb-12">
-                    {isConfirmed || appointmentId ? (
-                        <div className="w-24 h-24 bg-[#17DB4E] rounded-full flex items-center justify-center mx-auto mb-6">
-                            <CheckCircle className="w-12 h-12 text-white" />
+        <div className="min-h-screen bg-gradient-to-br from-[#1a2c5b] to-[#2d4a7c]">
+            <div className="container mx-auto px-4 py-8">
+                {/* Success Header */}
+                <div className="text-white text-center mb-12">
+                    {/* Success Icon */}
+                    <div className="flex justify-center mb-6">
+                        <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center">
+                            <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
                         </div>
-                    ) : (
-                        <div className="w-24 h-24 bg-[#BF9C73] rounded-full flex items-center justify-center mx-auto mb-6">
-                            <Calendar className="w-12 h-12 text-white" />
+                    </div>
+
+                    <h1 className="text-4xl font-bold mb-4">{getScenarioTitle()}</h1>
+                    <p className="text-xl opacity-90 mb-6">{getScenarioMessage()}</p>
+
+                    {appointmentId && (
+                        <div className="bg-white/20 rounded-xl p-4 max-w-md mx-auto">
+                            <p className="text-sm opacity-80 mb-1">Appointment Reference</p>
+                            <p className="text-lg font-mono font-bold">{appointmentId}</p>
                         </div>
                     )}
-
-                    <h1 className="text-4xl font-light text-[#091747] mb-4 font-['Newsreader']">
-                        {getConfirmationTitle()}
-                    </h1>
-
-                    <p className="text-xl text-[#091747]/70 max-w-2xl mx-auto leading-relaxed font-['Newsreader']">
-                        {getConfirmationMessage()}
-                    </p>
                 </div>
 
-                {/* Eligibility Status Display */}
-                {eligibilityStatus && !isConfirmed && (
-                    <div className={`mb-8 p-6 rounded-2xl border-2 ${eligibilityStatus === 'checking'
-                            ? 'bg-blue-50 border-blue-200'
-                            : eligibilityStatus === 'passed'
-                                ? 'bg-green-50 border-green-200'
-                                : 'bg-red-50 border-red-200'
-                        }`}>
-                        <div className="flex items-center space-x-3">
-                            {eligibilityStatus === 'checking' ? (
-                                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                            ) : eligibilityStatus === 'passed' ? (
-                                <CheckCircle className="h-6 w-6 text-green-600" />
-                            ) : (
-                                <X className="h-6 w-6 text-red-600" />
-                            )}
-                            <div className="flex-1">
-                                <p className={`font-medium text-lg font-['Newsreader'] ${eligibilityStatus === 'checking'
-                                        ? 'text-blue-800'
-                                        : eligibilityStatus === 'passed'
-                                            ? 'text-green-800'
-                                            : 'text-red-800'
-                                    }`}>
-                                    {eligibilityMessage}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Error Display */}
-                {bookingError && (
-                    <div className="mb-8 p-6 bg-red-50 border-2 border-red-200 rounded-2xl">
-                        <div className="flex items-start space-x-3">
-                            <AlertCircle className="h-6 w-6 text-red-600 mt-0.5" />
-                            <div>
-                                <p className="font-medium text-red-800 font-['Newsreader']">
-                                    Unable to confirm appointment
-                                </p>
-                                <p className="text-sm text-red-700 mt-1 font-['Newsreader']">
-                                    {bookingError}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 {/* Appointment Details */}
-                {selectedTimeSlot && patientInfo && (
-                    <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
-                        <h2 className="text-2xl font-semibold text-[#091747] mb-6 font-['Newsreader']">
-                            Appointment Details
-                        </h2>
+                <div className="max-w-4xl mx-auto">
+                    <div className="bg-white rounded-2xl p-8 shadow-lg mb-8">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Appointment Details</h2>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            {/* Patient Information */}
-                            <div>
-                                <div className="flex items-center space-x-3 mb-4">
-                                    <div className="w-10 h-10 bg-[#BF9C73]/10 rounded-lg flex items-center justify-center">
-                                        <User className="w-5 h-5 text-[#BF9C73]" />
-                                    </div>
-                                    <h3 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
-                                        {bookingScenario === 'case-manager' ? 'Client Information' : 'Patient Information'}
-                                    </h3>
-                                </div>
-                                <div className="space-y-2">
-                                    <p className="text-[#091747] font-medium font-['Newsreader']">
-                                        {patientInfo.first_name} {patientInfo.last_name}
+                        {selectedTimeSlot && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Date & Time</h3>
+                                    <p className="text-gray-700 mb-2">
+                                        {formatDateTime(selectedTimeSlot.date, selectedTimeSlot.start_time)}
                                     </p>
-                                    <div className="flex items-center space-x-2">
-                                        <Mail className="w-4 h-4 text-[#091747]/60" />
-                                        <span className="text-[#091747]/70 font-['Newsreader']">
-                                            {patientInfo.email || 'No email provided'}
-                                        </span>
-                                    </div>
-                                    {patientInfo.phone && (
-                                        <div className="flex items-center space-x-2">
-                                            <Phone className="w-4 h-4 text-[#091747]/60" />
-                                            <span className="text-[#091747]/70 font-['Newsreader']">
-                                                {patientInfo.phone}
-                                            </span>
-                                        </div>
+                                    {selectedTimeSlot.duration_minutes && (
+                                        <p className="text-sm text-gray-600">
+                                            Duration: {selectedTimeSlot.duration_minutes} minutes
+                                        </p>
+                                    )}
+                                    {onChangeAppointment && (
+                                        <button
+                                            type="button"
+                                            onClick={onChangeAppointment}
+                                            className="mt-2 text-sm text-[#BF9C73] hover:text-[#A8865F] transition-colors"
+                                        >
+                                            Change Appointment Time
+                                        </button>
                                     )}
                                 </div>
-                            </div>
 
-                            {/* Appointment Time */}
-                            <div>
-                                <div className="flex items-center space-x-3 mb-4">
-                                    <div className="w-10 h-10 bg-[#17DB4E]/10 rounded-lg flex items-center justify-center">
-                                        <Calendar className="w-5 h-5 text-[#17DB4E]" />
-                                    </div>
-                                    <h3 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
-                                        Appointment Time
-                                    </h3>
-                                </div>
-                                <div className="space-y-2">
-                                    <p className="text-[#091747] font-medium font-['Newsreader']">
-                                        {timeSlotFormatted?.date}
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Provider</h3>
+                                    <p className="text-gray-700">
+                                        {selectedTimeSlot.provider_name || 'Moonlit Psychiatry'}
                                     </p>
-                                    <div className="flex items-center space-x-2">
-                                        <Clock className="w-4 h-4 text-[#091747]/60" />
-                                        <span className="text-[#091747]/70 font-['Newsreader']">
-                                            {timeSlotFormatted?.time}
-                                        </span>
-                                    </div>
-                                    <p className="text-[#091747]/70 text-sm font-['Newsreader']">
-                                        60-minute telehealth appointment
+                                    <p className="text-sm text-gray-600 mt-2">
+                                        Location: Telehealth Appointment
                                     </p>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
-                        {/* Insurance Information */}
-                        {insuranceInfo && (
-                            <div className="mt-6 pt-6 border-t border-[#BF9C73]/20">
-                                <div className="flex items-center space-x-3 mb-3">
-                                    <div className="w-8 h-8 bg-[#091747]/10 rounded-lg flex items-center justify-center">
-                                        <CreditCard className="w-4 h-4 text-[#091747]" />
+                        {/* Patient Information */}
+                        {patientInfo && (
+                            <div className="border-t pt-6">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-4">Patient Information</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-sm text-gray-600">Name</p>
+                                        <p className="text-gray-900">
+                                            {patientInfo.firstName} {patientInfo.lastName}
+                                        </p>
                                     </div>
-                                    <h3 className="text-md font-semibold text-[#091747] font-['Newsreader']">
-                                        Insurance
-                                    </h3>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Phone</p>
+                                        <p className="text-gray-900">{patientInfo.phone}</p>
+                                    </div>
+                                    {patientInfo.email && (
+                                        <div>
+                                            <p className="text-sm text-gray-600">Email</p>
+                                            <p className="text-gray-900">{patientInfo.email}</p>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <p className="text-sm text-gray-600">Date of Birth</p>
+                                        <p className="text-gray-900">{patientInfo.dateOfBirth}</p>
+                                    </div>
                                 </div>
-                                <p className="text-[#091747]/70 font-['Newsreader'] ml-11">
-                                    {insuranceInfo.payerName}
-                                    {insuranceInfo.memberId && ` • Member ID: ${insuranceInfo.memberId}`}
-                                </p>
                             </div>
                         )}
 
                         {/* Case Manager Information */}
                         {bookingScenario === 'case-manager' && caseManagerInfo && (
-                            <div className="mt-6 pt-6 border-t border-[#BF9C73]/20">
-                                <div className="flex items-center space-x-3 mb-4">
-                                    <div className="w-10 h-10 bg-[#17DB4E]/10 rounded-lg flex items-center justify-center">
-                                        <Building2 className="w-5 h-5 text-[#17DB4E]" />
+                            <div className="border-t pt-6">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-4">Case Manager Information</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-sm text-gray-600">Name</p>
+                                        <p className="text-gray-900">{caseManagerInfo.name}</p>
                                     </div>
-                                    <h3 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
-                                        Case Manager
-                                    </h3>
-                                </div>
-                                <div className="space-y-2 ml-13">
-                                    <p className="text-[#091747] font-medium font-['Newsreader']">
-                                        {caseManagerInfo.name}
-                                    </p>
-                                    {caseManagerInfo.organization && (
-                                        <p className="text-[#091747]/70 font-['Newsreader']">
-                                            {caseManagerInfo.organization}
-                                        </p>
-                                    )}
-                                    <div className="flex items-center space-x-2">
-                                        <Mail className="w-4 h-4 text-[#091747]/60" />
-                                        <span className="text-[#091747]/70 font-['Newsreader']">
-                                            {caseManagerInfo.email}
-                                        </span>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Email</p>
+                                        <p className="text-gray-900">{caseManagerInfo.email}</p>
                                     </div>
                                     {caseManagerInfo.phone && (
-                                        <div className="flex items-center space-x-2">
-                                            <Phone className="w-4 h-4 text-[#091747]/60" />
-                                            <span className="text-[#091747]/70 font-['Newsreader']">
-                                                {caseManagerInfo.phone}
-                                            </span>
+                                        <div>
+                                            <p className="text-sm text-gray-600">Phone</p>
+                                            <p className="text-gray-900">{caseManagerInfo.phone}</p>
+                                        </div>
+                                    )}
+                                    {caseManagerInfo.organization && (
+                                        <div>
+                                            <p className="text-sm text-gray-600">Organization</p>
+                                            <p className="text-gray-900">{caseManagerInfo.organization}</p>
                                         </div>
                                     )}
                                 </div>
                             </div>
                         )}
 
-                        {/* Confirm Button */}
-                        {!isConfirmed && !appointmentId && (
-                            <div className="mt-8 flex justify-center">
-                                <button
-                                    onClick={handleConfirmAppointment}
-                                    disabled={isProcessing || eligibilityStatus === 'failed'}
-                                    className="px-8 py-3 bg-[#17DB4E] text-white rounded-xl hover:bg-[#14c440] transition-all duration-200 font-['Newsreader'] font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                                >
-                                    {isProcessing ? (
-                                        <>
-                                            <Loader2 className="h-5 w-5 animate-spin" />
-                                            <span>Processing...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <CheckCircle className="h-5 w-5" />
-                                            <span>Confirm Appointment</span>
-                                        </>
-                                    )}
-                                </button>
+                        {/* Insurance Information */}
+                        {onChangeInsurance && (
+                            <div className="border-t pt-6">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-semibold text-gray-900">Insurance</h3>
+                                    <button
+                                        type="button"
+                                        onClick={onChangeInsurance}
+                                        className="text-sm text-[#BF9C73] hover:text-[#A8865F] transition-colors"
+                                    >
+                                        Change Insurance
+                                    </button>
+                                </div>
+                                <p className="text-gray-700 mt-2">Insurance verification completed</p>
                             </div>
                         )}
                     </div>
-                )}
 
-                {/* Next Steps - Only show after confirmation */}
-                {(isConfirmed || appointmentId) && (
-                    <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
-                        <h2 className="text-2xl font-semibold text-[#091747] mb-6 font-['Newsreader']">
-                            What's Next?
-                        </h2>
-
+                    {/* Next Steps */}
+                    <div className="bg-white rounded-2xl p-8 shadow-lg mb-8">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-6">What Happens Next?</h2>
+                        
                         <div className="space-y-4">
-                            <div className="flex items-start space-x-3">
-                                <div className="w-6 h-6 bg-[#BF9C73] text-white rounded-full flex items-center justify-center text-sm font-semibold">
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0 w-8 h-8 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold">
                                     1
                                 </div>
                                 <div>
-                                    <p className="text-[#091747] font-semibold font-['Newsreader']">
-                                        Check your email for confirmation
-                                    </p>
-                                    <p className="text-[#091747]/70 text-sm font-['Newsreader']">
-                                        {bookingScenario === 'case-manager'
-                                            ? 'You\'ll receive a detailed confirmation with all appointment information.'
-                                            : 'You should receive a confirmation email within the next few minutes.'
-                                        }
+                                    <h3 className="font-semibold text-gray-900">Confirmation Email</h3>
+                                    <p className="text-gray-600">
+                                        {communicationPreferences?.sendToPatient 
+                                            ? "You'll receive a confirmation email with appointment details and preparation instructions."
+                                            : communicationPreferences?.sendToCaseManager
+                                            ? "The case manager will receive a confirmation email with appointment details."
+                                            : "Confirmation details will be sent according to your preferences."}
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="flex items-start space-x-3">
-                                <div className="w-6 h-6 bg-[#BF9C73] text-white rounded-full flex items-center justify-center text-sm font-semibold">
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0 w-8 h-8 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold">
                                     2
                                 </div>
                                 <div>
-                                    <p className="text-[#091747] font-semibold font-['Newsreader']">
-                                        Complete intake forms
-                                    </p>
-                                    <p className="text-[#091747]/70 text-sm font-['Newsreader']">
-                                        {bookingScenario === 'case-manager'
-                                            ? 'You\'ll receive intake forms to complete with your client before the appointment.'
-                                            : 'Please complete the intake forms that will be emailed to you.'
-                                        }
+                                    <h3 className="font-semibold text-gray-900">Pre-Appointment Preparation</h3>
+                                    <p className="text-gray-600">
+                                        Complete any required forms and gather insurance information before your visit.
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="flex items-start space-x-3">
-                                <div className="w-6 h-6 bg-[#BF9C73] text-white rounded-full flex items-center justify-center text-sm font-semibold">
+                            <div className="flex items-start space-x-4">
+                                <div className="flex-shrink-0 w-8 h-8 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold">
                                     3
                                 </div>
                                 <div>
-                                    <p className="text-[#091747] font-semibold font-['Newsreader']">
-                                        Join your telehealth appointment
+                                    <h3 className="font-semibold text-gray-900">Telehealth Link</h3>
+                                    <p className="text-gray-600">
+                                        You'll receive a secure telehealth link 30 minutes before your appointment.
                                     </p>
-                                    <p className="text-[#091747]/70 text-sm font-['Newsreader']">
-                                        {bookingScenario === 'case-manager'
-                                            ? 'You\'ll receive the meeting link and can help your client join the video call.'
-                                            : 'A meeting link will be provided closer to your appointment date.'
-                                        }
+                                </div>
+                            </div>
+
+                            {bookingScenario === 'case-manager' && (
+                                <div className="flex items-start space-x-4">
+                                    <div className="flex-shrink-0 w-8 h-8 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold">
+                                        4
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold text-gray-900">Case Manager Coordination</h3>
+                                        <p className="text-gray-600">
+                                            Our team will coordinate with the case manager for any additional requirements.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Contact Information */}
+                    <div className="bg-white rounded-2xl p-8 shadow-lg mb-8">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Need Help?</h2>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <h3 className="font-semibold text-gray-900 mb-2">Questions about your appointment?</h3>
+                                <p className="text-gray-600 mb-2">Call our scheduling team:</p>
+                                <p className="text-[#BF9C73] font-semibold">(555) 123-4567</p>
+                            </div>
+                            
+                            <div>
+                                <h3 className="font-semibold text-gray-900 mb-2">Technical issues?</h3>
+                                <p className="text-gray-600 mb-2">Email our support team:</p>
+                                <p className="text-[#BF9C73] font-semibold">support@moonlitpsychiatry.com</p>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 p-4 bg-blue-50 rounded-xl">
+                            <div className="flex items-start space-x-3">
+                                <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                <div>
+                                    <h3 className="font-semibold text-blue-900">Need to reschedule?</h3>
+                                    <p className="text-blue-800 text-sm">
+                                        Please call us at least 24 hours before your appointment to reschedule without any fees.
                                     </p>
                                 </div>
                             </div>
                         </div>
                     </div>
-                )}
 
-                {/* Action Buttons */}
-                <div className="text-center">
-                    <button
-                        onClick={onStartOver}
-                        className="inline-flex items-center space-x-2 px-6 py-3 border-2 border-[#BF9C73] text-[#BF9C73] hover:bg-[#BF9C73] hover:text-white rounded-xl transition-all duration-200 font-['Newsreader']"
-                    >
-                        <Repeat className="w-5 h-5" />
-                        <span>Book Another Appointment</span>
-                    </button>
-                </div>
+                    {/* Action Buttons */}
+                    <div className="text-center">
+                        <div className="space-y-4">
+                            {/* Quick Change Options */}
+                            {(onChangeAppointment || onChangeInsurance) && (
+                                <div className="flex items-center justify-center gap-4 mb-6">
+                                    {onChangeAppointment && (
+                                        <button
+                                            type="button"
+                                            onClick={onChangeAppointment}
+                                            className="px-6 py-3 border border-[#BF9C73] text-[#BF9C73] rounded-xl hover:bg-[#BF9C73]/5 transition-colors"
+                                        >
+                                            Change Appointment
+                                        </button>
+                                    )}
+                                    {onChangeInsurance && (
+                                        <button
+                                            type="button"
+                                            onClick={onChangeInsurance}
+                                            className="px-6 py-3 border border-[#BF9C73] text-[#BF9C73] rounded-xl hover:bg-[#BF9C73]/5 transition-colors"
+                                        >
+                                            Change Insurance
+                                        </button>
+                                    )}
+                                </div>
+                            )}
 
-                {/* Dev Info - Only in development */}
-                {process.env.NODE_ENV === 'development' && insuranceInfo && (
-                    <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-                        <div className="flex items-start space-x-2">
-                            <Shield className="h-4 w-4 text-yellow-600 mt-0.5" />
-                            <div className="text-xs text-yellow-800 font-['Newsreader']">
-                                <p className="font-semibold">Dev Info:</p>
-                                <p>
-                                    Eligibility Checker: {eligibilityService.isEligibilityCheckEnabled() ? 'ON' : 'OFF'}
-                                    {' '}(Toggle via NEXT_PUBLIC_ELIGIBILITY_CHECKER in .env.local)
-                                </p>
+                            {/* Primary Actions */}
+                            <div className="space-y-3">
+                                <button
+                                    type="button"
+                                    onClick={() => window.print()}
+                                    className="px-8 py-3 bg-[#BF9C73] text-white rounded-xl font-medium hover:bg-[#A8865F] transition-colors"
+                                >
+                                    Print Confirmation
+                                </button>
+                                
+                                <div>
+                                    <button
+                                        type="button"
+                                        onClick={onStartOver}
+                                        className="px-6 py-2 text-white/80 hover:text-white transition-colors"
+                                    >
+                                        Book Another Appointment
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                )}
+                </div>
             </div>
         </div>
     )

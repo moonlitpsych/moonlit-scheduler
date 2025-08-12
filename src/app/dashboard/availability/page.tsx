@@ -82,14 +82,17 @@ export default function DashboardAvailabilityPage() {
 
             setUser(user)
 
+            // FIXED: Added .eq('is_active', true) to filter out inactive duplicates
             const { data: providerData, error: providerError } = await supabase
                 .from('providers')
                 .select('*')
                 .eq('auth_user_id', user.id)
+                .eq('is_active', true)
                 .single()
 
             if (providerError) {
-                setError(`Provider lookup failed: ${providerError.message}. Please ensure your provider account is linked to auth user ID: ${user.id}`)
+                setError(`Provider lookup failed: ${providerError.message}.
+                Please ensure your provider account is linked to auth user ID: ${user.id}`)
             } else {
                 setProvider(providerData)
                 await loadProviderSchedule(providerData.id)
@@ -142,104 +145,62 @@ export default function DashboardAvailabilityPage() {
         }
     }
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut()
-        router.push('/auth/login')
-    }
+    // Calculate statistics
+    const activeDays = DAYS.filter(day => 
+        schedule.some(block => block.day_of_week === day.number)
+    ).length
 
-    const handleSaveComplete = async () => {
-        setEditing(false)
-        if (provider) {
-            await loadProviderSchedule(provider.id)
-        }
-    }
+    const totalBlocks = schedule.length
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#FEF8F1] flex items-center justify-center">
+            <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/20 to-[#FEF8F1] flex items-center justify-center">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#BF9C73] mx-auto mb-4"></div>
-                    <p className="text-[#091747]">Loading availability manager...</p>
+                    <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#BF9C73] mx-auto"></div>
+                    <p className="mt-4 text-[#091747] font-medium">Loading your dashboard...</p>
                 </div>
             </div>
         )
     }
 
-    if (error || !provider) {
+    if (error) {
         return (
-            <div className="min-h-screen bg-[#FEF8F1] flex items-center justify-center">
-                <div className="text-center max-w-md mx-auto px-4">
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-                        <h3 className="font-semibold text-yellow-900 mb-3">Setup Required</h3>
-                        <p className="text-sm text-yellow-800 mb-4">
-                            {error || `Your account (${user?.email}) needs to be linked to a provider profile.`}
-                        </p>
-                        <button 
-                            onClick={() => window.location.href = 'mailto:admin@moonlitpsychiatry.com'}
-                            className="text-sm bg-yellow-600 text-white px-3 py-2 rounded hover:bg-yellow-700"
-                        >
-                            Contact Admin
-                        </button>
+            <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/20 to-[#FEF8F1] flex items-center justify-center">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 max-w-2xl mx-4">
+                    <div className="flex items-center mb-4">
+                        <AlertCircle className="h-8 w-8 text-yellow-600 mr-3" />
+                        <h2 className="text-xl font-bold text-yellow-900">Setup Required</h2>
                     </div>
+                    <p className="text-yellow-800 mb-6 leading-relaxed">{error}</p>
+                    <button
+                        onClick={() => router.push('/contact')}
+                        className="bg-[#BF9C73] hover:bg-[#A88861] text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                    >
+                        Contact Admin
+                    </button>
                 </div>
             </div>
         )
     }
-
-    const activeDays = [...new Set(schedule.map(s => s.day_of_week))].length
-    const totalBlocks = schedule.length
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/20 to-[#FEF8F1]">
-            {/* Header */}
-            <div className="bg-white shadow-sm border-b border-stone-200">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center py-6">
-                        <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 bg-[#091747] rounded-lg flex items-center justify-center">
-                                <div className="w-3 h-3 bg-[#BF9C73] rounded-full"></div>
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-bold text-[#091747] font-['Newsreader']">
-                                    Availability Management
-                                </h1>
-                                <p className="text-sm text-[#091747]/60">Set your weekly schedule and one-off exceptions</p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={handleLogout}
-                            className="px-4 py-2 text-sm text-[#091747] hover:bg-[#FEF8F1] rounded-lg transition-colors"
-                        >
-                            Sign Out
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Main Content */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {editing ? (
-                    <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <h2 className="text-xl font-semibold text-[#091747] font-['Newsreader']">
-                                    Edit Weekly Schedule
-                                </h2>
-                                <p className="text-sm text-[#091747]/60 mt-1">
-                                    Set your recurring availability for patient appointments
-                                </p>
-                            </div>
-                        </div>
-                        <ScheduleEditor
-                            providerId={provider?.id || 'temp-provider-id'}
-                            onSave={handleSaveComplete}
-                            onCancel={() => setEditing(false)}
-                        />
-                    </div>
-                ) : (
+                {/* Header */}
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-[#091747] font-['Newsreader']">
+                        Manage Your Availability
+                    </h1>
+                    <p className="mt-2 text-[#091747]/70">
+                        Set your weekly schedule, time off, and booking preferences.
+                    </p>
+                </div>
+
+                {/* Provider Schedule Management */}
+                {provider && (
                     <>
-                        {/* Status Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                        {/* Overview Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                             <div className="bg-white rounded-xl p-6 shadow-sm border border-stone-200">
                                 <div className="flex items-center">
                                     <div className="p-2 bg-[#BF9C73]/10 rounded-lg">
@@ -295,24 +256,26 @@ export default function DashboardAvailabilityPage() {
 
                         {/* Main Content Grid */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            {/* Schedule Overview */}
+                            {/* Weekly Schedule */}
                             <div className="lg:col-span-2">
                                 <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
-                                                Weekly Schedule
-                                            </h3>
-                                            <p className="text-sm text-[#091747]/60 mt-1">
-                                                Your current availability for patient appointments
-                                            </p>
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h2 className="text-xl font-bold text-[#091747]">Weekly Schedule</h2>
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={() => setShowExceptions(true)}
+                                                className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg transition-colors font-medium flex items-center gap-2"
+                                            >
+                                                <Plus className="h-4 w-4" />
+                                                Add Exception
+                                            </button>
+                                            <button
+                                                onClick={() => setEditing(true)}
+                                                className="bg-[#BF9C73] hover:bg-[#A88861] text-white px-4 py-2 rounded-lg transition-colors font-medium"
+                                            >
+                                                Edit Schedule
+                                            </button>
                                         </div>
-                                        <button
-                                            onClick={() => setEditing(true)}
-                                            className="bg-[#BF9C73] hover:bg-[#A88861] text-white px-4 py-2 rounded-lg transition-colors font-medium"
-                                        >
-                                            Edit Schedule
-                                        </button>
                                     </div>
 
                                     {schedule.length > 0 ? (
@@ -320,13 +283,9 @@ export default function DashboardAvailabilityPage() {
                                             {DAYS.map(day => {
                                                 const dayBlocks = schedule.filter(block => block.day_of_week === day.number)
                                                 return (
-                                                    <div
-                                                        key={day.number}
-                                                        className="flex items-center justify-between py-3 px-4 bg-[#FEF8F1] rounded-lg"
-                                                    >
+                                                    <div key={day.number} className="flex items-center justify-between py-3 border-b border-stone-100 last:border-b-0">
                                                         <div className="flex items-center gap-3">
-                                                            <div className={`w-3 h-3 rounded-full ${dayBlocks.length > 0 ? 
-                                                                'bg-[#17DB4E]' : 'bg-stone-300'}`}></div>
+                                                            <div className={`w-3 h-3 rounded-full ${dayBlocks.length > 0 ? 'bg-[#17DB4E]' : 'bg-stone-300'}`}></div>
                                                             <span className="font-medium text-[#091747]">{day.name}</span>
                                                         </div>
                                                         <div className="text-sm text-[#091747]">
@@ -365,115 +324,99 @@ export default function DashboardAvailabilityPage() {
 
                                 {/* Enhanced Schedule Exceptions Section */}
                                 <div className="mt-8 bg-white rounded-xl shadow-sm border border-stone-200 p-6">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
-                                                Schedule Exceptions
-                                            </h3>
-                                            <p className="text-sm text-[#091747]/60 mt-1">
-                                                Birthday off • Vacation week • Family afternoon • Lunch meeting
-                                            </p>
-                                        </div>
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-lg font-bold text-[#091747]">Schedule Exceptions</h3>
                                         <button
                                             onClick={() => setShowExceptions(true)}
-                                            className="flex items-center gap-2 bg-[#BF9C73] hover:bg-[#A88861] text-white px-4 py-2 rounded-lg transition-colors font-medium"
+                                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg transition-colors font-medium flex items-center gap-2 text-sm"
                                         >
-                                            <Plus className="w-4 h-4" />
+                                            <Plus className="h-4 w-4" />
                                             Add Exception
                                         </button>
                                     </div>
 
                                     {exceptions.length > 0 ? (
                                         <div className="space-y-3">
-                                            {exceptions.slice(0, 5).map((exception) => (
-                                                <div key={exception.id} className="flex items-center justify-between p-4 bg-[#FEF8F1] rounded-lg">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`p-2 rounded-lg ${
-                                                            exception.exception_type === 'unavailable' || exception.exception_type === 'vacation'
-                                                                ? 'bg-red-100' 
-                                                                : exception.exception_type === 'custom_hours'
-                                                                ? 'bg-yellow-100'
-                                                                : exception.exception_type === 'partial_block'
-                                                                ? 'bg-orange-100'
-                                                                : 'bg-purple-100'
-                                                        }`}>
-                                                            {exception.exception_type === 'unavailable' || exception.exception_type === 'vacation' ? (
-                                                                <X className="h-4 w-4 text-red-600" />
-                                                            ) : exception.exception_type === 'partial_block' ? (
-                                                                <AlertTriangle className="h-4 w-4 text-orange-600" />
-                                                            ) : exception.exception_type === 'recurring_change' ? (
-                                                                <Repeat className="h-4 w-4 text-purple-600" />
-                                                            ) : (
-                                                                <Clock className="h-4 w-4 text-yellow-600" />
-                                                            )}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-medium text-[#091747]">
-                                                                {new Date(exception.exception_date).toLocaleDateString('en-US', {
-                                                                    weekday: 'long',
-                                                                    month: 'long',
-                                                                    day: 'numeric'
-                                                                })}
-                                                                {exception.end_date && exception.end_date !== exception.exception_date && (
-                                                                    <span> - {new Date(exception.end_date).toLocaleDateString('en-US', {
-                                                                        month: 'long',
-                                                                        day: 'numeric'
-                                                                    })}</span>
-                                                                )}
+                                            {exceptions.map((exception) => (
+                                                <div key={exception.id} className="bg-stone-50 rounded-lg p-4 border border-stone-200">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <div className={`p-1 rounded ${
+                                                                    exception.exception_type === 'unavailable' || exception.exception_type === 'vacation' 
+                                                                        ? 'bg-red-100'
+                                                                        : exception.exception_type === 'partial_block' 
+                                                                        ? 'bg-orange-100'
+                                                                        : 'bg-purple-100'
+                                                                }`}>
+                                                                    {exception.exception_type === 'unavailable' || exception.exception_type === 'vacation' ? (
+                                                                        <X className="h-4 w-4 text-red-600" />
+                                                                    ) : exception.exception_type === 'partial_block' ? (
+                                                                        <AlertTriangle className="h-4 w-4 text-orange-600" />
+                                                                    ) : exception.exception_type === 'recurring_change' ? (
+                                                                        <Repeat className="h-4 w-4 text-purple-600" />
+                                                                    ) : (
+                                                                        <Clock className="h-4 w-4 text-blue-600" />
+                                                                    )}
+                                                                </div>
+                                                                <h4 className="font-medium text-[#091747] capitalize">
+                                                                    {exception.exception_type.replace('_', ' ')}
+                                                                </h4>
                                                                 {exception.is_recurring && (
-                                                                    <span className="ml-2 px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-full">
+                                                                    <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">
                                                                         Recurring
                                                                     </span>
                                                                 )}
-                                                            </p>
-                                                            <p className="text-sm text-[#091747]/60">
-                                                                {exception.exception_type === 'unavailable' 
-                                                                    ? 'Completely unavailable'
-                                                                    : exception.exception_type === 'vacation'
-                                                                    ? 'Vacation/time off'
-                                                                    : exception.exception_type === 'custom_hours'
-                                                                    ? `Custom hours: ${formatTimeRange(exception.start_time || '', exception.end_time || '')}`
-                                                                    : exception.exception_type === 'partial_block'
-                                                                    ? `Blocked: ${formatTimeRange(exception.start_time || '', exception.end_time || '')}`
-                                                                    : 'Recurring schedule change'
-                                                                }
-                                                            </p>
-                                                            {exception.note && (
-                                                                <p className="text-sm text-[#091747]/50 italic">{exception.note}</p>
-                                                            )}
+                                                            </div>
+                                                            <div className="text-sm text-[#091747]/70 space-y-1">
+                                                                <div>
+                                                                    <strong>Date:</strong> {new Date(exception.exception_date).toLocaleDateString()}
+                                                                    {exception.end_date && (
+                                                                        <span> - {new Date(exception.end_date).toLocaleDateString()}</span>
+                                                                    )}
+                                                                </div>
+                                                                {exception.start_time && exception.end_time && (
+                                                                    <div>
+                                                                        <strong>Time:</strong> {formatTimeRange(exception.start_time, exception.end_time)}
+                                                                    </div>
+                                                                )}
+                                                                {exception.note && (
+                                                                    <div>
+                                                                        <strong>Note:</strong> {exception.note}
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <button
-                                                        onClick={async () => {
-                                                            if (confirm('Delete this exception?')) {
-                                                                try {
-                                                                    const { error } = await supabase
-                                                                        .from('availability_exceptions')
-                                                                        .delete()
-                                                                        .eq('id', exception.id)
-                                                                    
-                                                                    if (error) throw error
-                                                                    await loadProviderExceptions(provider.id)
-                                                                } catch (error) {
-                                                                    console.error('Error deleting exception:', error)
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (confirm('Are you sure you want to delete this exception?')) {
+                                                                    try {
+                                                                        const { error } = await supabase
+                                                                            .from('availability_exceptions')
+                                                                            .delete()
+                                                                            .eq('id', exception.id)
+
+                                                                        if (error) {
+                                                                            console.error('Error deleting exception:', error)
+                                                                        } else {
+                                                                            await loadProviderExceptions(provider.id)
+                                                                        }
+                                                                    } catch (err) {
+                                                                        console.error('Error deleting exception:', err)
+                                                                    }
                                                                 }
-                                                            }
-                                                        }}
-                                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
+                                                            }}
+                                                            className="text-red-500 hover:text-red-700 p-1"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ))}
-                                            {exceptions.length > 5 && (
-                                                <p className="text-sm text-[#091747]/60 text-center py-2">
-                                                    +{exceptions.length - 5} more exceptions
-                                                </p>
-                                            )}
                                         </div>
                                     ) : (
                                         <div className="text-center py-8">
-                                            <Calendar className="h-8 w-8 text-[#091747]/30 mx-auto mb-3" />
+                                            <AlertCircle className="h-8 w-8 text-[#091747]/30 mx-auto mb-3" />
                                             <p className="text-[#091747]/60 mb-4">No schedule exceptions</p>
                                             <button
                                                 onClick={() => setShowExceptions(true)}
@@ -544,6 +487,35 @@ export default function DashboardAvailabilityPage() {
                     }}
                 />
             )}
+
+            {/* Schedule Editor Modal */}
+            {editing && provider && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-stone-200">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-bold text-[#091747]">Edit Schedule</h2>
+                                <button
+                                    onClick={() => setEditing(false)}
+                                    className="text-[#091747]/60 hover:text-[#091747] transition-colors"
+                                >
+                                    <X className="h-6 w-6" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <ScheduleEditor
+                                providerId={provider.id}
+                                onSave={async () => {
+                                    setEditing(false)
+                                    await loadProviderSchedule(provider.id)
+                                }}
+                                onCancel={() => setEditing(false)}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
@@ -555,247 +527,311 @@ function WorkingExceptionManagerModal({
     onSave 
 }: { 
     providerId: string
-    onClose: () => void 
-    onSave: () => void 
+    onClose: () => void
+    onSave: () => void
 }) {
-    const [exception, setException] = useState({
-        provider_id: providerId,
-        exception_type: 'unavailable' as const,
-        exception_date: '',
-        end_date: '',
-        start_time: '',
-        end_time: '',
-        note: '' // Using 'note' to match the actual database schema
-    })
+    const [exceptionType, setExceptionType] = useState<'unavailable' | 'custom_hours' | 'partial_block' | 'vacation' | 'recurring_change'>('unavailable')
+    const [exceptionDate, setExceptionDate] = useState('')
+    const [endDate, setEndDate] = useState('')
+    const [startTime, setStartTime] = useState('')
+    const [endTime, setEndTime] = useState('')
+    const [note, setNote] = useState('')
+    const [isRecurring, setIsRecurring] = useState(false)
+    const [recurrencePattern, setRecurrencePattern] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
+    const [recurrenceInterval, setRecurrenceInterval] = useState(1)
+    const [recurrenceCount, setRecurrenceCount] = useState<number | undefined>(undefined)
+    const [recurrenceEndDate, setRecurrenceEndDate] = useState('')
+    const [recurrenceDays, setRecurrenceDays] = useState<number[]>([])
     const [saving, setSaving] = useState(false)
-    const [errors, setErrors] = useState<string[]>([])
-    const supabase = createClientComponentClient()
-
-    const validateException = (): string[] => {
-        const validationErrors: string[] = []
-        
-        if (!exception.exception_date) {
-            validationErrors.push('Start date is required')
-        }
-        
-        if (exception.exception_type === 'custom_hours' || exception.exception_type === 'partial_block') {
-            if (!exception.start_time || !exception.end_time) {
-                validationErrors.push('Start and end times are required for custom hours/partial blocks')
-            }
-            if (exception.start_time && exception.end_time && exception.start_time >= exception.end_time) {
-                validationErrors.push('End time must be after start time')
-            }
-        }
-        
-        if (exception.end_date && exception.exception_date && exception.end_date < exception.exception_date) {
-            validationErrors.push('End date must be after start date')
-        }
-        
-        return validationErrors
-    }
+    
+    const supabase = createClientComponentClient<Database>()
 
     const handleSave = async () => {
-        const validationErrors = validateException()
-        if (validationErrors.length > 0) {
-            setErrors(validationErrors)
+        if (!exceptionDate) {
+            alert('Please select a date')
+            return
+        }
+
+        if ((exceptionType === 'custom_hours' || exceptionType === 'partial_block') && (!startTime || !endTime)) {
+            alert('Please specify start and end times for custom hours or partial blocks')
             return
         }
 
         setSaving(true)
-        setErrors([])
 
         try {
-            // Create the exception object matching the database schema exactly
-            const exceptionToSave = {
+            const exceptionData: any = {
                 provider_id: providerId,
-                exception_date: exception.exception_date,
-                exception_type: exception.exception_type,
-                // Only include optional fields that have values
-                ...(exception.end_date && { end_date: exception.end_date }),
-                ...(exception.start_time && { start_time: exception.start_time }),
-                ...(exception.end_time && { end_time: exception.end_time }),
-                ...(exception.note && { note: exception.note }), // Using 'note' not 'reason'
-                created_at: new Date().toISOString()
+                exception_date: exceptionDate,
+                exception_type: exceptionType,
+                note: note || null,
+                is_recurring: isRecurring
             }
 
-            console.log('Saving exception with correct schema:', exceptionToSave)
+            // Add optional fields based on exception type
+            if (endDate) exceptionData.end_date = endDate
+            if (startTime) exceptionData.start_time = startTime
+            if (endTime) exceptionData.end_time = endTime
+
+            // Add recurrence fields if recurring
+            if (isRecurring) {
+                exceptionData.recurrence_pattern = recurrencePattern
+                exceptionData.recurrence_interval = recurrenceInterval
+                if (recurrenceCount) exceptionData.recurrence_count = recurrenceCount
+                if (recurrenceEndDate) exceptionData.recurrence_end_date = recurrenceEndDate
+                if (recurrenceDays.length > 0) exceptionData.recurrence_days = recurrenceDays
+            }
+
+            console.log('Saving exception data:', exceptionData)
 
             const { data, error } = await supabase
                 .from('availability_exceptions')
-                .insert([exceptionToSave])
+                .insert([exceptionData])
                 .select()
 
             if (error) {
-                console.error('Database error:', error)
-                throw error
+                console.error('Error saving exception:', error)
+                alert(`Error saving exception: ${error.message}`)
+            } else {
+                console.log('Exception saved successfully:', data)
+                onSave()
             }
-
-            console.log('Exception saved successfully:', data)
-            onSave()
-        } catch (error: any) {
-            console.error('Error saving exception:', error)
-            setErrors([`Error saving exception: ${error.message}`])
+        } catch (err) {
+            console.error('Error saving exception:', err)
+            alert(`Error saving exception: ${err}`)
         } finally {
             setSaving(false)
         }
     }
 
-    const getMinDate = () => new Date().toISOString().split('T')[0]
+    const toggleRecurrenceDay = (dayNumber: number) => {
+        setRecurrenceDays(prev => 
+            prev.includes(dayNumber) 
+                ? prev.filter(d => d !== dayNumber)
+                : [...prev, dayNumber].sort()
+        )
+    }
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 className="text-xl font-semibold text-[#091747] font-['Newsreader']">
-                            Add Schedule Exception
-                        </h2>
-                        <p className="text-sm text-[#091747]/60 mt-1">
-                            Birthday off • Vacation week • Family afternoon • Lunch meeting
-                        </p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6 border-b border-stone-200">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-bold text-[#091747]">Add Schedule Exception</h2>
+                        <button
+                            onClick={onClose}
+                            className="text-[#091747]/60 hover:text-[#091747] transition-colors"
+                        >
+                            <X className="h-6 w-6" />
+                        </button>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-                        <X className="h-5 w-5" />
-                    </button>
                 </div>
 
-                {errors.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                        <div className="flex items-center gap-2 mb-2">
-                            <AlertCircle className="h-5 w-5 text-red-600" />
-                            <h3 className="font-medium text-red-900">Please fix the following errors:</h3>
-                        </div>
-                        <ul className="list-disc list-inside space-y-1">
-                            {errors.map((error, index) => (
-                                <li key={index} className="text-sm text-red-800">{error}</li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
-
-                <div className="space-y-6">
+                <div className="p-6 space-y-6">
                     {/* Exception Type */}
                     <div>
-                        <label className="block text-sm font-medium text-[#091747] mb-2">Exception Type</label>
-                        <div className="space-y-3">
-                            {[
-                                { value: 'unavailable', label: 'Completely Unavailable', icon: X, description: 'Birthday off, sick day' },
-                                { value: 'vacation', label: 'Vacation/Multi-day Off', icon: Calendar, description: 'Week vacation, conference' },
-                                { value: 'custom_hours', label: 'Custom Hours', icon: Clock, description: 'Different schedule today' },
-                                { value: 'partial_block', label: 'Partial Day Block', icon: AlertTriangle, description: 'Lunch meeting, family time' }
-                            ].map(({ value, label, icon: Icon, description }) => (
-                                <label key={value} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        name="exception_type"
-                                        value={value}
-                                        checked={exception.exception_type === value}
-                                        onChange={(e) => setException(prev => ({ 
-                                            ...prev, 
-                                            exception_type: e.target.value as any,
-                                            start_time: value === 'unavailable' || value === 'vacation' ? '' : prev.start_time,
-                                            end_time: value === 'unavailable' || value === 'vacation' ? '' : prev.end_time
-                                        }))}
-                                        className="mt-1 rounded border-stone-300 text-[#BF9C73] focus:ring-[#BF9C73]"
-                                    />
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <Icon className="h-4 w-4 text-[#BF9C73]" />
-                                            <span className="font-medium text-[#091747]">{label}</span>
-                                        </div>
-                                        <p className="text-xs text-[#091747]/60 mt-1">{description}</p>
-                                    </div>
-                                </label>
-                            ))}
-                        </div>
+                        <label className="block text-sm font-medium text-[#091747] mb-2">
+                            Exception Type
+                        </label>
+                        <select
+                            value={exceptionType}
+                            onChange={(e) => setExceptionType(e.target.value as any)}
+                            className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
+                        >
+                            <option value="unavailable">Unavailable</option>
+                            <option value="vacation">Vacation</option>
+                            <option value="custom_hours">Custom Hours</option>
+                            <option value="partial_block">Partial Block</option>
+                            <option value="recurring_change">Recurring Change</option>
+                        </select>
                     </div>
 
                     {/* Date Range */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-[#091747] mb-2">
-                                Start Date <span className="text-red-500">*</span>
+                                Start Date *
                             </label>
                             <input
                                 type="date"
-                                min={getMinDate()}
-                                value={exception.exception_date}
-                                onChange={(e) => setException(prev => ({ ...prev, exception_date: e.target.value }))}
-                                className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
+                                value={exceptionDate}
+                                onChange={(e) => setExceptionDate(e.target.value)}
+                                min={new Date().toISOString().split('T')[0]}
+                                className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
                             />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[#091747] mb-2">
-                                End Date <span className="text-gray-500">(optional)</span>
+                                End Date (optional)
                             </label>
                             <input
                                 type="date"
-                                min={exception.exception_date || getMinDate()}
-                                value={exception.end_date}
-                                onChange={(e) => setException(prev => ({ ...prev, end_date: e.target.value }))}
-                                className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                min={exceptionDate || new Date().toISOString().split('T')[0]}
+                                className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
                             />
                         </div>
                     </div>
 
-                    {/* Time Range (for custom hours and partial blocks) */}
-                    {(exception.exception_type === 'custom_hours' || exception.exception_type === 'partial_block') && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <h4 className="font-medium text-blue-900 mb-3">Time Details</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-[#091747] mb-2">
-                                        Start Time <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="time"
-                                        value={exception.start_time}
-                                        onChange={(e) => setException(prev => ({ ...prev, start_time: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-[#091747] mb-2">
-                                        End Time <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="time"
-                                        value={exception.end_time}
-                                        onChange={(e) => setException(prev => ({ ...prev, end_time: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
-                                    />
-                                </div>
+                    {/* Time Fields (for custom hours and partial blocks) */}
+                    {(exceptionType === 'custom_hours' || exceptionType === 'partial_block') && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-[#091747] mb-2">
+                                    Start Time *
+                                </label>
+                                <input
+                                    type="time"
+                                    value={startTime}
+                                    onChange={(e) => setStartTime(e.target.value)}
+                                    className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-[#091747] mb-2">
+                                    End Time *
+                                </label>
+                                <input
+                                    type="time"
+                                    value={endTime}
+                                    onChange={(e) => setEndTime(e.target.value)}
+                                    className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
+                                />
                             </div>
                         </div>
                     )}
 
                     {/* Note */}
                     <div>
-                        <label className="block text-sm font-medium text-[#091747] mb-2">Note (optional)</label>
-                        <input
-                            type="text"
-                            placeholder="e.g., Birthday celebration, Hawaii vacation, Extended lunch"
-                            value={exception.note}
-                            onChange={(e) => setException(prev => ({ ...prev, note: e.target.value }))}
-                            className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
+                        <label className="block text-sm font-medium text-[#091747] mb-2">
+                            Note (optional)
+                        </label>
+                        <textarea
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            rows={3}
+                            className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
+                            placeholder="Add any additional notes..."
                         />
                     </div>
+
+                    {/* Recurring Options */}
+                    <div>
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={isRecurring}
+                                onChange={(e) => setIsRecurring(e.target.checked)}
+                                className="rounded border-stone-300 text-[#BF9C73] focus:ring-[#BF9C73]"
+                            />
+                            <span className="text-sm font-medium text-[#091747]">Make this recurring</span>
+                        </label>
+                    </div>
+
+                    {/* Recurrence Settings */}
+                    {isRecurring && (
+                        <div className="space-y-4 bg-stone-50 p-4 rounded-lg">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-[#091747] mb-2">
+                                        Repeat Pattern
+                                    </label>
+                                    <select
+                                        value={recurrencePattern}
+                                        onChange={(e) => setRecurrencePattern(e.target.value as any)}
+                                        className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
+                                    >
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-[#091747] mb-2">
+                                        Every N {recurrencePattern === 'daily' ? 'days' : recurrencePattern === 'weekly' ? 'weeks' : 'months'}
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="100"
+                                        value={recurrenceInterval}
+                                        onChange={(e) => setRecurrenceInterval(parseInt(e.target.value) || 1)}
+                                        className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Days of Week (for weekly pattern) */}
+                            {recurrencePattern === 'weekly' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-[#091747] mb-2">
+                                        Repeat on days
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {DAYS.map(day => (
+                                            <button
+                                                key={day.number}
+                                                type="button"
+                                                onClick={() => toggleRecurrenceDay(day.number)}
+                                                className={`px-3 py-2 text-sm rounded-lg transition-colors ${
+                                                    recurrenceDays.includes(day.number)
+                                                        ? 'bg-[#BF9C73] text-white'
+                                                        : 'bg-white border border-stone-300 text-[#091747] hover:bg-stone-50'
+                                                }`}
+                                            >
+                                                {day.name.slice(0, 3)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* End Conditions */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-[#091747] mb-2">
+                                        Number of occurrences (optional)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={recurrenceCount || ''}
+                                        onChange={(e) => setRecurrenceCount(e.target.value ? parseInt(e.target.value) : undefined)}
+                                        className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
+                                        placeholder="Leave blank for indefinite"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-[#091747] mb-2">
+                                        End date (optional)
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={recurrenceEndDate}
+                                        onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                                        min={exceptionDate || new Date().toISOString().split('T')[0]}
+                                        className="w-full p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Actions */}
-                <div className="flex justify-end gap-3 pt-6 border-t mt-6">
+                {/* Footer */}
+                <div className="p-6 border-t border-stone-200 flex justify-end gap-3">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-[#091747] hover:bg-gray-100 rounded-lg transition-colors"
+                        className="px-4 py-2 text-[#091747] border border-stone-300 rounded-lg hover:bg-stone-50 transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={saving || !exception.exception_date}
-                        className="bg-[#BF9C73] hover:bg-[#A88861] disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                        disabled={saving}
+                        className="px-4 py-2 bg-[#BF9C73] hover:bg-[#A88861] text-white rounded-lg transition-colors disabled:opacity-50"
                     >
-                        {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
                         {saving ? 'Saving...' : 'Save Exception'}
                     </button>
                 </div>

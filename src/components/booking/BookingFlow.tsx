@@ -1,63 +1,65 @@
-// src/components/booking/BookingFlow.tsx
 'use client'
 
+import { InsuranceInfo, PatientInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
 import { useState } from 'react'
-import { Payer, TimeSlot, PatientInfo, InsuranceInfo, ROIContact } from '@/types/database'
 
-// Import components with new WelcomeView
-import WelcomeView, { BookingScenario } from './views/WelcomeView'
-import PayerSearchView from './views/PayerSearchView'
 import CalendarView from './views/CalendarView'
-import InsuranceNotAcceptedView from './views/InsuranceNotAcceptedView'
+import ConfirmationView from './views/ConfirmationView'
 import InsuranceFutureView from './views/InsuranceFutureView'
 import InsuranceInfoView from './views/InsuranceInfoView'
+import InsuranceNotAcceptedView from './views/InsuranceNotAcceptedView'
+import PayerSearchView from './views/PayerSearchView'
+import ProviderSelectionView from './views/ProviderSelectionView.tsx'; // NEW: Individual provider selection
 import ROIView from './views/ROIView'
-import ConfirmationView from './views/ConfirmationView'
+import WelcomeView, { BookingScenario } from './views/WelcomeView'
 
-// Enhanced booking steps
 type BookingStep =
     | 'welcome'
     | 'payer-search'
     | 'insurance-not-accepted'
     | 'insurance-future'
     | 'calendar'
+    | 'provider-selection'     // NEW: Individual provider selection step
     | 'insurance-info'
     | 'roi'
     | 'confirmation'
 
-// Enhanced booking state with case manager support
+type CalendarViewMode = 'merged' | 'individual' // NEW: Calendar display modes
+
 interface BookingState {
     step: BookingStep
     bookingScenario: BookingScenario
     selectedPayer?: Payer
     payerAcceptanceStatus?: 'not-accepted' | 'future' | 'active'
     selectedTimeSlot?: TimeSlot
+    selectedProviderId?: string // NEW: For individual provider selection
+    calendarViewMode: CalendarViewMode // NEW: Track calendar view preference
     patientInfo?: PatientInfo
     insuranceInfo?: InsuranceInfo
     roiContacts: ROIContact[]
     appointmentId?: string
-
-    // New case manager fields
     caseManagerInfo?: {
         name: string
         email: string
         phone?: string
         organization?: string
     }
-
-    // Enhanced communication preferences
     communicationPreferences?: {
-        sendToPatient: boolean  // Only if patient has email
-        sendToCaseManager: boolean  // For case manager scenarios
-        patientHasEmail: boolean  // Track if patient has email access
+        sendToPatient: boolean
+        sendToCaseManager: boolean
+        patientHasEmail: boolean
     }
+    // NEW: Navigation history for easy back navigation
+    navigationHistory: BookingStep[]
 }
 
 export default function BookingFlow() {
     const [state, setState] = useState<BookingState>({
         step: 'welcome',
         bookingScenario: 'self',
+        calendarViewMode: 'merged', // Default to merged view
         roiContacts: [],
+        navigationHistory: [], // Track navigation for back button
         communicationPreferences: {
             sendToPatient: true,
             sendToCaseManager: false,
@@ -69,17 +71,63 @@ export default function BookingFlow() {
         setState(prev => ({ ...prev, ...updates }))
     }
 
-    const goToStep = (step: BookingStep) => {
-        setState(prev => ({ ...prev, step }))
+    // Enhanced navigation with history tracking
+    const goToStep = (step: BookingStep, addToHistory: boolean = true) => {
+        setState(prev => ({
+            ...prev,
+            step,
+            navigationHistory: addToHistory 
+                ? [...prev.navigationHistory, prev.step]
+                : prev.navigationHistory
+        }))
     }
 
-    // Enhanced welcome handler for three scenarios
+    // NEW: Enhanced back navigation using history
+    const goBack = () => {
+        setState(prev => {
+            const history = [...prev.navigationHistory]
+            const previousStep = history.pop()
+            
+            if (previousStep) {
+                return {
+                    ...prev,
+                    step: previousStep,
+                    navigationHistory: history
+                }
+            }
+            
+            // Fallback to logical previous step
+            return prev
+        })
+    }
+
+    // NEW: Reset to any step (for "change selection" functionality)
+    const resetToStep = (step: BookingStep) => {
+        setState(prev => ({
+            ...prev,
+            step,
+            // Clear related data when going back to certain steps
+            ...(step === 'payer-search' && {
+                selectedPayer: undefined,
+                payerAcceptanceStatus: undefined,
+                selectedTimeSlot: undefined,
+                selectedProviderId: undefined
+            }),
+            ...(step === 'calendar' && {
+                selectedTimeSlot: undefined,
+                selectedProviderId: undefined
+            }),
+            navigationHistory: [] // Reset navigation history
+        }))
+    }
+
     const handleWelcomeSelection = (scenario: BookingScenario) => {
+        console.log('Welcome selection:', scenario)
+        
         const updates: Partial<BookingState> = {
             bookingScenario: scenario,
         }
 
-        // Set up communication preferences based on scenario
         switch (scenario) {
             case 'self':
                 updates.communicationPreferences = {
@@ -92,14 +140,14 @@ export default function BookingFlow() {
                 updates.communicationPreferences = {
                     sendToPatient: true,
                     sendToCaseManager: false,
-                    patientHasEmail: true // Assume yes, but can be changed later
+                    patientHasEmail: true
                 }
                 break
             case 'case-manager':
                 updates.communicationPreferences = {
-                    sendToPatient: false, // Start with case manager only
+                    sendToPatient: false,
                     sendToCaseManager: true,
-                    patientHasEmail: false // Assume no, but can be changed later
+                    patientHasEmail: false
                 }
                 break
         }
@@ -124,29 +172,44 @@ export default function BookingFlow() {
         }
     }
 
+    // NEW: Handle calendar view mode toggle
+    const handleCalendarViewModeChange = (mode: CalendarViewMode) => {
+        if (mode === 'individual') {
+            updateState({ calendarViewMode: mode })
+            goToStep('provider-selection', false) // Don't add to history since it's a view change
+        } else {
+            updateState({ 
+                calendarViewMode: mode,
+                selectedProviderId: undefined // Clear provider selection in merged mode
+            })
+            goToStep('calendar', false)
+        }
+    }
+
+    // NEW: Handle individual provider selection
+    const handleProviderSelected = (providerId: string) => {
+        updateState({ 
+            selectedProviderId: providerId,
+            calendarViewMode: 'individual'
+        })
+        goToStep('calendar')
+    }
+
     const handleTimeSlotSelected = (timeSlot: TimeSlot) => {
         updateState({ selectedTimeSlot: timeSlot })
         goToStep('insurance-info')
     }
 
-    const handleInsuranceInfoSubmitted = (insuranceInfo: InsuranceInfo, patientInfo: PatientInfo) => {
-        updateState({ insuranceInfo, patientInfo })
+    const handleInsuranceInfoSubmitted = (insuranceInfo: InsuranceInfo) => {
+        updateState({ insuranceInfo })
         goToStep('roi')
     }
 
     const handleROISubmitted = (roiContacts: ROIContact[]) => {
         updateState({ roiContacts })
-        // TODO: Create appointment and send to confirmation
         goToStep('confirmation')
     }
 
-    const handleLeadSubmitted = (leadData: any) => {
-        // Handle lead submission for unaccepted insurance
-        console.log('Lead submitted:', leadData)
-        goToStep('confirmation')
-    }
-
-    // Render appropriate view based on current step
     const renderCurrentView = () => {
         switch (state.step) {
             case 'welcome':
@@ -161,24 +224,21 @@ export default function BookingFlow() {
                     <PayerSearchView
                         onPayerSelected={handlePayerSelected}
                         bookingScenario={state.bookingScenario}
+                        onBack={() => goBack()}
                     />
                 )
 
             case 'insurance-not-accepted':
-                // Safety check for selectedPayer
                 if (!state.selectedPayer) {
-                    console.error('No payer selected for insurance-not-accepted view')
                     return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
+                        <div className="min-h-screen flex items-center justify-center">
+                            <button 
+                                type="button"
+                                onClick={() => resetToStep('welcome')} 
+                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
+                            >
+                                Start Over
+                            </button>
                         </div>
                     )
                 }
@@ -186,26 +246,22 @@ export default function BookingFlow() {
                     <InsuranceNotAcceptedView
                         selectedPayer={state.selectedPayer}
                         bookingScenario={state.bookingScenario}
-                        onLeadSubmitted={handleLeadSubmitted}
-                        onBack={() => goToStep('payer-search')}
+                        onLeadSubmitted={() => goToStep('confirmation')}
+                        onBackToPayers={() => resetToStep('payer-search')}
                     />
                 )
 
             case 'insurance-future':
-                // Safety check for selectedPayer
                 if (!state.selectedPayer) {
-                    console.error('No payer selected for insurance-future view')
                     return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
+                        <div className="min-h-screen flex items-center justify-center">
+                            <button 
+                                type="button"
+                                onClick={() => resetToStep('welcome')} 
+                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
+                            >
+                                Start Over
+                            </button>
                         </div>
                     )
                 }
@@ -213,56 +269,71 @@ export default function BookingFlow() {
                     <InsuranceFutureView
                         selectedPayer={state.selectedPayer}
                         bookingScenario={state.bookingScenario}
-                        onLeadSubmitted={handleLeadSubmitted}
-                        onBack={() => goToStep('payer-search')}
+                        onLeadSubmitted={() => goToStep('confirmation')}
+                        onBackToPayers={() => resetToStep('payer-search')}
+                    />
+                )
+
+            case 'provider-selection':
+                if (!state.selectedPayer) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center">
+                            <button 
+                                type="button"
+                                onClick={() => resetToStep('welcome')} 
+                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
+                            >
+                                Start Over
+                            </button>
+                        </div>
+                    )
+                }
+                return (
+                    <ProviderSelectionView
+                        selectedPayer={state.selectedPayer}
+                        onProviderSelected={handleProviderSelected}
+                        onBackToMergedCalendar={() => handleCalendarViewModeChange('merged')}
+                        onBack={() => goBack()}
                     />
                 )
 
             case 'calendar':
-                // Safety check for selectedPayer
                 if (!state.selectedPayer) {
-                    console.error('No payer selected for calendar view')
                     return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
+                        <div className="min-h-screen flex items-center justify-center">
+                            <button 
+                                type="button"
+                                onClick={() => resetToStep('welcome')} 
+                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
+                            >
+                                Start Over
+                            </button>
                         </div>
                     )
                 }
                 return (
                     <CalendarView
                         selectedPayer={state.selectedPayer}
-                        bookingScenario={state.bookingScenario}
+                        selectedProviderId={state.selectedProviderId} // Pass provider ID for individual view
+                        calendarViewMode={state.calendarViewMode}
                         onTimeSlotSelected={handleTimeSlotSelected}
-                        onBack={() => goToStep('payer-search')}
+                        onViewModeChange={handleCalendarViewModeChange} // NEW: Allow toggling view modes
+                        onBackToInsurance={() => resetToStep('payer-search')}
+                        onChangeProvider={() => resetToStep('provider-selection')} // NEW: Easy provider change
                     />
                 )
 
             case 'insurance-info':
-                // Safety checks for required state
                 if (!state.selectedPayer || !state.selectedTimeSlot) {
-                    console.error('Missing required state for insurance-info view', {
-                        selectedPayer: !!state.selectedPayer,
-                        selectedTimeSlot: !!state.selectedTimeSlot
-                    })
                     return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
+                        <div className="min-h-screen flex items-center justify-center">
+                            <button 
+                                type="button"
+                                onClick={() => resetToStep('welcome')} 
+                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
+                            >
+                                Start Over
+                            </button>
                         </div>
                     )
                 }
@@ -274,39 +345,20 @@ export default function BookingFlow() {
                         caseManagerInfo={state.caseManagerInfo}
                         communicationPreferences={state.communicationPreferences!}
                         onSubmit={handleInsuranceInfoSubmitted}
-                        onUpdateCaseManager={(caseManagerInfo) => updateState({ caseManagerInfo })}
-                        onUpdateCommunicationPrefs={(prefs) => updateState({
-                            communicationPreferences: { ...state.communicationPreferences, ...prefs }
-                        })}
-                        onBack={() => goToStep('calendar')}
+                        onBack={() => goBack()}
+                        onChangeAppointment={() => resetToStep('calendar')} // NEW: Easy appointment change
+                        onChangeInsurance={() => resetToStep('payer-search')} // NEW: Easy insurance change
                     />
                 )
 
             case 'roi':
-                // Safety check for patientInfo
-                if (!state.patientInfo) {
-                    console.error('No patient info available for ROI view')
-                    return (
-                        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                            <div className="text-center">
-                                <p className="text-[#091747] mb-4 font-['Newsreader']">Something went wrong. Please try again.</p>
-                                <button
-                                    onClick={() => goToStep('welcome')}
-                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl font-['Newsreader']"
-                                >
-                                    Start Over
-                                </button>
-                            </div>
-                        </div>
-                    )
-                }
                 return (
                     <ROIView
                         patientInfo={state.patientInfo}
                         bookingScenario={state.bookingScenario}
                         caseManagerInfo={state.caseManagerInfo}
                         onSubmit={handleROISubmitted}
-                        onBack={() => goToStep('insurance-info')}
+                        onBack={() => goBack()}
                     />
                 )
 
@@ -323,7 +375,9 @@ export default function BookingFlow() {
                             setState({
                                 step: 'welcome',
                                 bookingScenario: 'self',
+                                calendarViewMode: 'merged',
                                 roiContacts: [],
+                                navigationHistory: [],
                                 communicationPreferences: {
                                     sendToPatient: true,
                                     sendToCaseManager: false,
@@ -331,16 +385,71 @@ export default function BookingFlow() {
                                 }
                             })
                         }}
+                        // NEW: Quick action buttons for confirmation screen
+                        onChangeAppointment={() => resetToStep('calendar')}
+                        onChangeInsurance={() => resetToStep('payer-search')}
                     />
                 )
 
             default:
-                return <div>Unknown step</div>
+                return (
+                    <div className="min-h-screen flex items-center justify-center">
+                        <button 
+                            type="button"
+                            onClick={() => resetToStep('welcome')} 
+                            className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
+                        >
+                            Start Over
+                        </button>
+                    </div>
+                )
         }
     }
 
     return (
         <div className="min-h-screen">
+            {/* NEW: Breadcrumb navigation for user confidence */}
+            {state.step !== 'welcome' && state.step !== 'confirmation' && (
+                <div className="bg-gray-50 px-4 py-2 border-b">
+                    <div className="max-w-2xl mx-auto flex items-center gap-2 text-sm text-gray-600">
+                        <button
+                            type="button"
+                            onClick={() => resetToStep('welcome')}
+                            className="hover:text-[#BF9C73] transition-colors"
+                        >
+                            Start
+                        </button>
+                        {state.selectedPayer && (
+                            <>
+                                <span>→</span>
+                                <button
+                                    type="button"
+                                    onClick={() => resetToStep('payer-search')}
+                                    className="hover:text-[#BF9C73] transition-colors"
+                                >
+                                    {state.selectedPayer.name}
+                                </button>
+                            </>
+                        )}
+                        {state.selectedTimeSlot && (
+                            <>
+                                <span>→</span>
+                                <button
+                                    type="button"
+                                    onClick={() => resetToStep('calendar')}
+                                    className="hover:text-[#BF9C73] transition-colors"
+                                >
+                                    Appointment Selected
+                                </button>
+                            </>
+                        )}
+                        <span className="text-[#BF9C73] font-medium ml-auto">
+                            You can change any of these selections anytime
+                        </span>
+                    </div>
+                </div>
+            )}
+            
             {renderCurrentView()}
         </div>
     )
