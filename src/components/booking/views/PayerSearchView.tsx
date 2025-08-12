@@ -1,273 +1,357 @@
-// src/components/booking/views/PayerSearchView.tsx
 'use client'
 
-import { payerService, PayerWithStatus } from '@/lib/services/PayerService'
-import { AlertCircle, Check, ChevronRight, Clock, CreditCard, Loader2, Search, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { Payer } from '@/types/database'
+import { Calendar, Check, Clock, CreditCard, Loader2, Search, X } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { BookingScenario } from './WelcomeView'
 
-interface PayerSearchViewProps {
-    onPayerSelected: (payer: PayerWithStatus | null, acceptanceStatus?: 'active' | 'future' | 'not-accepted') => void
-    onBackToStart?: () => void
-    bookingScenario?: any // Added for compatibility with BookingFlow
+interface PayerSearchState {
+    query: string
+    results: Payer[]
+    loading: boolean
+    showResults: boolean
+    error: string | null
 }
 
-export default function PayerSearchView({
-    onPayerSelected,
-    onBackToStart,
-    bookingScenario
-}: PayerSearchViewProps) {
-    const [searchQuery, setSearchQuery] = useState('')
-    const [searchResults, setSearchResults] = useState<PayerWithStatus[]>([])
-    const [loading, setLoading] = useState(false)
-    const [acceptedPayers, setAcceptedPayers] = useState<PayerWithStatus[]>([])
-    const [initialLoadComplete, setInitialLoadComplete] = useState(false)
+interface PayerSearchViewProps {
+    onPayerSelected: (payer: Payer, acceptanceStatus: 'not-accepted' | 'future' | 'active') => void
+    bookingScenario: BookingScenario
+    onBack?: () => void
+}
 
-    // Load accepted payers on mount for quick selection
-    useEffect(() => {
-        loadAcceptedPayers()
+export default function PayerSearchView({ onPayerSelected, bookingScenario, onBack }: PayerSearchViewProps) {
+    const [state, setState] = useState<PayerSearchState>({
+        query: '',
+        results: [],
+        loading: false,
+        showResults: false,
+        error: null
+    })
+
+    // Direct Supabase search function
+    const searchPayers = useCallback(async (query: string) => {
+        if (query.length < 2) {
+            setState(prev => ({ ...prev, showResults: false, results: [] }))
+            return
+        }
+
+        setState(prev => ({ ...prev, loading: true, error: null }))
+
+        try {
+            console.log('🔍 Searching payers for:', query)
+            
+            const { data: payers, error } = await supabase
+                .from('payers')
+                .select('*')
+                .ilike('name', `%${query}%`)
+                .order('name')
+                .limit(10)
+
+            if (error) {
+                console.error('❌ Supabase error:', error)
+                throw error
+            }
+
+            console.log('✅ Found payers:', payers?.length || 0)
+            
+            setState(prev => ({
+                ...prev,
+                results: payers || [],
+                loading: false,
+                showResults: true
+            }))
+        } catch (error: any) {
+            console.error('💥 Search error:', error)
+            setState(prev => ({
+                ...prev,
+                loading: false,
+                error: `Search failed: ${error.message}`,
+                showResults: false
+            }))
+        }
     }, [])
 
-    const loadAcceptedPayers = async () => {
-        try {
-            const accepted = await payerService.getAcceptedPayers()
-            setAcceptedPayers(accepted)
-            setInitialLoadComplete(true)
-            console.log(`Loaded ${accepted.length} accepted payers`)
-        } catch (error) {
-            console.error('Error loading accepted payers:', error)
-            setInitialLoadComplete(true)
-        }
-    }
-
-    // Search payers using the service
+    // Debounce the search
     useEffect(() => {
-        const searchTimeout = setTimeout(() => {
-            if (searchQuery.length >= 2) {
-                performSearch(searchQuery)
-            } else if (searchQuery.length === 0) {
-                setSearchResults([])
+        const timer = setTimeout(() => {
+            if (state.query) {
+                searchPayers(state.query)
             }
-        }, 300) // Debounce for 300ms
+        }, 300)
 
-        return () => clearTimeout(searchTimeout)
-    }, [searchQuery])
+        return () => clearTimeout(timer)
+    }, [state.query, searchPayers])
 
-    const performSearch = async (query: string) => {
-        setLoading(true)
-        try {
-            const results = await payerService.searchPayers(query)
-            setSearchResults(results)
-            console.log(`Found ${results.length} payers matching "${query}"`)
-        } catch (error) {
-            console.error('Search error:', error)
-            setSearchResults([])
-        } finally {
-            setLoading(false)
-        }
+    const handleInputChange = (value: string) => {
+        setState(prev => ({ ...prev, query: value }))
     }
 
-    const handlePayerSelect = async (payer: PayerWithStatus) => {
-        console.log('Selected payer:', payer.name, '- Status:', payer.acceptanceStatus)
+    const handlePayerSelect = (payer: Payer) => {
+        console.log('🎯 Payer selected:', payer.name)
+        
+        // Determine acceptance status based on payer data
+        const now = new Date()
+        let acceptanceStatus: 'not-accepted' | 'future' | 'active' = 'not-accepted'
 
-        // SIMPLIFIED: Treat all insurance the same, including Medicaid
-        if (payer.acceptanceStatus === 'active') {
-            // Active payer - proceed directly
-            console.log('Calling onPayerSelected with active status')
-            onPayerSelected(payer, 'active')
-        } else if (payer.acceptanceStatus === 'future') {
-            // Future payer - show waitlist option
-            if (confirm(`${payer.name} will be accepted soon. ${payer.statusMessage}\n\nWould you like to join our waitlist?`)) {
-                // TODO: Implement waitlist capture
-                console.log('Add to waitlist for:', payer.name)
-                onPayerSelected(payer, 'future')
+        if (payer.effective_date) {
+            const effectiveDate = new Date(payer.effective_date)
+            if (effectiveDate <= now) {
+                acceptanceStatus = 'active'
+            } else {
+                const daysUntilActive = Math.ceil((effectiveDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                acceptanceStatus = daysUntilActive > 30 ? 'not-accepted' : 'future'
             }
-        } else {
-            // Not accepted - show message
-            alert(`${payer.statusMessage}\n\nPlease choose a different insurance or select self-pay.`)
-            // Could optionally still pass it along: onPayerSelected(payer, 'not-accepted')
         }
+
+        console.log('📊 Acceptance status:', acceptanceStatus)
+        onPayerSelected(payer, acceptanceStatus)
     }
 
-    const handleSelfPay = () => {
-        console.log('Self-pay selected')
-        onPayerSelected(null, 'active') // null indicates self-pay, 'active' means proceed
+    const handleCashPayment = () => {
+        console.log('💳 Cash payment selected')
+        
+        // Create a mock payer for cash payment
+        const cashPayer: Payer = {
+            id: 'cash-payment',
+            name: 'Cash Payment',
+            payer_type: 'cash',
+            state: 'UT',
+            effective_date: new Date().toISOString(),
+            requires_attending: false,
+            credentialing_status: 'active',
+            notes: 'Self-pay patient',
+            created_at: new Date().toISOString(),
+            projected_effective_date: null,
+            requires_individual_contract: false
+        }
+
+        onPayerSelected(cashPayer, 'active')
     }
 
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'active':
-                return (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        <Check className="w-3 h-3 mr-1" />
-                        Accepted
-                    </span>
-                )
-            case 'future':
-                return (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        <Clock className="w-3 h-3 mr-1" />
-                        Coming Soon
-                    </span>
-                )
+    const getScenarioTitle = () => {
+        switch (bookingScenario) {
+            case 'self':
+                return 'What insurance do you have?'
+            case 'case-manager':
+                return 'What insurance does the patient have?'
+            case 'referral':
+                return 'What insurance does your patient have?'
             default:
-                return (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        <X className="w-3 h-3 mr-1" />
-                        Not Accepted
-                    </span>
-                )
+                return 'Insurance Information'
+        }
+    }
+
+    const getScenarioSubtitle = () => {
+        switch (bookingScenario) {
+            case 'self':
+                return 'Search for your insurance provider below'
+            case 'case-manager':
+                return 'Search for the patient\'s insurance provider'
+            case 'referral':
+                return 'Search for the patient\'s insurance provider'
+            default:
+                return 'Search for insurance provider'
         }
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-6">
-            <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="min-h-screen bg-gradient-to-br from-stone-50 via-orange-50/30 to-stone-100">
+            <div className="max-w-4xl mx-auto px-6 py-12">
                 {/* Header */}
-                <div className="mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                        How will you pay for your visit?
-                    </h2>
-                    <p className="text-gray-600">
-                        Search for your insurance provider or choose to pay out of pocket
+                <div className="text-center mb-12">
+                    {onBack && (
+                        <button
+                            onClick={onBack}
+                            className="absolute top-8 left-8 p-3 hover:bg-white/50 rounded-xl transition-colors"
+                        >
+                            ← Back
+                        </button>
+                    )}
+                    
+                    <h1 className="text-4xl font-bold text-slate-800 mb-4 font-['Newsreader']">
+                        {getScenarioTitle()}
+                    </h1>
+                    <p className="text-xl text-slate-600">
+                        {getScenarioSubtitle()}
                     </p>
                 </div>
 
-                {/* Search Box */}
-                <div className="relative mb-6">
-                    <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search for your insurance (e.g., Medicaid, SelectHealth, PEHP)"
-                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        autoFocus
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => setSearchQuery('')}
-                            className="absolute right-3 top-3"
-                        >
-                            <X className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                        </button>
-                    )}
-                </div>
-
-                {/* Loading State */}
-                {loading && (
-                    <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                    </div>
-                )}
-
-                {/* Search Results */}
-                {!loading && searchResults.length > 0 && (
-                    <div className="space-y-2 mb-6">
-                        <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                            Search Results ({searchResults.length})
-                        </h3>
-                        {searchResults.map((payer) => (
-                            <button
-                                key={payer.id}
-                                onClick={() => handlePayerSelect(payer)}
-                                className="w-full text-left p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                            >
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                        {payer.acceptanceStatus === 'active' ? (
-                                            <Check className="h-5 w-5 text-green-500" />
-                                        ) : payer.acceptanceStatus === 'future' ? (
-                                            <Clock className="h-5 w-5 text-yellow-500" />
-                                        ) : (
-                                            <X className="h-5 w-5 text-red-500" />
-                                        )}
-                                        <div>
-                                            <p className="font-medium text-gray-800">{payer.name}</p>
-                                            <p className="text-sm text-gray-600">{payer.statusMessage}</p>
-                                        </div>
-                                    </div>
-                                    <ChevronRight className="h-5 w-5 text-gray-400" />
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                )}
-
-                {/* No Results Message */}
-                {!loading && searchQuery.length >= 2 && searchResults.length === 0 && (
-                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                        <p className="text-gray-600">
-                            No insurance plans found matching "{searchQuery}".
-                            Try searching differently or choose self-pay below.
-                        </p>
-                    </div>
-                )}
-
-                {/* Quick Select for Common Payers */}
-                {!searchQuery && initialLoadComplete && acceptedPayers.length > 0 && (
-                    <div className="mb-6">
-                        <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                            Common Insurance Providers
-                        </h3>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                            {acceptedPayers.slice(0, 6).map((payer) => (
-                                <button
-                                    key={payer.id}
-                                    onClick={() => handlePayerSelect(payer)}
-                                    className="p-3 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors text-sm font-medium text-gray-700"
-                                >
-                                    {payer.name}
-                                </button>
-                            ))}
+                <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+                    {/* Search Input */}
+                    <div className="relative mb-6">
+                        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
+                            <Search className={`h-6 w-6 transition-colors ${
+                                state.query ? 'text-orange-400' : 'text-slate-400'
+                            }`} />
                         </div>
-                    </div>
-                )}
+                        <input
+                            type="text"
+                            value={state.query}
+                            onChange={(e) => handleInputChange(e.target.value)}
+                            placeholder="Type your insurance name (e.g., Molina, Blue Cross, Aetna, Cigna, Medicaid)"
+                            className="
+                                w-full bg-stone-50 border-2 border-stone-200 rounded-xl 
+                                py-4 pl-16 pr-6 text-lg text-slate-800 placeholder-slate-500 
+                                focus:outline-none focus:border-orange-300 focus:bg-white
+                                transition-all duration-200
+                            "
+                            autoFocus
+                        />
 
-                {/* Self-Pay Option */}
-                <div className="border-t pt-6">
-                    <button
-                        onClick={handleSelfPay}
-                        className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                        <div className="flex items-center space-x-3">
-                            <CreditCard className="h-5 w-5 text-gray-600" />
-                            <div className="text-left">
-                                <p className="font-medium text-gray-800">
-                                    I'll pay out of pocket
-                                </p>
-                                <p className="text-sm text-gray-600">
-                                    No insurance needed - pay directly for your visit
-                                </p>
+                        {state.loading && (
+                            <div className="absolute inset-y-0 right-0 pr-6 flex items-center">
+                                <Loader2 className="h-5 w-5 text-orange-400 animate-spin" />
                             </div>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-gray-400" />
-                    </button>
-                </div>
+                        )}
 
-                {/* Back Button */}
-                {onBackToStart && (
-                    <div className="mt-6">
+                        {state.query && !state.loading && (
+                            <button
+                                onClick={() => setState(prev => ({ ...prev, query: '', showResults: false }))}
+                                className="absolute inset-y-0 right-0 pr-6 flex items-center hover:bg-stone-100 rounded-r-xl transition-colors"
+                            >
+                                <X className="h-5 w-5 text-slate-400 hover:text-slate-600" />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Error State */}
+                    {state.error && (
+                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+                            <p className="text-red-700">{state.error}</p>
+                            <p className="text-red-600 text-sm mt-1">
+                                Please try again or contact support if the issue persists.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Search Results */}
+                    {state.showResults && (
+                        <div className="space-y-3 mb-6">
+                            {state.results.length > 0 ? (
+                                <>
+                                    <p className="text-sm text-slate-500 px-2 mb-4">
+                                        Found {state.results.length} matching insurance plan{state.results.length > 1 ? 's' : ''}
+                                    </p>
+                                    {state.results.map((payer) => {
+                                        const now = new Date()
+                                        const effectiveDate = payer.effective_date ? new Date(payer.effective_date) : null
+                                        const isActive = effectiveDate && effectiveDate <= now
+                                        const isFuture = effectiveDate && effectiveDate > now
+                                        const daysUntilActive = isFuture ? Math.ceil((effectiveDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 0
+
+                                        return (
+                                            <button
+                                                key={payer.id}
+                                                onClick={() => handlePayerSelect(payer)}
+                                                className="
+                                                    w-full p-4 border-2 border-stone-200 rounded-xl 
+                                                    hover:border-orange-300 hover:bg-orange-50/50 
+                                                    transition-all duration-200 text-left
+                                                    group focus:outline-none focus:border-orange-400
+                                                "
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center space-x-4">
+                                                        {isActive ? (
+                                                            <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                                                <Check className="w-5 h-5 text-green-600" />
+                                                            </div>
+                                                        ) : isFuture ? (
+                                                            <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                                                <Calendar className="w-5 h-5 text-blue-600" />
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                                                                <Clock className="w-5 h-5 text-gray-600" />
+                                                            </div>
+                                                        )}
+                                                        
+                                                        <div>
+                                                            <h3 className="font-semibold text-slate-900 group-hover:text-orange-700 transition-colors">
+                                                                {payer.name}
+                                                            </h3>
+                                                            <p className="text-sm text-slate-500">
+                                                                {isActive && 'We accept this insurance'}
+                                                                {isFuture && `Available starting ${effectiveDate?.toLocaleDateString()}`}
+                                                                {!effectiveDate && 'Status unknown - contact us'}
+                                                            </p>
+                                                            {payer.payer_type && (
+                                                                <p className="text-xs text-slate-400 mt-1">
+                                                                    Type: {payer.payer_type}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="text-sm text-slate-400 group-hover:text-orange-500 transition-colors">
+                                                        Select →
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        )
+                                    })}
+                                </>
+                            ) : (
+                                <div className="text-center py-8">
+                                    <div className="text-slate-400 mb-2">
+                                        <Search className="w-12 h-12 mx-auto mb-4" />
+                                    </div>
+                                    <p className="text-slate-600">
+                                        No insurance plans found matching "{state.query}"
+                                    </p>
+                                    <p className="text-sm text-slate-500 mt-2">
+                                        Try a different search term or consider cash payment below
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Cash Payment Option */}
+                    <div className="border-t border-stone-200 pt-6">
+                        <h3 className="text-lg font-semibold text-slate-800 mb-3">
+                            No insurance? No problem.
+                        </h3>
                         <button
-                            onClick={onBackToStart}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            onClick={handleCashPayment}
+                            className="
+                                w-full p-4 border-2 border-stone-200 rounded-xl 
+                                hover:border-orange-300 hover:bg-orange-50/50 
+                                transition-all duration-200 text-left group
+                                focus:outline-none focus:border-orange-400
+                            "
                         >
-                            ← Back to start
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-4">
+                                    <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                        <CreditCard className="w-5 h-5 text-green-600" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold text-slate-900 group-hover:text-orange-700 transition-colors">
+                                            Pay Out of Pocket
+                                        </h3>
+                                        <p className="text-sm text-slate-500">
+                                            Self-pay rates available
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-sm text-slate-400 group-hover:text-orange-500 transition-colors">
+                                    Select →
+                                </div>
+                            </div>
                         </button>
                     </div>
-                )}
-            </div>
+                </div>
 
-            {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
-                <div className="flex items-start space-x-3">
-                    <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
-                    <div className="text-sm text-blue-800">
-                        <p className="font-semibold mb-1">Insurance Verification</p>
-                        <p>
-                            We'll verify your insurance coverage before confirming your appointment.
-                            If you have questions about coverage, please contact us at (801) 555-0123.
-                        </p>
-                    </div>
+                {/* Help Text */}
+                <div className="text-center text-slate-500">
+                    <p className="text-sm">
+                        Can't find your insurance? We're always adding new providers.
+                    </p>
+                    <p className="text-sm mt-1">
+                        Contact us at <span className="font-medium">hello@moonlit.com</span> for assistance.
+                    </p>
                 </div>
             </div>
         </div>

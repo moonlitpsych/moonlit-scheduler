@@ -9,7 +9,6 @@ import InsuranceFutureView from './views/InsuranceFutureView'
 import InsuranceInfoView from './views/InsuranceInfoView'
 import InsuranceNotAcceptedView from './views/InsuranceNotAcceptedView'
 import PayerSearchView from './views/PayerSearchView'
-import ProviderSelectionView from './views/ProviderSelectionView.tsx'; // NEW: Individual provider selection
 import ROIView from './views/ROIView'
 import WelcomeView, { BookingScenario } from './views/WelcomeView'
 
@@ -19,12 +18,9 @@ type BookingStep =
     | 'insurance-not-accepted'
     | 'insurance-future'
     | 'calendar'
-    | 'provider-selection'     // NEW: Individual provider selection step
     | 'insurance-info'
     | 'roi'
     | 'confirmation'
-
-type CalendarViewMode = 'merged' | 'individual' // NEW: Calendar display modes
 
 interface BookingState {
     step: BookingStep
@@ -32,8 +28,6 @@ interface BookingState {
     selectedPayer?: Payer
     payerAcceptanceStatus?: 'not-accepted' | 'future' | 'active'
     selectedTimeSlot?: TimeSlot
-    selectedProviderId?: string // NEW: For individual provider selection
-    calendarViewMode: CalendarViewMode // NEW: Track calendar view preference
     patientInfo?: PatientInfo
     insuranceInfo?: InsuranceInfo
     roiContacts: ROIContact[]
@@ -49,17 +43,13 @@ interface BookingState {
         sendToCaseManager: boolean
         patientHasEmail: boolean
     }
-    // NEW: Navigation history for easy back navigation
-    navigationHistory: BookingStep[]
 }
 
 export default function BookingFlow() {
     const [state, setState] = useState<BookingState>({
         step: 'welcome',
         bookingScenario: 'self',
-        calendarViewMode: 'merged', // Default to merged view
         roiContacts: [],
-        navigationHistory: [], // Track navigation for back button
         communicationPreferences: {
             sendToPatient: true,
             sendToCaseManager: false,
@@ -71,54 +61,8 @@ export default function BookingFlow() {
         setState(prev => ({ ...prev, ...updates }))
     }
 
-    // Enhanced navigation with history tracking
-    const goToStep = (step: BookingStep, addToHistory: boolean = true) => {
-        setState(prev => ({
-            ...prev,
-            step,
-            navigationHistory: addToHistory 
-                ? [...prev.navigationHistory, prev.step]
-                : prev.navigationHistory
-        }))
-    }
-
-    // NEW: Enhanced back navigation using history
-    const goBack = () => {
-        setState(prev => {
-            const history = [...prev.navigationHistory]
-            const previousStep = history.pop()
-            
-            if (previousStep) {
-                return {
-                    ...prev,
-                    step: previousStep,
-                    navigationHistory: history
-                }
-            }
-            
-            // Fallback to logical previous step
-            return prev
-        })
-    }
-
-    // NEW: Reset to any step (for "change selection" functionality)
-    const resetToStep = (step: BookingStep) => {
-        setState(prev => ({
-            ...prev,
-            step,
-            // Clear related data when going back to certain steps
-            ...(step === 'payer-search' && {
-                selectedPayer: undefined,
-                payerAcceptanceStatus: undefined,
-                selectedTimeSlot: undefined,
-                selectedProviderId: undefined
-            }),
-            ...(step === 'calendar' && {
-                selectedTimeSlot: undefined,
-                selectedProviderId: undefined
-            }),
-            navigationHistory: [] // Reset navigation history
-        }))
+    const goToStep = (step: BookingStep) => {
+        setState(prev => ({ ...prev, step }))
     }
 
     const handleWelcomeSelection = (scenario: BookingScenario) => {
@@ -157,6 +101,8 @@ export default function BookingFlow() {
     }
 
     const handlePayerSelected = (payer: Payer, acceptanceStatus: BookingState['payerAcceptanceStatus']) => {
+        console.log('Payer selected:', payer.name, 'Status:', acceptanceStatus)
+        
         updateState({ selectedPayer: payer, payerAcceptanceStatus: acceptanceStatus })
 
         switch (acceptanceStatus) {
@@ -172,30 +118,8 @@ export default function BookingFlow() {
         }
     }
 
-    // NEW: Handle calendar view mode toggle
-    const handleCalendarViewModeChange = (mode: CalendarViewMode) => {
-        if (mode === 'individual') {
-            updateState({ calendarViewMode: mode })
-            goToStep('provider-selection', false) // Don't add to history since it's a view change
-        } else {
-            updateState({ 
-                calendarViewMode: mode,
-                selectedProviderId: undefined // Clear provider selection in merged mode
-            })
-            goToStep('calendar', false)
-        }
-    }
-
-    // NEW: Handle individual provider selection
-    const handleProviderSelected = (providerId: string) => {
-        updateState({ 
-            selectedProviderId: providerId,
-            calendarViewMode: 'individual'
-        })
-        goToStep('calendar')
-    }
-
     const handleTimeSlotSelected = (timeSlot: TimeSlot) => {
+        console.log('Time slot selected:', timeSlot)
         updateState({ selectedTimeSlot: timeSlot })
         goToStep('insurance-info')
     }
@@ -208,6 +132,18 @@ export default function BookingFlow() {
     const handleROISubmitted = (roiContacts: ROIContact[]) => {
         updateState({ roiContacts })
         goToStep('confirmation')
+    }
+
+    const handleBackToInsurance = () => {
+        goToStep('payer-search')
+    }
+
+    const handleBackToCalendar = () => {
+        goToStep('calendar')
+    }
+
+    const handleBackToWelcome = () => {
+        goToStep('welcome')
     }
 
     const renderCurrentView = () => {
@@ -224,21 +160,23 @@ export default function BookingFlow() {
                     <PayerSearchView
                         onPayerSelected={handlePayerSelected}
                         bookingScenario={state.bookingScenario}
-                        onBack={() => goBack()}
+                        onBack={handleBackToWelcome}
                     />
                 )
 
             case 'insurance-not-accepted':
                 if (!state.selectedPayer) {
                     return (
-                        <div className="min-h-screen flex items-center justify-center">
-                            <button 
-                                type="button"
-                                onClick={() => resetToStep('welcome')} 
-                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
-                            >
-                                Start Over
-                            </button>
+                        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+                            <div className="text-center space-y-4">
+                                <p className="text-stone-600">Insurance information missing.</p>
+                                <button 
+                                    onClick={handleBackToInsurance}
+                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
+                                >
+                                    Back to Insurance Selection
+                                </button>
+                            </div>
                         </div>
                     )
                 }
@@ -247,21 +185,23 @@ export default function BookingFlow() {
                         selectedPayer={state.selectedPayer}
                         bookingScenario={state.bookingScenario}
                         onLeadSubmitted={() => goToStep('confirmation')}
-                        onBackToPayers={() => resetToStep('payer-search')}
+                        onBackToPayers={handleBackToInsurance}
                     />
                 )
 
             case 'insurance-future':
                 if (!state.selectedPayer) {
                     return (
-                        <div className="min-h-screen flex items-center justify-center">
-                            <button 
-                                type="button"
-                                onClick={() => resetToStep('welcome')} 
-                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
-                            >
-                                Start Over
-                            </button>
+                        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+                            <div className="text-center space-y-4">
+                                <p className="text-stone-600">Insurance information missing.</p>
+                                <button 
+                                    onClick={handleBackToInsurance}
+                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
+                                >
+                                    Back to Insurance Selection
+                                </button>
+                            </div>
                         </div>
                     )
                 }
@@ -270,70 +210,47 @@ export default function BookingFlow() {
                         selectedPayer={state.selectedPayer}
                         bookingScenario={state.bookingScenario}
                         onLeadSubmitted={() => goToStep('confirmation')}
-                        onBackToPayers={() => resetToStep('payer-search')}
-                    />
-                )
-
-            case 'provider-selection':
-                if (!state.selectedPayer) {
-                    return (
-                        <div className="min-h-screen flex items-center justify-center">
-                            <button 
-                                type="button"
-                                onClick={() => resetToStep('welcome')} 
-                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
-                            >
-                                Start Over
-                            </button>
-                        </div>
-                    )
-                }
-                return (
-                    <ProviderSelectionView
-                        selectedPayer={state.selectedPayer}
-                        onProviderSelected={handleProviderSelected}
-                        onBackToMergedCalendar={() => handleCalendarViewModeChange('merged')}
-                        onBack={() => goBack()}
+                        onBackToPayers={handleBackToInsurance}
                     />
                 )
 
             case 'calendar':
                 if (!state.selectedPayer) {
                     return (
-                        <div className="min-h-screen flex items-center justify-center">
-                            <button 
-                                type="button"
-                                onClick={() => resetToStep('welcome')} 
-                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
-                            >
-                                Start Over
-                            </button>
+                        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+                            <div className="text-center space-y-4">
+                                <p className="text-stone-600">Please select your insurance first.</p>
+                                <button 
+                                    onClick={handleBackToInsurance}
+                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
+                                >
+                                    Back to Insurance Selection
+                                </button>
+                            </div>
                         </div>
                     )
                 }
                 return (
                     <CalendarView
                         selectedPayer={state.selectedPayer}
-                        selectedProviderId={state.selectedProviderId} // Pass provider ID for individual view
-                        calendarViewMode={state.calendarViewMode}
                         onTimeSlotSelected={handleTimeSlotSelected}
-                        onViewModeChange={handleCalendarViewModeChange} // NEW: Allow toggling view modes
-                        onBackToInsurance={() => resetToStep('payer-search')}
-                        onChangeProvider={() => resetToStep('provider-selection')} // NEW: Easy provider change
+                        onBackToInsurance={handleBackToInsurance}
                     />
                 )
 
             case 'insurance-info':
                 if (!state.selectedPayer || !state.selectedTimeSlot) {
                     return (
-                        <div className="min-h-screen flex items-center justify-center">
-                            <button 
-                                type="button"
-                                onClick={() => resetToStep('welcome')} 
-                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
-                            >
-                                Start Over
-                            </button>
+                        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+                            <div className="text-center space-y-4">
+                                <p className="text-stone-600">Appointment information missing.</p>
+                                <button 
+                                    onClick={handleBackToCalendar}
+                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
+                                >
+                                    Back to Calendar
+                                </button>
+                            </div>
                         </div>
                     )
                 }
@@ -345,9 +262,7 @@ export default function BookingFlow() {
                         caseManagerInfo={state.caseManagerInfo}
                         communicationPreferences={state.communicationPreferences!}
                         onSubmit={handleInsuranceInfoSubmitted}
-                        onBack={() => goBack()}
-                        onChangeAppointment={() => resetToStep('calendar')} // NEW: Easy appointment change
-                        onChangeInsurance={() => resetToStep('payer-search')} // NEW: Easy insurance change
+                        onBack={handleBackToCalendar}
                     />
                 )
 
@@ -358,7 +273,7 @@ export default function BookingFlow() {
                         bookingScenario={state.bookingScenario}
                         caseManagerInfo={state.caseManagerInfo}
                         onSubmit={handleROISubmitted}
-                        onBack={() => goBack()}
+                        onBack={() => goToStep('insurance-info')}
                     />
                 )
 
@@ -375,9 +290,7 @@ export default function BookingFlow() {
                             setState({
                                 step: 'welcome',
                                 bookingScenario: 'self',
-                                calendarViewMode: 'merged',
                                 roiContacts: [],
-                                navigationHistory: [],
                                 communicationPreferences: {
                                     sendToPatient: true,
                                     sendToCaseManager: false,
@@ -385,22 +298,21 @@ export default function BookingFlow() {
                                 }
                             })
                         }}
-                        // NEW: Quick action buttons for confirmation screen
-                        onChangeAppointment={() => resetToStep('calendar')}
-                        onChangeInsurance={() => resetToStep('payer-search')}
                     />
                 )
 
             default:
                 return (
-                    <div className="min-h-screen flex items-center justify-center">
-                        <button 
-                            type="button"
-                            onClick={() => resetToStep('welcome')} 
-                            className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl"
-                        >
-                            Start Over
-                        </button>
+                    <div className="min-h-screen flex items-center justify-center bg-stone-50">
+                        <div className="text-center space-y-4">
+                            <p className="text-stone-600">Something went wrong.</p>
+                            <button 
+                                onClick={handleBackToWelcome}
+                                className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
+                            >
+                                Start Over
+                            </button>
+                        </div>
                     </div>
                 )
         }
@@ -408,48 +320,6 @@ export default function BookingFlow() {
 
     return (
         <div className="min-h-screen">
-            {/* NEW: Breadcrumb navigation for user confidence */}
-            {state.step !== 'welcome' && state.step !== 'confirmation' && (
-                <div className="bg-gray-50 px-4 py-2 border-b">
-                    <div className="max-w-2xl mx-auto flex items-center gap-2 text-sm text-gray-600">
-                        <button
-                            type="button"
-                            onClick={() => resetToStep('welcome')}
-                            className="hover:text-[#BF9C73] transition-colors"
-                        >
-                            Start
-                        </button>
-                        {state.selectedPayer && (
-                            <>
-                                <span>→</span>
-                                <button
-                                    type="button"
-                                    onClick={() => resetToStep('payer-search')}
-                                    className="hover:text-[#BF9C73] transition-colors"
-                                >
-                                    {state.selectedPayer.name}
-                                </button>
-                            </>
-                        )}
-                        {state.selectedTimeSlot && (
-                            <>
-                                <span>→</span>
-                                <button
-                                    type="button"
-                                    onClick={() => resetToStep('calendar')}
-                                    className="hover:text-[#BF9C73] transition-colors"
-                                >
-                                    Appointment Selected
-                                </button>
-                            </>
-                        )}
-                        <span className="text-[#BF9C73] font-medium ml-auto">
-                            You can change any of these selections anytime
-                        </span>
-                    </div>
-                </div>
-            )}
-            
             {renderCurrentView()}
         </div>
     )
