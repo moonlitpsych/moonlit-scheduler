@@ -1,5 +1,4 @@
 // src/app/api/patient-booking/merged-availability/route.ts
-
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -22,75 +21,110 @@ interface AvailableSlot {
 
 export async function POST(request: NextRequest) {
     try {
-        const { payerId, startDate, endDate, appointmentDuration = 60 } = await request.json()
-
-        console.log(`Getting merged availability for payer ${payerId || 'test-payer'}`)
-
         const supabase = createRouteHandlerClient({ cookies })
+        const { payer_id, date, startDate, endDate, appointmentDuration = 60 } = await request.json()
 
-        // Get all available providers (since we don't have provider-payer relationships set up yet)
-        const { data: providers, error: providersError } = await supabase
-            .from('providers')
-            .select('id, first_name, last_name, title, role, availability, auth_user_id')
-            .eq('availability', true)
+        // Support both single date and date range requests
+        const requestDate = date || startDate
+        const requestEndDate = endDate || date
 
-        if (providersError) {
-            console.error('Error getting providers:', providersError)
-            return NextResponse.json({ 
-                error: 'Failed to get providers', 
-                details: providersError.message,
-                success: false 
-            }, { status: 500 })
+        if (!payer_id || !requestDate) {
+            return NextResponse.json(
+                { error: 'payer_id and date are required', success: false },
+                { status: 400 }
+            )
         }
 
-        if (!providers || providers.length === 0) {
+        console.log(`🔍 Getting merged availability for payer ${payer_id} on ${requestDate}`)
+
+        // Step 1: Get providers who accept this payer using CORRECT table name
+        const { data: networks, error: networksError } = await supabase
+            .from('provider_payer_networks')
+            .select(`
+                provider_id,
+                effective_date,
+                status,
+                providers!inner (
+                    id,
+                    first_name,
+                    last_name,
+                    title,
+                    role,
+                    is_active,
+                    accepts_new_patients,
+                    telehealth_enabled
+                )
+            `)
+            .eq('payer_id', payer_id)
+            .eq('status', 'active')
+            .eq('providers.is_active', true)
+
+        if (networksError) {
+            console.error('❌ Error fetching provider networks:', networksError)
+            return NextResponse.json(
+                { error: 'Failed to fetch provider networks', details: networksError, success: false },
+                { status: 500 }
+            )
+        }
+
+        const providers = networks?.map(n => n.providers) || []
+        const providerIds = providers.map(p => p.id)
+        
+        console.log(`👥 Found ${providers.length} providers accepting this payer:`, 
+            providers.map(p => `${p.first_name} ${p.last_name}`))
+
+        if (providers.length === 0) {
             return NextResponse.json({
                 success: true,
                 data: {
                     totalSlots: 0,
                     availableSlots: [],
-                    message: 'No providers found. Please create a provider with availability = true first.'
+                    dateRange: { startDate: requestDate, endDate: requestEndDate },
+                    message: 'No providers currently accept this insurance'
                 }
             })
         }
 
-        // Get availability for all providers
-        const allSlots: AvailableSlot[] = []
-        
-        for (const provider of providers) {
-            try {
-                const providerSlots = await getProviderAvailability(
-                    provider.id,
-                    startDate,
-                    endDate,
-                    appointmentDuration,
-                    supabase
-                )
-                
-                providerSlots.forEach(slot => {
-                    allSlots.push({
-                        ...slot,
-                        provider: {
-                            id: provider.id,
-                            first_name: provider.first_name,
-                            last_name: provider.last_name,
-                            title: provider.title || '',
-                            role: provider.role || ''
-                        }
-                    })
-                })
-            } catch (error) {
-                console.error(`Error getting availability for provider ${provider.id}:`, error)
-                // Continue with other providers
-            }
+        // Step 2: Convert date to day of week (0 = Sunday, 1 = Monday, etc.)
+        const targetDate = new Date(requestDate)
+        const dayOfWeek = targetDate.getDay()
+        console.log(`📅 Target date ${requestDate} is day of week ${dayOfWeek} (0=Sun, 1=Mon, etc.)`)
+
+        // Step 3: Get availability for these providers on this day of week
+        const { data: availability, error: availabilityError } = await supabase
+            .from('provider_availability')
+            .select('*')
+            .in('provider_id', providerIds)
+            .eq('day_of_week', dayOfWeek)
+            .eq('is_recurring', true)
+
+        if (availabilityError) {
+            console.error('❌ Error fetching availability:', availabilityError)
+            return NextResponse.json(
+                { error: 'Failed to fetch availability', details: availabilityError, success: false },
+                { status: 500 }
+            )
         }
 
-        // Sort by date and time
-        allSlots.sort((a, b) => {
-            const dateTimeA = new Date(`${a.date} ${a.time}`).getTime()
-            const dateTimeB = new Date(`${b.date} ${b.time}`).getTime()
-            return dateTimeA - dateTimeB
+        console.log(`📊 Found ${availability?.length || 0} availability records`)
+
+        // Step 4: Generate time slots from availability
+        const allSlots: AvailableSlot[] = []
+        
+        availability?.forEach(avail => {
+            const provider = providers.find(p => p.id === avail.provider_id)
+            if (!provider) return
+
+            console.log(`⏰ Processing availability for ${provider.first_name} ${provider.last_name}: ${avail.start_time} - ${avail.end_time}`)
+
+            const slots = generateTimeSlotsFromAvailability(avail, requestDate, provider, appointmentDuration)
+            allSlots.push(...slots)
         })
+
+        // Sort by time
+        allSlots.sort((a, b) => a.time.localeCompare(b.time))
+
+        console.log(`✅ Generated ${allSlots.length} total time slots`)
 
         // Group slots by date for easier frontend consumption
         const slotsByDate = allSlots.reduce((acc, slot) => {
@@ -105,7 +139,7 @@ export async function POST(request: NextRequest) {
             success: true,
             data: {
                 totalSlots: allSlots.length,
-                dateRange: { startDate, endDate },
+                dateRange: { startDate: requestDate, endDate: requestEndDate },
                 slotsByDate,
                 availableSlots: allSlots.slice(0, 50), // Limit for performance
                 providers: providers.map(p => ({
@@ -114,6 +148,14 @@ export async function POST(request: NextRequest) {
                     title: p.title,
                     role: p.role
                 })),
+                debug: {
+                    payer_id,
+                    date: requestDate,
+                    dayOfWeek,
+                    providers_found: providers.length,
+                    availability_records: availability?.length || 0,
+                    slots_generated: allSlots.length
+                },
                 message: `Found ${allSlots.length} available appointment slots from ${providers.length} providers`
             }
         }
@@ -121,7 +163,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(response)
 
     } catch (error: any) {
-        console.error('Error getting merged availability:', error)
+        console.error('💥 Error getting merged availability:', error)
         return NextResponse.json(
             { 
                 error: 'Failed to get availability', 
@@ -133,217 +175,66 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// Helper function to get availability for a single provider
-async function getProviderAvailability(
-    providerId: string,
-    startDate: string,
-    endDate: string,
-    appointmentDuration: number,
-    supabase: any
-): Promise<AvailableSlot[]> {
+function generateTimeSlotsFromAvailability(
+    availability: any, 
+    date: string, 
+    provider: any, 
+    appointmentDuration: number
+): AvailableSlot[] {
+    const slots: AvailableSlot[] = []
+    
     try {
-        // Get provider info
-        const { data: provider, error: providerError } = await supabase
-            .from('providers')
-            .select('*')
-            .eq('id', providerId)
-            .single()
-
-        if (providerError || !provider) {
-            return []
-        }
-
-        // Get provider's weekly schedule
-        const { data: weeklySchedule, error: scheduleError } = await supabase
-            .from('provider_availability')
-            .select('*')
-            .eq('provider_id', providerId)
-            .order('day_of_week')
-            .order('start_time')
-
-        if (scheduleError) {
-            console.error('Error loading schedule:', scheduleError)
-            return []
-        }
-
-        // Get exceptions for the date range
-        const { data: exceptions, error: exceptionsError } = await supabase
-            .from('availability_exceptions')
-            .select('*')
-            .eq('provider_id', providerId)
-            .gte('exception_date', startDate.split('T')[0])
-            .lte('exception_date', endDate.split('T')[0])
-
-        if (exceptionsError) {
-            console.error('Error loading exceptions:', exceptionsError)
-        }
-
-        // Get existing appointments
-        const { data: appointments, error: appointmentsError } = await supabase
-            .from('appointments')
-            .select('appointment_date, appointment_time, duration_minutes')
-            .eq('provider_id', providerId)
-            .gte('appointment_date', startDate.split('T')[0])
-            .lte('appointment_date', endDate.split('T')[0])
-
-        if (appointmentsError) {
-            console.error('Error loading appointments:', appointmentsError)
-        }
-
-        // Process weekly schedule into usable format
-        const scheduleByDay: Record<number, Array<{start_time: string, end_time: string}>> = {}
+        const startTime = availability.start_time // e.g., "09:00:00"
+        const endTime = availability.end_time     // e.g., "17:00:00"
         
-        weeklySchedule?.forEach(block => {
-            if (!scheduleByDay[block.day_of_week]) {
-                scheduleByDay[block.day_of_week] = []
+        // Parse start and end times
+        const [startHour, startMin] = startTime.split(':').map(Number)
+        const [endHour, endMin] = endTime.split(':').map(Number)
+        
+        // Create date objects for this specific date
+        const baseDate = new Date(date)
+        let currentTime = new Date(baseDate)
+        currentTime.setHours(startHour, startMin, 0, 0)
+        
+        const endDateTime = new Date(baseDate)
+        endDateTime.setHours(endHour, endMin, 0, 0)
+        
+        // Generate slots based on appointment duration
+        while (currentTime < endDateTime) {
+            const slotEndTime = new Date(currentTime.getTime() + appointmentDuration * 60 * 1000)
+            
+            // Don't create slots that extend past the end time
+            if (slotEndTime <= endDateTime) {
+                slots.push({
+                    date: date,
+                    time: formatTime(currentTime),
+                    providerId: availability.provider_id,
+                    providerName: `${provider.first_name} ${provider.last_name}`,
+                    duration: appointmentDuration,
+                    isAvailable: true,
+                    provider: {
+                        id: provider.id,
+                        first_name: provider.first_name,
+                        last_name: provider.last_name,
+                        title: provider.title || '',
+                        role: provider.role || ''
+                    }
+                })
             }
-            scheduleByDay[block.day_of_week].push({
-                start_time: block.start_time,
-                end_time: block.end_time
-            })
-        })
-
-        // Generate available slots
-        const availableSlots: AvailableSlot[] = []
-        const currentDate = new Date(startDate)
-        const endDateObj = new Date(endDate)
-
-        while (currentDate <= endDateObj) {
-            const dateStr = currentDate.toISOString().split('T')[0]
-            const dayOfWeek = currentDate.getDay()
-
-            // Check for exceptions on this date
-            const exception = exceptions?.find(e => 
-                e.exception_date === dateStr ||
-                (e.end_date && dateStr >= e.exception_date && dateStr <= e.end_date)
-            )
-
-            if (exception) {
-                if (exception.exception_type === 'unavailable' || exception.exception_type === 'vacation') {
-                    // Skip this day entirely
-                    currentDate.setDate(currentDate.getDate() + 1)
-                    continue
-                } else if (exception.exception_type === 'custom_hours' && exception.start_time && exception.end_time) {
-                    // Use custom hours for this day
-                    const slots = generateTimeSlots(
-                        exception.start_time,
-                        exception.end_time,
-                        appointmentDuration,
-                        15 // buffer minutes
-                    )
-                    
-                    const availableDaySlots = filterBookedSlots(slots, appointments || [], dateStr)
-                    
-                    availableDaySlots.forEach(slot => {
-                        availableSlots.push({
-                            date: dateStr,
-                            time: slot,
-                            providerId: provider.id,
-                            providerName: `${provider.first_name} ${provider.last_name}`,
-                            duration: appointmentDuration,
-                            isAvailable: true,
-                            provider: {
-                                id: provider.id,
-                                first_name: provider.first_name,
-                                last_name: provider.last_name,
-                                title: provider.title || '',
-                                role: provider.role || ''
-                            }
-                        })
-                    })
-                }
-                // Handle partial_block type by continuing with regular schedule but filtering blocked time
-            } else {
-                // Use regular weekly schedule
-                const daySchedule = scheduleByDay[dayOfWeek]
-                
-                if (daySchedule && daySchedule.length > 0) {
-                    daySchedule.forEach(block => {
-                        const slots = generateTimeSlots(
-                            block.start_time,
-                            block.end_time,
-                            appointmentDuration,
-                            15
-                        )
-                        
-                        const availableDaySlots = filterBookedSlots(slots, appointments || [], dateStr)
-                        
-                        availableDaySlots.forEach(slot => {
-                            availableSlots.push({
-                                date: dateStr,
-                                time: slot,
-                                providerId: provider.id,
-                                providerName: `${provider.first_name} ${provider.last_name}`,
-                                duration: appointmentDuration,
-                                isAvailable: true,
-                                provider: {
-                                    id: provider.id,
-                                    first_name: provider.first_name,
-                                    last_name: provider.last_name,
-                                    title: provider.title || '',
-                                    role: provider.role || ''
-                                }
-                            })
-                        })
-                    })
-                }
-            }
-
-            currentDate.setDate(currentDate.getDate() + 1)
+            
+            // Move to next slot (based on appointment duration)
+            currentTime = new Date(currentTime.getTime() + appointmentDuration * 60 * 1000)
         }
-
-        return availableSlots
-
+        
+        console.log(`✅ Generated ${slots.length} slots for ${provider.first_name}`)
+        
     } catch (error) {
-        console.error('Error getting provider availability:', error)
-        return []
-    }
-}
-
-// Helper function to generate time slots
-function generateTimeSlots(
-    startTime: string,
-    endTime: string,
-    duration: number,
-    bufferMinutes: number
-): string[] {
-    const slots: string[] = []
-    const [startHour, startMin] = startTime.split(':').map(Number)
-    const [endHour, endMin] = endTime.split(':').map(Number)
-    
-    let currentHour = startHour
-    let currentMin = startMin
-    const totalDuration = duration + bufferMinutes
-    
-    while (
-        currentHour < endHour ||
-        (currentHour === endHour && currentMin < endMin)
-    ) {
-        slots.push(
-            `${currentHour.toString().padStart(2, '0')}:${currentMin
-                .toString()
-                .padStart(2, '0')}`
-        )
-        
-        currentMin += totalDuration
-        if (currentMin >= 60) {
-            currentHour += Math.floor(currentMin / 60)
-            currentMin = currentMin % 60
-        }
+        console.error('❌ Error generating time slots:', error)
     }
     
     return slots
 }
 
-// Helper function to filter out booked slots
-function filterBookedSlots(
-    slots: string[],
-    appointments: any[],
-    date: string
-): string[] {
-    const bookedTimes = appointments
-        .filter(a => a.appointment_date === date)
-        .map(a => a.appointment_time)
-
-    return slots.filter(slot => !bookedTimes.includes(slot))
+function formatTime(date: Date): string {
+    return date.toTimeString().slice(0, 5) // Returns "HH:MM"
 }

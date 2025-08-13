@@ -1,3 +1,4 @@
+// src/app/api/patient-booking/providers-for-payer/route.ts
 import { supabase } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
 
         console.log('🔍 Fetching providers for payer:', { payer_id, language })
 
-        // Get providers who accept this payer
+        // FIXED: Use correct table name 'provider_payer_networks' instead of 'provider_payer_relationships'
         const { data: networks, error: networksError } = await supabase
             .from('provider_payer_networks')
             .select(`
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
         if (networksError) {
             console.error('❌ Error fetching provider networks:', networksError)
             return NextResponse.json(
-                { success: false, error: 'Failed to fetch provider networks' },
+                { success: false, error: 'Failed to fetch provider networks', details: networksError },
                 { status: 500 }
             )
         }
@@ -78,22 +79,32 @@ export async function POST(request: NextRequest) {
             })
         }
 
-        console.log('🌐 Providers after language filter:', providers.length)
+        console.log(`✅ Filtered providers for ${language}:`, providers.length)
 
-        return NextResponse.json({
+        const response = {
             success: true,
             data: {
-                providers,
-                totalCount: providers.length,
+                payer_id,
                 language,
-                payer_id
+                providers,
+                total_providers: providers.length,
+                debug_info: {
+                    networks_found: networks?.length || 0,
+                    providers_after_language_filter: providers.length
+                }
             }
-        })
+        }
 
-    } catch (error) {
-        console.error('💥 Error in providers-for-payer API:', error)
+        return NextResponse.json(response)
+
+    } catch (error: any) {
+        console.error('❌ Error getting providers for payer:', error)
         return NextResponse.json(
-            { success: false, error: 'Internal server error' },
+            { 
+                success: false, 
+                error: 'Failed to get providers', 
+                details: error.message 
+            },
             { status: 500 }
         )
     }
