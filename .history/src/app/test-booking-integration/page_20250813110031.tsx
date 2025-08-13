@@ -13,7 +13,7 @@ export default function TestBookingIntegration() {
             const providersResponse = await fetch('/api/patient-booking/providers-for-payer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ payer_id: 'test-payer-id' })
+                body: JSON.stringify({ payerId: 'test-payer-id' })
             })
             const providersData = await providersResponse.json()
             
@@ -23,7 +23,7 @@ export default function TestBookingIntegration() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        payer_id: 'test-payer-id',
+                        payerId: 'test-payer-id',
                         startDate: new Date().toISOString(),
                         endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
                     })

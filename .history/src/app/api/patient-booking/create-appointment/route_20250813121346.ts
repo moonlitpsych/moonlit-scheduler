@@ -3,7 +3,7 @@ import type { Database } from '@/types/database'
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Service key if present (server-side insert), else anon for dev
+// Use service key if present (RLS-neutral server-side insert), else anon
 const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
     (process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!.trim()
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
     try {
         const payload = await req.json()
 
+        // Minimal required fields for MVP (keep exact original)
         const required = ['provider_id', 'service_instance_id', 'start_time', 'patient_info', 'insurance_info']
         for (const key of required) {
             if (!payload[key]) {
@@ -20,32 +21,21 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        // Optional fields (keep your original names)
         const {
             provider_id,
-            rendering_provider_id,    // for supervision cases
+            rendering_provider_id, // for supervision cases
             service_instance_id,
             payer_id,
-            start_time,               // ISO string
+            start_time,            // ISO string
             timezone = 'America/Denver',
             patient_info,
             insurance_info,
             roi_contacts,
-            booking_source = 'scheduler',
-            appointment_type = 'telehealth', // aligns with your data model
+            booking_source = 'scheduler'
         } = payload
 
-        // Quick sanity checks
-        const start = new Date(start_time)
-        if (isNaN(+start)) {
-            return NextResponse.json({ success: false, error: 'start_time must be a valid ISO date-time string' }, { status: 400 })
-        }
-
-        const now = new Date()
-        if (+start < +now - 5 * 60 * 1000) {
-            // allow small drift but avoid obviously past times
-            return NextResponse.json({ success: false, error: 'start_time is in the past' }, { status: 400 })
-        }
-
+        // Insert appointment
         const { data, error } = await supabase
             .from('appointments')
             .insert([{
@@ -55,10 +45,10 @@ export async function POST(req: NextRequest) {
                 payer_id: payer_id ?? null,
                 start_time,
                 timezone,
-                appointment_type,
+                appointment_type: 'telehealth', // original behavior
                 booking_source,
-                patient_info,   // JSONB
-                insurance_info, // JSONB
+                patient_info,        // JSONB
+                insurance_info,      // JSONB
                 roi_contacts: roi_contacts ?? null,
                 status: 'scheduled',
                 created_at: new Date().toISOString(),
@@ -72,7 +62,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: 'Failed to create appointment' }, { status: 500 })
         }
 
-        // TODO (optional): mark a hold or decrement cache capacity here
+        // TODO (future): decrement availability cache or create a slim “hold” row
 
         return NextResponse.json({ success: true, appointment_id: data!.id })
     } catch (err: any) {

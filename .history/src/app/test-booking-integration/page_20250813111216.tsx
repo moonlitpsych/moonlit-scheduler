@@ -23,7 +23,7 @@ export default function TestBookingIntegration() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        payer_id: 'test-payer-id',
+                        payerId: 'test-payer-id',
                         startDate: new Date().toISOString(),
                         endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
                     })
