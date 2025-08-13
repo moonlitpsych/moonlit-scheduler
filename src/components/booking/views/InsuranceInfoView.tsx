@@ -1,114 +1,114 @@
+// src/components/booking/views/InsuranceInfoView.tsx
 'use client'
 
-import { InsuranceInfo, Payer, TimeSlot } from '@/types/database'
+import { BookingScenario, PatientInfo, Payer, TimeSlot } from '@/types/database'
+import { format } from 'date-fns'
+import { ArrowLeft, ArrowRight, Calendar, Clock } from 'lucide-react'
 import { useState } from 'react'
-import { BookingScenario } from './WelcomeView'
 
 interface InsuranceInfoViewProps {
     selectedPayer: Payer
     selectedTimeSlot: TimeSlot
     bookingScenario: BookingScenario
-    caseManagerInfo?: {
-        name: string
-        email: string
-        phone?: string
-        organization?: string
-    }
-    communicationPreferences: {
-        sendToPatient: boolean
-        sendToCaseManager: boolean
-        patientHasEmail: boolean
-    }
-    onSubmit: (insuranceInfo: InsuranceInfo) => void
+    onSubmit: (patientInfo: PatientInfo) => void
     onBack: () => void
-    onChangeAppointment?: () => void // NEW: Quick change appointment
-    onChangeInsurance?: () => void  // NEW: Quick change insurance
 }
 
-export default function InsuranceInfoView({
-    selectedPayer,
-    selectedTimeSlot,
+export default function InsuranceInfoView({ 
+    selectedPayer, 
+    selectedTimeSlot, 
     bookingScenario,
-    caseManagerInfo,
-    communicationPreferences,
-    onSubmit,
-    onBack,
-    onChangeAppointment,
-    onChangeInsurance
+    onSubmit, 
+    onBack 
 }: InsuranceInfoViewProps) {
-    const [formData, setFormData] = useState({
-        // Patient Information
+    const [patientInfo, setPatientInfo] = useState<PatientInfo>({
         firstName: '',
         lastName: '',
-        dateOfBirth: '',
-        phone: '',
+        dob: '',
         email: '',
-        address: '',
-        city: '',
-        state: 'UT',
-        zipCode: '',
-        
-        // Insurance Information
-        memberId: '',
-        groupNumber: '',
-        subscriberName: '',
-        subscriberDateOfBirth: '',
-        relationshipToSubscriber: 'self',
-        
-        // Emergency Contact
-        emergencyContactName: '',
-        emergencyContactPhone: '',
-        emergencyContactRelationship: '',
-        
-        // Medical Information
-        primaryCarePhysician: '',
-        reasonForVisit: '',
-        currentMedications: '',
-        allergies: '',
-        previousPsychiatricTreatment: false,
-        previousPsychiatricDetails: ''
+        phone: '',
+        insuranceId: '',
+        address: ''
     })
 
     const [errors, setErrors] = useState<Record<string, string>>({})
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const { name, value, type } = e.target
-        
-        setFormData(prev => ({
-            ...prev,
-            [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
-        }))
+    // FIXED: Safe time formatting function
+    const formatDateTime = (timeSlot: TimeSlot): { date: string, time: string } => {
+        try {
+            if (!timeSlot?.start_time) {
+                return { date: 'Date not available', time: 'Time not available' }
+            }
 
-        // Clear error when user starts typing
-        if (errors[name]) {
-            setErrors(prev => ({
-                ...prev,
-                [name]: ''
-            }))
+            let dateToFormat: Date
+
+            // Handle different time formats safely
+            if (timeSlot.start_time.includes('T') || timeSlot.start_time.includes('-')) {
+                // Full datetime string
+                dateToFormat = new Date(timeSlot.start_time)
+            } else {
+                // Time-only string like "09:00:00" - need to create a proper date
+                const today = new Date()
+                const timeParts = timeSlot.start_time.split(':')
+                if (timeParts.length >= 2) {
+                    const hours = parseInt(timeParts[0], 10)
+                    const minutes = parseInt(timeParts[1], 10)
+                    dateToFormat = new Date(today)
+                    dateToFormat.setHours(hours, minutes, 0, 0)
+                } else {
+                    // Fallback if split fails
+                    dateToFormat = new Date()
+                    dateToFormat.setHours(9, 0, 0, 0)
+                }
+            }
+
+            // Validate the date
+            if (isNaN(dateToFormat.getTime())) {
+                console.warn('Invalid date created from:', timeSlot.start_time)
+                return { date: 'Date not available', time: 'Time not available' }
+            }
+
+            return {
+                date: format(dateToFormat, 'EEEE, MMMM d, yyyy'),
+                time: format(dateToFormat, 'h:mm a')
+            }
+        } catch (error) {
+            console.error('Error formatting datetime:', error, timeSlot)
+            return { date: 'Date not available', time: 'Time not available' }
         }
     }
 
-    const validateForm = () => {
+    const timeSlotFormatted = formatDateTime(selectedTimeSlot)
+
+    const validateForm = (): boolean => {
         const newErrors: Record<string, string> = {}
 
-        // Required fields
-        if (!formData.firstName.trim()) newErrors.firstName = 'First name is required'
-        if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required'
-        if (!formData.dateOfBirth) newErrors.dateOfBirth = 'Date of birth is required'
-        if (!formData.phone.trim()) newErrors.phone = 'Phone number is required'
-        if (!formData.memberId.trim()) newErrors.memberId = 'Member ID is required'
-        
-        // Email validation (only if patient has email in communication preferences)
-        if (communicationPreferences.patientHasEmail && !formData.email.trim()) {
-            newErrors.email = 'Email is required'
-        } else if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
-            newErrors.email = 'Valid email is required'
+        if (!patientInfo.firstName.trim()) {
+            newErrors.firstName = 'First name is required'
         }
 
-        // Emergency contact
-        if (!formData.emergencyContactName.trim()) newErrors.emergencyContactName = 'Emergency contact name is required'
-        if (!formData.emergencyContactPhone.trim()) newErrors.emergencyContactPhone = 'Emergency contact phone is required'
+        if (!patientInfo.lastName.trim()) {
+            newErrors.lastName = 'Last name is required'
+        }
+
+        if (!patientInfo.dob) {
+            newErrors.dob = 'Date of birth is required'
+        }
+
+        if (!patientInfo.email.trim()) {
+            newErrors.email = 'Email is required'
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(patientInfo.email)) {
+            newErrors.email = 'Please enter a valid email address'
+        }
+
+        if (!patientInfo.phone.trim()) {
+            newErrors.phone = 'Phone number is required'
+        }
+
+        if (!patientInfo.insuranceId.trim()) {
+            newErrors.insuranceId = 'Insurance ID is required'
+        }
 
         setErrors(newErrors)
         return Object.keys(newErrors).length === 0
@@ -122,409 +122,247 @@ export default function InsuranceInfoView({
         }
 
         setIsSubmitting(true)
-
+        
         try {
-            const insuranceInfo: InsuranceInfo = {
-                patient: {
-                    firstName: formData.firstName,
-                    lastName: formData.lastName,
-                    dateOfBirth: formData.dateOfBirth,
-                    phone: formData.phone,
-                    email: formData.email,
-                    address: {
-                        street: formData.address,
-                        city: formData.city,
-                        state: formData.state,
-                        zipCode: formData.zipCode
-                    }
-                },
-                insurance: {
-                    payerId: selectedPayer.id,
-                    payerName: selectedPayer.name,
-                    memberId: formData.memberId,
-                    groupNumber: formData.groupNumber,
-                    subscriberName: formData.subscriberName || `${formData.firstName} ${formData.lastName}`,
-                    subscriberDateOfBirth: formData.subscriberDateOfBirth || formData.dateOfBirth,
-                    relationshipToSubscriber: formData.relationshipToSubscriber as 'self' | 'spouse' | 'child' | 'other'
-                },
-                emergencyContact: {
-                    name: formData.emergencyContactName,
-                    phone: formData.emergencyContactPhone,
-                    relationship: formData.emergencyContactRelationship
-                },
-                medical: {
-                    primaryCarePhysician: formData.primaryCarePhysician,
-                    reasonForVisit: formData.reasonForVisit,
-                    currentMedications: formData.currentMedications,
-                    allergies: formData.allergies,
-                    previousPsychiatricTreatment: formData.previousPsychiatricTreatment,
-                    previousPsychiatricDetails: formData.previousPsychiatricDetails
-                }
-            }
-
-            onSubmit(insuranceInfo)
+            // Add a small delay for better UX
+            await new Promise(resolve => setTimeout(resolve, 500))
+            onSubmit(patientInfo)
         } catch (error) {
-            console.error('Error submitting insurance info:', error)
+            console.error('Error submitting patient info:', error)
         } finally {
             setIsSubmitting(false)
         }
     }
 
-    const formatDateTime = (date: string, startTime: string) => {
-        const dateObj = new Date(date)
-        const [hours, minutes] = startTime.split(':')
-        dateObj.setHours(parseInt(hours), parseInt(minutes))
+    const handleInputChange = (field: keyof PatientInfo, value: string) => {
+        setPatientInfo(prev => ({ ...prev, [field]: value }))
         
-        return dateObj.toLocaleString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        })
+        // Clear error when user starts typing
+        if (errors[field]) {
+            setErrors(prev => ({ ...prev, [field]: '' }))
+        }
+    }
+
+    const getScenarioTitle = (): string => {
+        switch (bookingScenario) {
+            case 'case-manager':
+                return 'Patient Information for Case Manager Booking'
+            case 'third-party-referral':
+                return 'Patient Information for Referral'
+            default:
+                return 'Your Information'
+        }
+    }
+
+    const getScenarioDescription = (): string => {
+        switch (bookingScenario) {
+            case 'case-manager':
+                return 'Please provide the patient\'s information below. As the case manager, you will receive all appointment communications.'
+            case 'third-party-referral':
+                return 'Please provide the patient\'s information for this referral.'
+            default:
+                return 'Please provide your information below to complete the booking.'
+        }
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#1a2c5b] to-[#2d4a7c]">
-            <div className="container mx-auto px-4 py-8">
-                {/* Header */}
-                <div className="text-white text-center mb-8">
-                    <h1 className="text-4xl font-bold mb-4">Patient Information</h1>
-                    <p className="text-xl opacity-90 mb-6">
-                        Please provide your information to complete your booking
-                    </p>
+        <div className="max-w-2xl mx-auto p-6">
+            {/* Header */}
+            <div className="text-center mb-8">
+                <h1 className="text-3xl font-normal text-slate-800 mb-2 font-['Newsreader']">
+                    {getScenarioTitle()}
+                </h1>
+                <p className="text-slate-600 font-['Newsreader']">
+                    {getScenarioDescription()}
+                </p>
+            </div>
 
-                    {/* Appointment Summary */}
-                    <div className="bg-white/10 rounded-2xl p-6 max-w-2xl mx-auto mb-6">
-                        <div className="text-left">
-                            <h3 className="text-lg font-semibold mb-4">Your Appointment</h3>
-                            <div className="space-y-2">
-                                <div className="flex justify-between items-center">
-                                    <span className="opacity-80">Date & Time:</span>
-                                    <span className="font-medium">
-                                        {formatDateTime(selectedTimeSlot.date, selectedTimeSlot.start_time)}
-                                    </span>
-                                </div>
-                                {selectedTimeSlot.provider_name && (
-                                    <div className="flex justify-between items-center">
-                                        <span className="opacity-80">Provider:</span>
-                                        <span className="font-medium">{selectedTimeSlot.provider_name}</span>
-                                    </div>
-                                )}
-                                <div className="flex justify-between items-center">
-                                    <span className="opacity-80">Insurance:</span>
-                                    <span className="font-medium">{selectedPayer.name}</span>
-                                </div>
-                            </div>
-                            
-                            {/* Quick Change Options */}
-                            <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-white/20">
-                                {onChangeAppointment && (
-                                    <button
-                                        type="button"
-                                        onClick={onChangeAppointment}
-                                        className="text-sm text-white/80 hover:text-white transition-colors"
-                                    >
-                                        Change Appointment
-                                    </button>
-                                )}
-                                {onChangeInsurance && (
-                                    <button
-                                        type="button"
-                                        onClick={onChangeInsurance}
-                                        className="text-sm text-white/80 hover:text-white transition-colors"
-                                    >
-                                        Change Insurance
-                                    </button>
-                                )}
-                            </div>
+            {/* Appointment Summary */}
+            <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-8">
+                <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <Calendar className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-slate-800 font-['Newsreader']">
+                            Appointment Scheduled
+                        </h3>
+                        <p className="text-sm text-slate-600 font-['Newsreader']">
+                            {selectedPayer.name}
+                        </p>
+                    </div>
+                </div>
+                
+                <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <p className="text-sm text-slate-600 mb-1 font-['Newsreader']">Date</p>
+                        <p className="font-medium text-slate-800 font-['Newsreader']">
+                            {timeSlotFormatted.date}
+                        </p>
+                    </div>
+                    <div>
+                        <p className="text-sm text-slate-600 mb-1 font-['Newsreader']">Time</p>
+                        <div className="flex items-center space-x-2">
+                            <Clock className="w-4 h-4 text-slate-500" />
+                            <span className="font-medium text-slate-800 font-['Newsreader']">
+                                {timeSlotFormatted.time}
+                            </span>
                         </div>
                     </div>
                 </div>
-
-                {/* Form */}
-                <div className="max-w-4xl mx-auto">
-                    <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-8 shadow-lg">
-                        
-                        {/* Patient Information Section */}
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Patient Information</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
-                                        First Name *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="firstName"
-                                        name="firstName"
-                                        value={formData.firstName}
-                                        onChange={handleInputChange}
-                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
-                                            errors.firstName ? 'border-red-500' : 'border-gray-300'
-                                        }`}
-                                    />
-                                    {errors.firstName && <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>}
-                                </div>
-
-                                <div>
-                                    <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Last Name *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="lastName"
-                                        name="lastName"
-                                        value={formData.lastName}
-                                        onChange={handleInputChange}
-                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
-                                            errors.lastName ? 'border-red-500' : 'border-gray-300'
-                                        }`}
-                                    />
-                                    {errors.lastName && <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>}
-                                </div>
-
-                                <div>
-                                    <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Date of Birth *
-                                    </label>
-                                    <input
-                                        type="date"
-                                        id="dateOfBirth"
-                                        name="dateOfBirth"
-                                        value={formData.dateOfBirth}
-                                        onChange={handleInputChange}
-                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
-                                            errors.dateOfBirth ? 'border-red-500' : 'border-gray-300'
-                                        }`}
-                                    />
-                                    {errors.dateOfBirth && <p className="text-red-500 text-sm mt-1">{errors.dateOfBirth}</p>}
-                                </div>
-
-                                <div>
-                                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Phone Number *
-                                    </label>
-                                    <input
-                                        type="tel"
-                                        id="phone"
-                                        name="phone"
-                                        value={formData.phone}
-                                        onChange={handleInputChange}
-                                        placeholder="(555) 123-4567"
-                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
-                                            errors.phone ? 'border-red-500' : 'border-gray-300'
-                                        }`}
-                                    />
-                                    {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
-                                </div>
-
-                                {communicationPreferences.patientHasEmail && (
-                                    <div>
-                                        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                                            Email Address *
-                                        </label>
-                                        <input
-                                            type="email"
-                                            id="email"
-                                            name="email"
-                                            value={formData.email}
-                                            onChange={handleInputChange}
-                                            className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
-                                                errors.email ? 'border-red-500' : 'border-gray-300'
-                                            }`}
-                                        />
-                                        {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Insurance Information Section */}
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Insurance Information</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label htmlFor="memberId" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Member ID *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="memberId"
-                                        name="memberId"
-                                        value={formData.memberId}
-                                        onChange={handleInputChange}
-                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
-                                            errors.memberId ? 'border-red-500' : 'border-gray-300'
-                                        }`}
-                                    />
-                                    {errors.memberId && <p className="text-red-500 text-sm mt-1">{errors.memberId}</p>}
-                                </div>
-
-                                <div>
-                                    <label htmlFor="groupNumber" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Group Number
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="groupNumber"
-                                        name="groupNumber"
-                                        value={formData.groupNumber}
-                                        onChange={handleInputChange}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label htmlFor="relationshipToSubscriber" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Relationship to Subscriber
-                                    </label>
-                                    <select
-                                        id="relationshipToSubscriber"
-                                        name="relationshipToSubscriber"
-                                        value={formData.relationshipToSubscriber}
-                                        onChange={handleInputChange}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
-                                    >
-                                        <option value="self">Self</option>
-                                        <option value="spouse">Spouse</option>
-                                        <option value="child">Child</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Emergency Contact Section */}
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Emergency Contact</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label htmlFor="emergencyContactName" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Name *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="emergencyContactName"
-                                        name="emergencyContactName"
-                                        value={formData.emergencyContactName}
-                                        onChange={handleInputChange}
-                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
-                                            errors.emergencyContactName ? 'border-red-500' : 'border-gray-300'
-                                        }`}
-                                    />
-                                    {errors.emergencyContactName && <p className="text-red-500 text-sm mt-1">{errors.emergencyContactName}</p>}
-                                </div>
-
-                                <div>
-                                    <label htmlFor="emergencyContactPhone" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Phone Number *
-                                    </label>
-                                    <input
-                                        type="tel"
-                                        id="emergencyContactPhone"
-                                        name="emergencyContactPhone"
-                                        value={formData.emergencyContactPhone}
-                                        onChange={handleInputChange}
-                                        placeholder="(555) 123-4567"
-                                        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] ${
-                                            errors.emergencyContactPhone ? 'border-red-500' : 'border-gray-300'
-                                        }`}
-                                    />
-                                    {errors.emergencyContactPhone && <p className="text-red-500 text-sm mt-1">{errors.emergencyContactPhone}</p>}
-                                </div>
-
-                                <div>
-                                    <label htmlFor="emergencyContactRelationship" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Relationship
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="emergencyContactRelationship"
-                                        name="emergencyContactRelationship"
-                                        value={formData.emergencyContactRelationship}
-                                        onChange={handleInputChange}
-                                        placeholder="e.g., Spouse, Parent, Sibling"
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Medical Information Section */}
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Medical Information</h2>
-                            <div className="space-y-6">
-                                <div>
-                                    <label htmlFor="reasonForVisit" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Reason for Visit
-                                    </label>
-                                    <textarea
-                                        id="reasonForVisit"
-                                        name="reasonForVisit"
-                                        value={formData.reasonForVisit}
-                                        onChange={handleInputChange}
-                                        rows={3}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
-                                        placeholder="Please describe your main concerns or symptoms..."
-                                    />
-                                </div>
-
-                                <div>
-                                    <label htmlFor="currentMedications" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Current Medications
-                                    </label>
-                                    <textarea
-                                        id="currentMedications"
-                                        name="currentMedications"
-                                        value={formData.currentMedications}
-                                        onChange={handleInputChange}
-                                        rows={3}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
-                                        placeholder="List all medications, dosages, and frequencies..."
-                                    />
-                                </div>
-
-                                <div>
-                                    <label htmlFor="allergies" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Allergies
-                                    </label>
-                                    <textarea
-                                        id="allergies"
-                                        name="allergies"
-                                        value={formData.allergies}
-                                        onChange={handleInputChange}
-                                        rows={2}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73]"
-                                        placeholder="List any known allergies or enter 'None'..."
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Form Actions */}
-                        <div className="flex items-center justify-between pt-6 border-t border-gray-200">
-                            <button
-                                type="button"
-                                onClick={onBack}
-                                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
-                            >
-                                Back to Calendar
-                            </button>
-
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="px-8 py-3 bg-[#BF9C73] text-white rounded-xl font-medium hover:bg-[#A8865F] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isSubmitting ? 'Submitting...' : 'Continue to ROI'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
             </div>
+
+            {/* Patient Information Form */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
+                            First Name *
+                        </label>
+                        <input
+                            type="text"
+                            value={patientInfo.firstName}
+                            onChange={(e) => handleInputChange('firstName', e.target.value)}
+                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
+                                errors.firstName ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter first name"
+                        />
+                        {errors.firstName && (
+                            <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.firstName}</p>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
+                            Last Name *
+                        </label>
+                        <input
+                            type="text"
+                            value={patientInfo.lastName}
+                            onChange={(e) => handleInputChange('lastName', e.target.value)}
+                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
+                                errors.lastName ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter last name"
+                        />
+                        {errors.lastName && (
+                            <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.lastName}</p>
+                        )}
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
+                        Date of Birth *
+                    </label>
+                    <input
+                        type="date"
+                        value={patientInfo.dob}
+                        onChange={(e) => handleInputChange('dob', e.target.value)}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
+                            errors.dob ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                    />
+                    {errors.dob && (
+                        <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.dob}</p>
+                    )}
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
+                            Email Address *
+                        </label>
+                        <input
+                            type="email"
+                            value={patientInfo.email}
+                            onChange={(e) => handleInputChange('email', e.target.value)}
+                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
+                                errors.email ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter email address"
+                        />
+                        {errors.email && (
+                            <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.email}</p>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
+                            Phone Number *
+                        </label>
+                        <input
+                            type="tel"
+                            value={patientInfo.phone}
+                            onChange={(e) => handleInputChange('phone', e.target.value)}
+                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
+                                errors.phone ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter phone number"
+                        />
+                        {errors.phone && (
+                            <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.phone}</p>
+                        )}
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
+                        Insurance ID *
+                    </label>
+                    <input
+                        type="text"
+                        value={patientInfo.insuranceId}
+                        onChange={(e) => handleInputChange('insuranceId', e.target.value)}
+                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
+                            errors.insuranceId ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                        placeholder="Enter insurance ID/member number"
+                    />
+                    {errors.insuranceId && (
+                        <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.insuranceId}</p>
+                    )}
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
+                        Address (Optional)
+                    </label>
+                    <input
+                        type="text"
+                        value={patientInfo.address}
+                        onChange={(e) => handleInputChange('address', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader']"
+                        placeholder="Enter address"
+                    />
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-between pt-6">
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        className="flex items-center space-x-2 text-slate-600 hover:text-slate-800 font-medium transition-colors font-['Newsreader']"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Back to calendar</span>
+                    </button>
+                    
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className={`flex items-center space-x-2 px-8 py-3 rounded-lg font-medium transition-all font-['Newsreader'] ${
+                            isSubmitting
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : 'bg-[#BF9C73] hover:bg-[#A67C52] text-white'
+                        }`}
+                    >
+                        <span>{isSubmitting ? 'Processing...' : 'Continue'}</span>
+                        {!isSubmitting && <ArrowRight className="w-4 h-4" />}
+                    </button>
+                </div>
+            </form>
         </div>
     )
 }

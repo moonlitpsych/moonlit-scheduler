@@ -1,15 +1,24 @@
+// src/components/booking/views/CalendarView.tsx
 'use client'
 
-import { Payer, Provider, TimeSlot } from '@/types/database'
-import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isSameDay, isSameMonth, isToday, startOfMonth, subMonths } from 'date-fns'
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Globe, UserCheck, Users } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Payer, TimeSlot } from '@/types/database'
+import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isSameDay, isToday, startOfMonth, subMonths } from 'date-fns'
+import { Check, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
+import { useState } from 'react'
 
 interface CalendarViewProps {
-    selectedPayer: Payer
-    onTimeSlotSelected: (timeSlot: TimeSlot) => void
+    selectedPayer?: Payer
+    onTimeSlotSelected: (slot: TimeSlot) => void
     onBackToInsurance: () => void
-    bookingMode?: 'normal' | 'from-effective-date'
+}
+
+interface AvailableSlot {
+    date: string
+    time: string
+    provider_id: string
+    provider_name: string
+    duration: number
+    available: boolean
 }
 
 interface ConsolidatedTimeSlot {
@@ -17,104 +26,88 @@ interface ConsolidatedTimeSlot {
     displayTime: string
     availableSlots: TimeSlot[]
     isSelected: boolean
-    providerCount: number
 }
 
-type Language = 'English' | 'Spanish' | 'Portuguese'
-
-export default function CalendarView({ 
-    selectedPayer, 
-    onTimeSlotSelected, 
-    onBackToInsurance,
-    bookingMode = 'normal'
-}: CalendarViewProps) {
-    const [currentMonth, setCurrentMonth] = useState(() => new Date())
+export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance }: CalendarViewProps) {
+    const [currentMonth, setCurrentMonth] = useState(new Date())
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
     const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([])
     const [consolidatedSlots, setConsolidatedSlots] = useState<ConsolidatedTimeSlot[]>([])
     const [loading, setLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [showProviderSelection, setShowProviderSelection] = useState(false)
-    const [availableProviders, setAvailableProviders] = useState<Provider[]>([])
-    const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
-    const [selectedLanguage, setSelectedLanguage] = useState<Language>('English')
-    const [showLanguageSelection, setShowLanguageSelection] = useState(false)
+    const [error, setError] = useState<string>('')
+    const [showInsuranceBanner, setShowInsuranceBanner] = useState(true)
 
+    const dayLabels = ['m', 't', 'w', 't', 'f', 's', 's']
+
+    // Calendar layout calculations (restored original)
     const monthStart = startOfMonth(currentMonth)
     const monthEnd = endOfMonth(currentMonth)
-    const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
-    
-    // Calendar grid setup
+    const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
+
+    // Pad the calendar to start on Sunday (restored original)
     const startPadding = getDay(monthStart)
     const paddedDays = [
         ...Array(startPadding).fill(null),
-        ...monthDays
+        ...days
     ]
 
-    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    // Generate mock availability data for fallback
+    const generateMockAvailability = (date: Date): TimeSlot[] => {
+        const slots: TimeSlot[] = []
+        const baseDate = format(date, 'yyyy-MM-dd')
 
-    useEffect(() => {
-        fetchProvidersForPayer()
-    }, [selectedPayer, selectedLanguage])
+        const morningTimes = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30']
+        const afternoonTimes = ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30']
+        const allTimes = [...morningTimes, ...afternoonTimes]
 
-    useEffect(() => {
-        if (selectedDate) {
-            fetchAvailabilityForDate(selectedDate)
-        }
-    }, [selectedDate, selectedPayer, selectedProvider, selectedLanguage])
+        allTimes.forEach((time, index) => {
+            const startTime = `${baseDate}T${time}:00`
+            const endTime = new Date(new Date(startTime).getTime() + 60 * 60 * 1000).toISOString()
 
-    const fetchProvidersForPayer = async () => {
-        try {
-            const response = await fetch('/api/patient-booking/providers-for-payer', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    payer_id: selectedPayer.id,
-                    language: selectedLanguage
+            // 70% chance of being available
+            if (Math.random() > 0.3) {
+                slots.push({
+                    start_time: startTime,
+                    end_time: endTime,
+                    provider_id: `provider-${(index % 3) + 1}`,
+                    available: true
                 })
-            })
-            
-            if (response.ok) {
-                const data = await response.json()
-                if (data.success) {
-                    setAvailableProviders(data.data?.providers || [])
-                }
             }
-        } catch (error) {
-            console.error('Error fetching providers:', error)
-        }
+        })
+
+        return slots
+    }
+
+    const handleDateClick = async (date: Date) => {
+        console.log('📅 Date clicked:', format(date, 'yyyy-MM-dd'))
+        setSelectedDate(date)
+        setSelectedSlot(null)
+        setError('')
+        await fetchAvailabilityForDate(date)
     }
 
     const fetchAvailabilityForDate = async (date: Date) => {
+        if (!selectedPayer) {
+            console.error('❌ No payer selected')
+            return
+        }
+
         setLoading(true)
-        setError(null)
-        
+        setError('')
+
         try {
             const dateString = format(date, 'yyyy-MM-dd')
-            
-            let requestBody: any
-            let endpoint: string
+            console.log('🔍 Fetching merged availability for:', dateString, 'with payer:', selectedPayer.name)
 
-            if (selectedProvider) {
-                // Individual provider availability
-                requestBody = {
-                    provider_id: selectedProvider.id,
-                    date: dateString
-                }
-                endpoint = '/api/patient-booking/provider-availability'
-            } else {
-                // Merged availability for all providers who accept this payer
-                requestBody = {
-                    payer_id: selectedPayer.id,
-                    date: dateString
-                }
-                endpoint = '/api/patient-booking/merged-availability'
+            const requestBody = {
+                payer_id: selectedPayer.id,
+                date: dateString
             }
 
-            console.log('🔍 Fetching availability:', { endpoint, requestBody })
+            console.log('📡 Request body:', requestBody)
 
-            const response = await fetch(endpoint, {
+            const response = await fetch('/api/patient-booking/merged-availability', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)
@@ -135,12 +128,29 @@ export default function CalendarView({
                 throw new Error(data.error || 'Failed to fetch availability')
             }
 
-            const slots = data.data?.availableSlots || data.availableSlots || []
+            // FIXED: Convert API response format to TimeSlot format
+            const apiSlots: AvailableSlot[] = data.data?.availableSlots || []
+            console.log('✅ Received API slots:', apiSlots.length)
+
+            // Convert AvailableSlot to TimeSlot format
+            const convertedSlots: TimeSlot[] = apiSlots.map(apiSlot => {
+                // Create proper datetime strings for start_time and end_time
+                const startDateTime = `${apiSlot.date}T${apiSlot.time}:00`
+                const endTime = new Date(new Date(startDateTime).getTime() + (apiSlot.duration * 60 * 1000))
+                const endDateTime = endTime.toISOString()
+
+                return {
+                    start_time: startDateTime,
+                    end_time: endDateTime,
+                    provider_id: apiSlot.provider_id,
+                    available: apiSlot.available
+                }
+            })
+
+            console.log('🔄 Converted slots:', convertedSlots.length)
             
-            console.log('✅ Received slots:', slots.length)
-            
-            setAvailableSlots(slots)
-            consolidateTimeSlots(slots)
+            setAvailableSlots(convertedSlots)
+            consolidateTimeSlots(convertedSlots)
             
         } catch (error) {
             console.error('💥 Error fetching availability:', error)
@@ -158,366 +168,259 @@ export default function CalendarView({
     }
 
     const consolidateTimeSlots = (slots: TimeSlot[]) => {
+        console.log('🔄 Consolidating slots:', slots.length)
         const timeMap = new Map<string, TimeSlot[]>()
         
         slots.forEach(slot => {
-            const timeKey = format(new Date(slot.start_time), 'HH:mm')
-            if (!timeMap.has(timeKey)) {
-                timeMap.set(timeKey, [])
+            try {
+                // Parse the time from start_time
+                const date = new Date(slot.start_time)
+                const timeKey = format(date, 'HH:mm')
+                
+                if (!timeMap.has(timeKey)) {
+                    timeMap.set(timeKey, [])
+                }
+                timeMap.get(timeKey)!.push(slot)
+                
+                console.log(`✅ Processed slot: ${slot.start_time} -> ${timeKey}`)
+            } catch (error) {
+                console.error('❌ Error processing slot:', slot.start_time, error)
             }
-            timeMap.get(timeKey)!.push(slot)
         })
 
         const consolidated = Array.from(timeMap.entries())
-            .map(([time, slotsAtTime]) => ({
-                time,
-                displayTime: format(new Date(slotsAtTime[0].start_time), 'h:mm a'),
-                availableSlots: slotsAtTime,
-                isSelected: false,
-                providerCount: slotsAtTime.length
-            }))
-            .sort((a, b) => a.time.localeCompare(b.time))
-
-        setConsolidatedSlots(consolidated)
-    }
-
-    const generateMockAvailability = (date: Date): TimeSlot[] => {
-        const slots: TimeSlot[] = []
-        const baseDate = format(date, 'yyyy-MM-dd')
-        
-        const timeSlots = [
-            '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-            '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'
-        ]
-
-        timeSlots.forEach((time) => {
-            const startTime = `${baseDate}T${time}:00`
-            const endTime = new Date(new Date(startTime).getTime() + 60 * 60 * 1000).toISOString()
-
-            slots.push({
-                id: `mock-${time}-${Date.now()}`,
-                provider_id: 'mock-provider',
-                start_time: startTime,
-                end_time: endTime,
-                is_available: true,
-                appointment_type: 'telehealth',
-                service_instance_id: 'mock-service'
+            .map(([time, slotsAtTime]) => {
+                try {
+                    // Create display time from the time key
+                    const [hours, minutes] = time.split(':')
+                    const hour24 = parseInt(hours, 10)
+                    const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24
+                    const ampm = hour24 >= 12 ? 'PM' : 'AM'
+                    const displayTime = `${hour12}:${minutes} ${ampm}`
+                    
+                    return {
+                        time,
+                        displayTime,
+                        availableSlots: slotsAtTime,
+                        isSelected: false
+                    }
+                } catch (error) {
+                    console.error('❌ Error creating consolidated slot:', error)
+                    return null
+                }
             })
-        })
+            .filter(Boolean) // Remove null entries
+            .sort((a, b) => a!.time.localeCompare(b!.time))
 
-        return slots
+        console.log('✅ Consolidated slots:', consolidated.length)
+        setConsolidatedSlots(consolidated as ConsolidatedTimeSlot[])
     }
 
-    const handleSlotSelection = (slot: ConsolidatedTimeSlot) => {
-        setSelectedSlot(slot.availableSlots[0])
-        onTimeSlotSelected(slot.availableSlots[0])
+    const handleSlotClick = (slot: ConsolidatedTimeSlot) => {
+        console.log('🎯 Slot clicked:', slot.displayTime)
+        
+        // Update selection state
+        const updatedSlots = consolidatedSlots.map(s => ({
+            ...s,
+            isSelected: s.time === slot.time
+        }))
+        setConsolidatedSlots(updatedSlots)
+        
+        // Set the first available slot for this time
+        if (slot.availableSlots.length > 0) {
+            setSelectedSlot(slot.availableSlots[0])
+        }
     }
 
-    const handleProviderSelection = (provider: Provider) => {
-        setSelectedProvider(provider)
-        setShowProviderSelection(false)
-        setSelectedDate(null) // Reset date selection to force re-fetch
+    const handleNext = () => {
+        if (selectedSlot) {
+            console.log('➡️ Proceeding with slot:', selectedSlot)
+            onTimeSlotSelected(selectedSlot)
+        }
     }
 
-    const renderProviderCard = (provider: Provider) => (
-        <div 
-            key={provider.id}
-            onClick={() => handleProviderSelection(provider)}
-            className="bg-white rounded-2xl p-6 border-2 border-stone-200 hover:border-[#BF9C73] cursor-pointer transition-all hover:shadow-lg"
-        >
-            <div className="flex items-start space-x-4">
-                <div className="w-16 h-16 bg-[#BF9C73]/10 rounded-full flex items-center justify-center">
-                    <UserCheck className="w-8 h-8 text-[#BF9C73]" />
+    return (
+        <div className="max-w-4xl mx-auto">
+            {/* Header */}
+            <div className="text-center mb-8">
+                <h2 className="text-3xl font-normal text-slate-800 mb-2">
+                    When would you like to book a video appointment?
+                </h2>
+                <p className="text-slate-600">
+                    Appointments are 60 minutes
+                </p>
+            </div>
+
+            {/* Insurance Banner */}
+            {showInsuranceBanner && selectedPayer && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-8 flex items-center justify-between">
+                    <div className="flex items-center">
+                        <Check className="w-5 h-5 text-orange-600 mr-3" />
+                        <span className="text-orange-800">
+                            <strong>{selectedPayer.name}</strong> is accepted • Merged availability from all providers
+                        </span>
+                    </div>
+                    <button 
+                        onClick={onBackToInsurance}
+                        className="text-orange-600 hover:text-orange-700 text-sm font-medium"
+                    >
+                        Change
+                    </button>
                 </div>
-                <div className="flex-1">
-                    <h3 className="font-medium text-[#091747] mb-1">
-                        {provider.first_name} {provider.last_name}, {provider.title}
-                    </h3>
-                    <p className="text-sm text-slate-600 mb-2">{provider.role}</p>
-                    {provider.languages_spoken && (
-                        <p className="text-sm text-[#BF9C73]">
-                            Languages: {Array.isArray(provider.languages_spoken) 
-                                ? provider.languages_spoken.join(', ') 
-                                : provider.languages_spoken}
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Calendar */}
+                <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <button
+                            onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                            className="p-2 hover:bg-stone-100 rounded-md transition-colors"
+                        >
+                            <ChevronLeft className="w-5 h-5 text-slate-600" />
+                        </button>
+                        <h3 className="text-lg font-medium text-slate-800">
+                            {format(currentMonth, 'MMMM yyyy')}
+                        </h3>
+                        <button
+                            onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                            className="p-2 hover:bg-stone-100 rounded-md transition-colors"
+                        >
+                            <ChevronRight className="w-5 h-5 text-slate-600" />
+                        </button>
+                    </div>
+
+                    {/* Day Labels */}
+                    <div className="grid grid-cols-7 gap-1 mb-2">
+                        {dayLabels.map((day, index) => (
+                            <div key={index} className="text-center text-sm text-slate-500 py-2">
+                                {day}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-1">
+                        {paddedDays.map((day, index) => (
+                            <button
+                                key={index}
+                                onClick={() => day && handleDateClick(day)}
+                                disabled={!day || day < new Date().setHours(0, 0, 0, 0)}
+                                className={`
+                                    aspect-square flex items-center justify-center text-sm rounded-md transition-colors
+                                    ${!day ? 'invisible' : ''}
+                                    ${day && day < new Date().setHours(0, 0, 0, 0) ? 'text-slate-400 cursor-not-allowed' : ''}
+                                    ${day && isToday(day) ? 'bg-blue-500 text-white font-medium' : ''}
+                                    ${day && selectedDate && isSameDay(day, selectedDate) ? 'bg-orange-300 text-slate-800 font-medium' : ''}
+                                    ${day && !isToday(day) && (!selectedDate || !isSameDay(day, selectedDate)) && day >= new Date().setHours(0, 0, 0, 0) ? 'hover:bg-stone-100 text-slate-700' : ''}
+                                `}
+                            >
+                                {day && format(day, 'd')}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Time Slots */}
+                <div>
+                    <h4 className="text-lg font-medium text-slate-800 mb-4">
+                        Select a time.
+                    </h4>
+
+                    {loading && (
+                        <div className="flex items-center text-sm text-slate-600 mb-4">
+                            <Clock className="w-4 h-4 mr-2 animate-spin" />
+                            Loading merged availability...
+                        </div>
+                    )}
+
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                            <p className="text-red-700 text-sm">
+                                <strong>Error:</strong> {error}
+                            </p>
+                            <button 
+                                onClick={() => selectedDate && fetchAvailabilityForDate(selectedDate)}
+                                className="text-red-600 hover:text-red-700 text-sm font-medium mt-2"
+                            >
+                                Try again
+                            </button>
+                        </div>
+                    )}
+
+                    {selectedDate ? (
+                        <div className="space-y-2">
+                            <p className="text-sm text-slate-600 mb-4">
+                                {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+                            </p>
+                            
+                            <div className="grid grid-cols-2 gap-2">
+                                {consolidatedSlots.map((slot, index) => (
+                                    <button
+                                        key={index}
+                                        onClick={() => handleSlotClick(slot)}
+                                        className={`
+                                            py-3 px-4 rounded-md text-sm font-medium transition-colors
+                                            ${slot.isSelected
+                                                ? 'bg-orange-300 text-slate-800'
+                                                : 'bg-stone-200 hover:bg-stone-300 text-slate-700'
+                                            }
+                                        `}
+                                    >
+                                        <div className="text-center">
+                                            <div>{slot.displayTime}</div>
+                                            {slot.availableSlots.length > 1 && (
+                                                <div className="text-xs text-slate-500 mt-1">
+                                                    {slot.availableSlots.length} available
+                                                </div>
+                                            )}
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {consolidatedSlots.length === 0 && !loading && (
+                                <div className="text-center py-8">
+                                    <Clock className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                                    <p className="text-slate-500 mb-2">
+                                        No available time slots for this date
+                                    </p>
+                                    <p className="text-sm text-slate-400">
+                                        Please try another day or check back later
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <p className="text-slate-500 text-center py-8">
+                            Please select a date to see available times.
                         </p>
                     )}
                 </div>
             </div>
-        </div>
-    )
 
-    const hasAvailabilityForDate = (date: Date) => {
-        // If booking from effective date, only show dates from effective date forward
-        if (bookingMode === 'from-effective-date' && selectedPayer) {
-            const effectiveDate = selectedPayer.effective_date || selectedPayer.projected_effective_date
-            if (effectiveDate) {
-                try {
-                    const effective = new Date(effectiveDate)
-                    effective.setHours(0, 0, 0, 0) // Start of day
-                    const checkDate = new Date(date)
-                    checkDate.setHours(0, 0, 0, 0) // Start of day
-                    
-                    if (checkDate < effective) {
-                        return false // Don't show dates before effective date
-                    }
-                } catch (error) {
-                    console.error('Error checking effective date:', error)
-                }
-            }
-        }
-
-        // Don't show past dates
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const checkDate = new Date(date)
-        checkDate.setHours(0, 0, 0, 0)
-        
-        if (checkDate < today) {
-            return false
-        }
-
-        // Mock logic - in real implementation, check against actual availability cache
-        const dayOfWeek = date.getDay()
-        return dayOfWeek >= 1 && dayOfWeek <= 5 // Monday to Friday
-    }
-
-    if (showProviderSelection) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-stone-50 via-orange-50/30 to-stone-100">
-                <div className="max-w-4xl mx-auto py-16 px-4">
-                    <button
-                        onClick={() => setShowProviderSelection(false)}
-                        className="mb-8 flex items-center space-x-2 text-[#BF9C73] hover:text-[#A8875F] transition-colors group"
-                    >
-                        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                        <span className="text-lg font-medium">Back to calendar</span>
-                    </button>
-
-                    <div className="text-center mb-12">
-                        <h1 className="text-4xl font-light text-[#091747] mb-6 font-['Newsreader']">
-                            Choose Your Provider
-                        </h1>
-                        <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
-                            Select a provider who accepts {selectedPayer.name} and speaks {selectedLanguage.toLowerCase()}.
-                        </p>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-6">
-                        {availableProviders.map(renderProviderCard)}
-                    </div>
-                </div>
-            </div>
-        )
-    }
-
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-stone-50 via-orange-50/30 to-stone-100">
-            <div className="max-w-6xl mx-auto py-16 px-4">
-                {/* Header with back button */}
-                <div className="flex items-center justify-between mb-12">
-                    <button
-                        onClick={onBackToInsurance}
-                        className="flex items-center space-x-2 text-[#BF9C73] hover:text-[#A8875F] transition-colors group"
-                    >
-                        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                        <span className="text-lg font-medium">Back to insurance search</span>
-                    </button>
-                </div>
-
-                {/* Insurance Banner */}
-                <div className="bg-white rounded-3xl shadow-xl p-8 mb-8">
-                    <div className="text-center">
-                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Check className="w-8 h-8 text-green-600" />
-                        </div>
-                        <h1 className="text-3xl font-light text-[#091747] mb-4 font-['Newsreader']">
-                            We're in-network with {selectedPayer.name}!
-                        </h1>
-                        <p className="text-lg text-slate-600">
-                            {selectedProvider 
-                                ? `Viewing availability for ${selectedProvider.first_name} ${selectedProvider.last_name}`
-                                : `Showing availability from all providers who accept ${selectedPayer.name}`
-                            }
-                            {selectedLanguage !== 'English' && ` and speak ${selectedLanguage}`}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="grid lg:grid-cols-3 gap-8">
-                    {/* Calendar */}
-                    <div className="lg:col-span-2">
-                        <div className="bg-white rounded-3xl shadow-xl p-8">
-                            {/* Calendar Header */}
-                            <div className="flex items-center justify-between mb-8">
-                                <h2 className="text-2xl font-light text-[#091747] font-['Newsreader']">
-                                    {format(currentMonth, 'MMMM yyyy')}
-                                </h2>
-                                <div className="flex items-center space-x-2">
-                                    <button
-                                        onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                                        className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                                    >
-                                        <ChevronLeft className="w-5 h-5 text-slate-600" />
-                                    </button>
-                                    <button
-                                        onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                                        className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                                    >
-                                        <ChevronRight className="w-5 h-5 text-slate-600" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Day Labels */}
-                            <div className="grid grid-cols-7 gap-2 mb-4">
-                                {dayLabels.map(day => (
-                                    <div key={day} className="text-center text-sm font-medium text-slate-600 py-2">
-                                        {day}
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Calendar Grid */}
-                            <div className="grid grid-cols-7 gap-2">
-                                {paddedDays.map((day, index) => {
-                                    if (!day) {
-                                        return <div key={index} className="aspect-square" />
-                                    }
-
-                                    const isSelected = selectedDate && isSameDay(day, selectedDate)
-                                    const isCurrentMonth = isSameMonth(day, currentMonth)
-                                    const hasAvailability = hasAvailabilityForDate(day)
-                                    const isPast = day < new Date(new Date().setHours(0, 0, 0, 0))
-
-                                    return (
-                                        <button
-                                            key={index}
-                                            onClick={() => !isPast && hasAvailability && setSelectedDate(day)}
-                                            disabled={isPast || !hasAvailability}
-                                            className={`
-                                                aspect-square rounded-lg text-sm font-medium transition-colors relative
-                                                ${isSelected 
-                                                    ? 'bg-[#BF9C73] text-white' 
-                                                    : hasAvailability && !isPast
-                                                        ? 'hover:bg-[#BF9C73]/10 text-slate-800'
-                                                        : 'text-slate-400 cursor-not-allowed'
-                                                }
-                                                ${!isCurrentMonth ? 'opacity-30' : ''}
-                                                ${isToday(day) ? 'ring-2 ring-[#BF9C73] ring-opacity-50' : ''}
-                                            `}
-                                        >
-                                            {format(day, 'd')}
-                                            {hasAvailability && !isPast && (
-                                                <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2">
-                                                    <div className="w-1 h-1 bg-[#17DB4E] rounded-full" />
-                                                </div>
-                                            )}
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Time Slots */}
-                    <div className="space-y-6">
-                        {/* Action Buttons */}
-                        <div className="space-y-3">
-                            <button
-                                onClick={() => setShowProviderSelection(true)}
-                                className="w-full py-3 px-4 bg-white border-2 border-[#BF9C73] text-[#BF9C73] hover:bg-[#BF9C73] hover:text-white rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
-                            >
-                                <Users className="w-5 h-5" />
-                                <span>Pick my provider first instead</span>
-                            </button>
-
-                            <button
-                                onClick={() => setShowLanguageSelection(!showLanguageSelection)}
-                                className="w-full py-3 px-4 bg-white border-2 border-blue-300 text-blue-600 hover:bg-blue-50 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
-                            >
-                                <Globe className="w-5 h-5" />
-                                <span>Language: {selectedLanguage}</span>
-                            </button>
-
-                            {showLanguageSelection && (
-                                <div className="bg-white rounded-xl shadow-lg border p-4 space-y-2">
-                                    {(['English', 'Spanish', 'Portuguese'] as Language[]).map((lang) => (
-                                        <button
-                                            key={lang}
-                                            onClick={() => {
-                                                setSelectedLanguage(lang)
-                                                setShowLanguageSelection(false)
-                                            }}
-                                            className={`w-full text-left py-2 px-3 rounded-lg transition-colors ${
-                                                selectedLanguage === lang 
-                                                    ? 'bg-blue-50 text-blue-600 font-medium' 
-                                                    : 'hover:bg-stone-50'
-                                            }`}
-                                        >
-                                            {lang}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Available Times */}
-                        {selectedDate && (
-                            <div className="bg-white rounded-2xl shadow-xl p-6">
-                                <h3 className="text-lg font-medium text-[#091747] mb-4 font-['Newsreader']">
-                                    Available Times - {format(selectedDate, 'MMM d')}
-                                </h3>
-
-                                {loading && (
-                                    <div className="text-center py-8">
-                                        <div className="animate-spin w-8 h-8 border-2 border-[#BF9C73] border-t-transparent rounded-full mx-auto mb-4" />
-                                        <p className="text-slate-600">Loading availability...</p>
-                                    </div>
-                                )}
-
-                                {error && (
-                                    <div className="text-center py-8">
-                                        <p className="text-red-600 mb-4">{error}</p>
-                                        <button 
-                                            onClick={() => fetchAvailabilityForDate(selectedDate)}
-                                            className="text-[#BF9C73] hover:underline"
-                                        >
-                                            Try again
-                                        </button>
-                                    </div>
-                                )}
-
-                                {!loading && !error && (
-                                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                                        {consolidatedSlots.length === 0 ? (
-                                            <p className="text-slate-600 text-center py-8">
-                                                No availability for this date. Please select another date.
-                                            </p>
-                                        ) : (
-                                            consolidatedSlots.map((slot) => (
-                                                <button
-                                                    key={slot.time}
-                                                    onClick={() => handleSlotSelection(slot)}
-                                                    className="w-full flex items-center justify-between p-3 border border-stone-200 rounded-lg hover:border-[#BF9C73] hover:bg-[#BF9C73]/5 transition-colors"
-                                                >
-                                                    <div className="flex items-center space-x-3">
-                                                        <Clock className="w-4 h-4 text-slate-600" />
-                                                        <span className="font-medium">{slot.displayTime}</span>
-                                                    </div>
-                                                    {slot.providerCount > 1 && (
-                                                        <span className="text-sm text-slate-600 bg-stone-100 px-2 py-1 rounded">
-                                                            {slot.providerCount} providers available
-                                                        </span>
-                                                    )}
-                                                </button>
-                                            ))
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
+            {/* Bottom Actions */}
+            <div className="flex items-center justify-between mt-12">
+                <button
+                    onClick={onBackToInsurance}
+                    className="text-slate-600 hover:text-slate-800 font-medium transition-colors"
+                >
+                    ← Back to insurance
+                </button>
+                
+                <button
+                    onClick={handleNext}
+                    disabled={!selectedSlot}
+                    className={`
+                        py-3 px-6 rounded-md font-medium transition-colors
+                        ${selectedSlot
+                            ? 'bg-[#BF9C73] hover:bg-[#A67C52] text-white'
+                            : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                        }
+                    `}
+                >
+                    Continue with appointment
+                </button>
             </div>
         </div>
     )
