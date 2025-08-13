@@ -1,231 +1,180 @@
-// src/components/booking/views/InsuranceNotAcceptedView.tsx
 'use client'
 
+import { Payer } from '@/types/database'
+import { AlertCircle, ArrowLeft, Mail } from 'lucide-react'
 import { useState } from 'react'
-import { Payer, BookingLead } from '@/types/database'
-import { BookingScenario } from './WelcomeView'
-import { ArrowLeft, AlertCircle, Mail, Phone } from 'lucide-react'
 
 interface InsuranceNotAcceptedViewProps {
     selectedPayer: Payer
-    bookingScenario: BookingScenario
-    onLeadSubmitted: (leadData: any) => void
-    onBack: () => void
+    onBackToPayers: () => void
+    onCashPayment: () => void
+    onWaitlistSubmitted: () => void
 }
 
-export default function InsuranceNotAcceptedView({
-    selectedPayer,
-    bookingScenario,
-    onLeadSubmitted,
-    onBack
+export default function InsuranceNotAcceptedView({ 
+    selectedPayer, 
+    onBackToPayers,
+    onCashPayment,
+    onWaitlistSubmitted
 }: InsuranceNotAcceptedViewProps) {
-    const [formData, setFormData] = useState({
-        email: '',
-        phone: '',
-        preferredName: ''
-    })
+    const [email, setEmail] = useState('')
+    const [phone, setPhone] = useState('')
+    const [preferredName, setPreferredName] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
-    // Safety check for undefined payer
-    if (!selectedPayer) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1] flex items-center justify-center px-4">
-                <div className="max-w-2xl mx-auto text-center">
-                    <div className="bg-white rounded-2xl shadow-xl p-8">
-                        <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-                        <h2 className="text-2xl font-semibold text-[#091747] mb-4 font-['Newsreader']">
-                            Something went wrong
-                        </h2>
-                        <p className="text-[#091747]/70 mb-6 font-['Newsreader']">
-                            We couldn't find the insurance information. Please try again.
-                        </p>
-                        <button
-                            onClick={onBack}
-                            className="px-6 py-3 bg-[#BF9C73] hover:bg-[#B8936A] text-white rounded-xl transition-colors font-['Newsreader']"
-                        >
-                            Go Back
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )
-    }
-
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleWaitlistSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        
+        if (!email.trim()) {
+            setError('Please enter your email address')
+            return
+        }
+
         setIsSubmitting(true)
+        setError(null)
 
         try {
-            const leadData: BookingLead = {
-                email: formData.email,
-                phone: formData.phone || undefined,
-                preferred_name: formData.preferredName || undefined,
-                requested_payer_id: selectedPayer.id,
-                reason: 'Insurance not currently accepted'
+            const response = await fetch('/api/booking-leads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: email.trim(),
+                    phone: phone.trim() || null,
+                    preferred_name: preferredName.trim() || null,
+                    requested_payer_id: selectedPayer.id,
+                    reason: 'out_of_network',
+                    status: 'pending'
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Failed to join waitlist')
             }
 
-            onLeadSubmitted(leadData)
-        } catch (error) {
-            console.error('Error submitting lead:', error)
+            // Success! Redirect to waitlist confirmation
+            onWaitlistSubmitted()
+            
+        } catch (err) {
+            console.error('Error submitting waitlist:', err)
+            setError('Unable to join waitlist. Please try again.')
         } finally {
             setIsSubmitting(false)
         }
     }
 
-    const handleChange = (field: keyof typeof formData, value: string) => {
-        setFormData(prev => ({ ...prev, [field]: value }))
-    }
-
-    const getHeading = () => {
-        const payerName = selectedPayer.name || 'this insurance'
-        switch (bookingScenario) {
-            case 'self':
-                return `We do not yet accept ${payerName}`
-            case 'referral':
-            case 'case-manager':
-                return `We do not yet accept ${payerName}`
-            default:
-                return `We do not yet accept ${payerName}`
-        }
-    }
-
-    const getSubheading = () => {
-        switch (bookingScenario) {
-            case 'self':
-                return 'We\'re working on getting credentialed with your insurance. Leave your contact information and we\'ll notify you when we\'re in-network.'
-            case 'referral':
-                return 'We\'re working on getting credentialed with this insurance. Leave the patient\'s contact information and we\'ll notify them when we\'re in-network.'
-            case 'case-manager':
-                return 'We\'re working on getting credentialed with this insurance. Leave your contact information and we\'ll notify you when we\'re in-network with your client\'s plan.'
-            default:
-                return 'We\'re working on getting credentialed with this insurance. Leave your contact information and we\'ll notify you when we\'re in-network.'
-        }
-    }
+    const payerName = selectedPayer?.name || 'this insurance'
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/30 to-[#FEF8F1]">
-            <div className="max-w-3xl mx-auto py-12 px-4">
-                {/* Header */}
-                <div className="mb-8">
-                    <button
-                        onClick={onBack}
-                        className="flex items-center text-[#091747]/60 hover:text-[#091747] transition-colors mb-6 font-['Newsreader']"
-                    >
-                        <ArrowLeft className="w-5 h-5 mr-2" />
-                        Back to insurance search
-                    </button>
+        <div className="min-h-screen bg-gradient-to-br from-stone-50 via-orange-50/30 to-stone-100">
+            <div className="max-w-4xl mx-auto py-16 px-4">
+                {/* Back Button */}
+                <button
+                    onClick={onBackToPayers}
+                    className="mb-8 flex items-center space-x-2 text-[#BF9C73] hover:text-[#A8875F] transition-colors group"
+                >
+                    <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                    <span className="text-lg font-medium">Back to insurance search</span>
+                </button>
 
-                    <div className="text-center">
-                        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <AlertCircle className="w-8 h-8 text-red-600" />
-                        </div>
-
-                        <h1 className="text-4xl font-light text-[#091747] mb-4 font-['Newsreader']">
-                            {getHeading()}
-                        </h1>
-
-                        <p className="text-xl text-[#091747]/70 max-w-2xl mx-auto leading-relaxed font-['Newsreader']">
-                            {getSubheading()}
-                        </p>
+                <div className="text-center mb-12">
+                    <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-8">
+                        <AlertCircle className="w-10 h-10 text-red-600" />
                     </div>
+                    
+                    <h1 className="text-4xl md:text-5xl font-light text-[#091747] mb-6 font-['Newsreader']">
+                        We do not yet accept {payerName}
+                    </h1>
+                    
+                    <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed mb-12">
+                        We're working on getting credentialed with this insurance. Leave your contact 
+                        information and we'll notify you when we're in-network.
+                    </p>
                 </div>
 
-                {/* Contact Form */}
-                <div className="bg-white rounded-2xl shadow-xl p-8">
-                    <div className="flex items-center space-x-3 mb-6">
-                        <div className="w-10 h-10 bg-[#BF9C73]/10 rounded-lg flex items-center justify-center">
-                            <Mail className="w-5 h-5 text-[#BF9C73]" />
-                        </div>
-                        <h2 className="text-2xl font-semibold text-[#091747] font-['Newsreader']">
-                            {bookingScenario === 'case-manager'
-                                ? 'Your Contact Information'
-                                : bookingScenario === 'referral'
-                                    ? 'Patient Contact Information'
-                                    : 'Your Contact Information'
-                            }
-                        </h2>
-                    </div>
-
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div>
-                            <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                Email Address *
-                            </label>
-                            <input
-                                type="email"
-                                required
-                                value={formData.email}
-                                onChange={(e) => handleChange('email', e.target.value)}
-                                className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                placeholder="your.email@example.com"
-                            />
+                <div className="bg-white rounded-3xl shadow-xl p-8 md:p-12 mb-8">
+                    <div className="max-w-md mx-auto">
+                        <div className="flex items-center space-x-3 mb-6">
+                            <Mail className="w-6 h-6 text-[#BF9C73]" />
+                            <h3 className="text-xl font-medium text-[#091747] font-['Newsreader']">
+                                Patient Contact Information
+                            </h3>
                         </div>
 
-                        <div>
-                            <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                Phone Number
-                            </label>
-                            <input
-                                type="tel"
-                                value={formData.phone}
-                                onChange={(e) => handleChange('phone', e.target.value)}
-                                className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                placeholder="(555) 123-4567"
-                            />
-                        </div>
+                        <form onSubmit={handleWaitlistSubmit} className="space-y-6">
+                            {error && (
+                                <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                                    <p className="text-red-700 text-sm">{error}</p>
+                                </div>
+                            )}
 
-                        {(bookingScenario === 'referral' || bookingScenario === 'case-manager') && (
                             <div>
-                                <label className="block text-[#091747] font-medium mb-2 font-['Newsreader']">
-                                    {bookingScenario === 'case-manager' ? 'Client Name' : 'Patient Name'}
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Email address *
+                                </label>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="your.email@example.com"
+                                    required
+                                    className="w-full px-4 py-3 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Phone number (optional)
+                                </label>
+                                <input
+                                    type="tel"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    placeholder="(555) 123-4567"
+                                    className="w-full px-4 py-3 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Preferred name (optional)
                                 </label>
                                 <input
                                     type="text"
-                                    value={formData.preferredName}
-                                    onChange={(e) => handleChange('preferredName', e.target.value)}
-                                    className="w-full px-4 py-3 border-2 border-[#BF9C73]/30 rounded-xl focus:border-[#BF9C73] focus:outline-none transition-colors font-['Newsreader']"
-                                    placeholder="Patient's name"
+                                    value={preferredName}
+                                    onChange={(e) => setPreferredName(e.target.value)}
+                                    placeholder="What should we call you?"
+                                    className="w-full px-4 py-3 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
                                 />
                             </div>
-                        )}
 
-                        {/* Information box */}
-                        <div className="bg-[#BF9C73]/5 p-4 rounded-xl">
-                            <p className="text-[#091747]/70 text-sm font-['Newsreader']">
-                                {bookingScenario === 'case-manager'
-                                    ? 'We\'ll notify you as the case manager when this insurance becomes available. You can then book appointments for your clients.'
-                                    : 'We\'ll send you an email as soon as we\'re able to accept this insurance plan.'
-                                }
-                            </p>
-                        </div>
-
-                        {/* Submit Button */}
-                        <div className="flex justify-end">
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className="px-8 py-4 bg-[#BF9C73] hover:bg-[#B8936A] disabled:bg-[#BF9C73]/50 text-white font-semibold rounded-xl transition-all duration-200 hover:shadow-lg font-['Newsreader']"
+                                className="w-full py-4 px-6 bg-[#BF9C73] hover:bg-[#A8875F] disabled:bg-stone-400 text-white rounded-xl font-medium transition-colors"
                             >
-                                {isSubmitting ? 'Submitting...' : 'Notify Me When Available'}
+                                {isSubmitting ? 'Adding to waitlist...' : 'Notify me when available'}
                             </button>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
                 </div>
 
-                {/* Alternative Options */}
-                <div className="mt-8 text-center">
-                    <p className="text-[#091747]/60 mb-4 font-['Newsreader']">
-                        Need to book an appointment right away?
-                    </p>
-                    <button
-                        onClick={() => {/* Handle cash payment */ }}
-                        className="px-6 py-3 border-2 border-[#BF9C73] text-[#BF9C73] hover:bg-[#BF9C73] hover:text-white rounded-xl transition-all duration-200 font-['Newsreader']"
-                    >
-                        {bookingScenario === 'self'
-                            ? 'Continue with cash payment'
-                            : 'Patient will pay out of pocket'
-                        }
-                    </button>
+                {/* Cash Payment Alternative */}
+                <div className="bg-white rounded-3xl shadow-xl p-8 md:p-12">
+                    <div className="text-center">
+                        <h3 className="text-2xl font-light text-[#091747] mb-4 font-['Newsreader']">
+                            Or, you can proceed with cash payment
+                        </h3>
+                        <p className="text-slate-600 mb-6">
+                            Book your appointment now and pay out of pocket. You may be able to get reimbursed later.
+                        </p>
+                        <button
+                            onClick={onCashPayment}
+                            className="py-4 px-8 bg-white border-2 border-[#17DB4E] text-[#17DB4E] hover:bg-[#17DB4E] hover:text-white rounded-xl font-medium transition-colors"
+                        >
+                            Patient will pay out of pocket
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

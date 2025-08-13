@@ -1,60 +1,99 @@
-// src/app/api/patient-booking/providers-for-payer/route.ts
-
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { supabase } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
     try {
-        const { payerId } = await request.json()
+        const body = await request.json()
+        const { payer_id, language = 'English' } = body
 
-        console.log(`Getting providers for payer ${payerId || 'test-payer'}`)
-
-        const supabase = createRouteHandlerClient({ cookies })
-
-        // For now, get all available providers since we don't have provider-payer relationships fully set up
-        const { data: providers, error: providersError } = await supabase
-            .from('providers')
-            .select('id, first_name, last_name, title, role, availability, accepts_new_patients, telehealth_enabled')
-            .eq('availability', true)
-
-        if (providersError) {
-            console.error('Error getting providers:', providersError)
+        if (!payer_id) {
             return NextResponse.json(
-                { 
-                    error: 'Failed to get providers', 
-                    details: providersError.message,
-                    success: false 
-                },
+                { success: false, error: 'payer_id is required' },
+                { status: 400 }
+            )
+        }
+
+        console.log('🔍 Fetching providers for payer:', { payer_id, language })
+
+        // Get providers who accept this payer
+        const { data: networks, error: networksError } = await supabase
+            .from('provider_payer_networks')
+            .select(`
+                provider_id,
+                effective_date,
+                status,
+                providers!inner(
+                    id,
+                    first_name,
+                    last_name,
+                    title,
+                    role,
+                    is_active,
+                    languages_spoken,
+                    telehealth_enabled,
+                    accepts_new_patients
+                )
+            `)
+            .eq('payer_id', payer_id)
+            .eq('status', 'active')
+            .eq('providers.is_active', true)
+
+        if (networksError) {
+            console.error('❌ Error fetching provider networks:', networksError)
+            return NextResponse.json(
+                { success: false, error: 'Failed to fetch provider networks' },
                 { status: 500 }
             )
         }
 
-        // Filter to only available providers
-        const availableProviders = (providers || []).filter(p => p.availability === true)
+        console.log('👥 Found networks:', networks?.length || 0)
 
-        const response = {
-            success: true,
-            data: {
-                payerId: payerId || 'test-payer',
-                providers: availableProviders,
-                totalProviders: availableProviders.length,
-                message: availableProviders.length > 0 
-                    ? `Found ${availableProviders.length} providers who are available for appointments`
-                    : 'No providers found. Please ensure providers have availability=true in the database.'
-            }
+        // Extract and filter providers
+        let providers = networks?.map(network => ({
+            ...network.providers,
+            network_effective_date: network.effective_date,
+            network_status: network.status
+        })) || []
+
+        // Filter by language if specified and not English
+        if (language && language !== 'English') {
+            providers = providers.filter(provider => {
+                if (!provider.languages_spoken) return false
+                
+                // Handle different data types for languages_spoken
+                let languages: string[] = []
+                if (Array.isArray(provider.languages_spoken)) {
+                    languages = provider.languages_spoken
+                } else if (typeof provider.languages_spoken === 'string') {
+                    try {
+                        languages = JSON.parse(provider.languages_spoken)
+                    } catch {
+                        languages = [provider.languages_spoken]
+                    }
+                }
+                
+                return languages.some(lang => 
+                    lang.toLowerCase().includes(language.toLowerCase())
+                )
+            })
         }
 
-        return NextResponse.json(response)
+        console.log('🌐 Providers after language filter:', providers.length)
 
-    } catch (error: any) {
-        console.error('Error getting providers for payer:', error)
+        return NextResponse.json({
+            success: true,
+            data: {
+                providers,
+                totalCount: providers.length,
+                language,
+                payer_id
+            }
+        })
+
+    } catch (error) {
+        console.error('💥 Error in providers-for-payer API:', error)
         return NextResponse.json(
-            { 
-                error: 'Failed to get providers', 
-                details: error.message,
-                success: false 
-            },
+            { success: false, error: 'Internal server error' },
             { status: 500 }
         )
     }

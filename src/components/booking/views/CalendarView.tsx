@@ -1,14 +1,15 @@
 'use client'
 
-import { Payer, TimeSlot } from '@/types/database'
+import { Payer, Provider, TimeSlot } from '@/types/database'
 import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isSameDay, isSameMonth, isToday, startOfMonth, subMonths } from 'date-fns'
-import { ArrowLeft, Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, Users } from 'lucide-react'
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Globe, UserCheck, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 interface CalendarViewProps {
     selectedPayer: Payer
     onTimeSlotSelected: (timeSlot: TimeSlot) => void
     onBackToInsurance: () => void
+    bookingMode?: 'normal' | 'from-effective-date'
 }
 
 interface ConsolidatedTimeSlot {
@@ -19,10 +20,13 @@ interface ConsolidatedTimeSlot {
     providerCount: number
 }
 
+type Language = 'English' | 'Spanish' | 'Portuguese'
+
 export default function CalendarView({ 
     selectedPayer, 
     onTimeSlotSelected, 
-    onBackToInsurance 
+    onBackToInsurance,
+    bookingMode = 'normal'
 }: CalendarViewProps) {
     const [currentMonth, setCurrentMonth] = useState(() => new Date())
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -31,6 +35,11 @@ export default function CalendarView({
     const [consolidatedSlots, setConsolidatedSlots] = useState<ConsolidatedTimeSlot[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [showProviderSelection, setShowProviderSelection] = useState(false)
+    const [availableProviders, setAvailableProviders] = useState<Provider[]>([])
+    const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
+    const [selectedLanguage, setSelectedLanguage] = useState<Language>('English')
+    const [showLanguageSelection, setShowLanguageSelection] = useState(false)
 
     const monthStart = startOfMonth(currentMonth)
     const monthEnd = endOfMonth(currentMonth)
@@ -46,10 +55,36 @@ export default function CalendarView({
     const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
     useEffect(() => {
+        fetchProvidersForPayer()
+    }, [selectedPayer, selectedLanguage])
+
+    useEffect(() => {
         if (selectedDate) {
             fetchAvailabilityForDate(selectedDate)
         }
-    }, [selectedDate, selectedPayer])
+    }, [selectedDate, selectedPayer, selectedProvider, selectedLanguage])
+
+    const fetchProvidersForPayer = async () => {
+        try {
+            const response = await fetch('/api/patient-booking/providers-for-payer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payer_id: selectedPayer.id,
+                    language: selectedLanguage
+                })
+            })
+            
+            if (response.ok) {
+                const data = await response.json()
+                if (data.success) {
+                    setAvailableProviders(data.data?.providers || [])
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching providers:', error)
+        }
+    }
 
     const fetchAvailabilityForDate = async (date: Date) => {
         setLoading(true)
@@ -58,28 +93,48 @@ export default function CalendarView({
         try {
             const dateString = format(date, 'yyyy-MM-dd')
             
-            console.log('🔍 Fetching merged availability for:', dateString, 'Payer:', selectedPayer.name)
+            let requestBody: any
+            let endpoint: string
 
-            const response = await fetch('/api/patient-booking/merged-availability', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+            if (selectedProvider) {
+                // Individual provider availability
+                requestBody = {
+                    provider_id: selectedProvider.id,
+                    date: dateString
+                }
+                endpoint = '/api/patient-booking/provider-availability'
+            } else {
+                // Merged availability for all providers who accept this payer
+                requestBody = {
                     payer_id: selectedPayer.id,
                     date: dateString
-                })
+                }
+                endpoint = '/api/patient-booking/merged-availability'
+            }
+
+            console.log('🔍 Fetching availability:', { endpoint, requestBody })
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
             })
             
+            console.log('📡 API Response status:', response.status)
+            
             if (!response.ok) {
-                throw new Error(`API error: ${response.status}`)
+                const errorText = await response.text()
+                console.error('❌ API Error Details:', errorText)
+                throw new Error(`API error: ${response.status} - ${errorText}`)
             }
 
             const data = await response.json()
+            console.log('📊 API Response data:', data)
             
             if (!data.success) {
                 throw new Error(data.error || 'Failed to fetch availability')
             }
 
-            // Extract slots from API response
             const slots = data.data?.availableSlots || data.availableSlots || []
             
             console.log('✅ Received slots:', slots.length)
@@ -89,9 +144,11 @@ export default function CalendarView({
             
         } catch (error) {
             console.error('💥 Error fetching availability:', error)
-            setError(error instanceof Error ? error.message : 'Failed to load availability')
+            const errorMessage = error instanceof Error ? error.message : 'Failed to load availability'
+            setError(errorMessage)
             
             // Fallback to mock data for demo
+            console.log('🔄 Falling back to mock data')
             const mockSlots = generateMockAvailability(date)
             setAvailableSlots(mockSlots)
             consolidateTimeSlots(mockSlots)
@@ -137,266 +194,326 @@ export default function CalendarView({
             const startTime = `${baseDate}T${time}:00`
             const endTime = new Date(new Date(startTime).getTime() + 60 * 60 * 1000).toISOString()
 
-            // Generate multiple providers for some time slots
-            const numProviders = Math.random() > 0.3 ? (Math.random() > 0.7 ? 3 : Math.random() > 0.5 ? 2 : 1) : 0
-            
-            for (let i = 0; i < numProviders; i++) {
-                slots.push({
-                    start_time: startTime,
-                    end_time: endTime,
-                    provider_id: `provider-${i + 1}`,
-                    available: true
-                })
-            }
+            slots.push({
+                id: `mock-${time}-${Date.now()}`,
+                provider_id: 'mock-provider',
+                start_time: startTime,
+                end_time: endTime,
+                is_available: true,
+                appointment_type: 'telehealth',
+                service_instance_id: 'mock-service'
+            })
         })
 
         return slots
     }
 
-    const handleDateClick = (day: Date) => {
-        if (day < new Date().setHours(0, 0, 0, 0)) return
-        setSelectedDate(day)
-        setSelectedSlot(null)
-        setConsolidatedSlots([])
+    const handleSlotSelection = (slot: ConsolidatedTimeSlot) => {
+        setSelectedSlot(slot.availableSlots[0])
+        onTimeSlotSelected(slot.availableSlots[0])
     }
 
-    const handleTimeSlotClick = (consolidatedSlot: ConsolidatedTimeSlot) => {
-        const slotToBook = consolidatedSlot.availableSlots[0]
-        setSelectedSlot(slotToBook)
-        
-        // Update visual state
-        setConsolidatedSlots(prev => 
-            prev.map(slot => ({
-                ...slot,
-                isSelected: slot.time === consolidatedSlot.time
-            }))
-        )
+    const handleProviderSelection = (provider: Provider) => {
+        setSelectedProvider(provider)
+        setShowProviderSelection(false)
+        setSelectedDate(null) // Reset date selection to force re-fetch
     }
 
-    const handleConfirmSlot = () => {
-        if (selectedSlot) {
-            onTimeSlotSelected(selectedSlot)
-        }
-    }
+    const renderProviderCard = (provider: Provider) => (
+        <div 
+            key={provider.id}
+            onClick={() => handleProviderSelection(provider)}
+            className="bg-white rounded-2xl p-6 border-2 border-stone-200 hover:border-[#BF9C73] cursor-pointer transition-all hover:shadow-lg"
+        >
+            <div className="flex items-start space-x-4">
+                <div className="w-16 h-16 bg-[#BF9C73]/10 rounded-full flex items-center justify-center">
+                    <UserCheck className="w-8 h-8 text-[#BF9C73]" />
+                </div>
+                <div className="flex-1">
+                    <h3 className="font-medium text-[#091747] mb-1">
+                        {provider.first_name} {provider.last_name}, {provider.title}
+                    </h3>
+                    <p className="text-sm text-slate-600 mb-2">{provider.role}</p>
+                    {provider.languages_spoken && (
+                        <p className="text-sm text-[#BF9C73]">
+                            Languages: {Array.isArray(provider.languages_spoken) 
+                                ? provider.languages_spoken.join(', ') 
+                                : provider.languages_spoken}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
 
-    const navigateMonth = (direction: 'prev' | 'next') => {
-        setCurrentMonth(prev => direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1))
-        setSelectedDate(null)
-        setSelectedSlot(null)
-        setConsolidatedSlots([])
-    }
-
-    const getCalendarDays = () => {
-        return paddedDays.map((day, index) => {
-            if (day === null) {
-                return new Date(0) // Placeholder for empty cells
+    const hasAvailabilityForDate = (date: Date) => {
+        // If booking from effective date, only show dates from effective date forward
+        if (bookingMode === 'from-effective-date' && selectedPayer) {
+            const effectiveDate = selectedPayer.effective_date || selectedPayer.projected_effective_date
+            if (effectiveDate) {
+                try {
+                    const effective = new Date(effectiveDate)
+                    effective.setHours(0, 0, 0, 0) // Start of day
+                    const checkDate = new Date(date)
+                    checkDate.setHours(0, 0, 0, 0) // Start of day
+                    
+                    if (checkDate < effective) {
+                        return false // Don't show dates before effective date
+                    }
+                } catch (error) {
+                    console.error('Error checking effective date:', error)
+                }
             }
-            return day
-        })
+        }
+
+        // Don't show past dates
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const checkDate = new Date(date)
+        checkDate.setHours(0, 0, 0, 0)
+        
+        if (checkDate < today) {
+            return false
+        }
+
+        // Mock logic - in real implementation, check against actual availability cache
+        const dayOfWeek = date.getDay()
+        return dayOfWeek >= 1 && dayOfWeek <= 5 // Monday to Friday
+    }
+
+    if (showProviderSelection) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-stone-50 via-orange-50/30 to-stone-100">
+                <div className="max-w-4xl mx-auto py-16 px-4">
+                    <button
+                        onClick={() => setShowProviderSelection(false)}
+                        className="mb-8 flex items-center space-x-2 text-[#BF9C73] hover:text-[#A8875F] transition-colors group"
+                    >
+                        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                        <span className="text-lg font-medium">Back to calendar</span>
+                    </button>
+
+                    <div className="text-center mb-12">
+                        <h1 className="text-4xl font-light text-[#091747] mb-6 font-['Newsreader']">
+                            Choose Your Provider
+                        </h1>
+                        <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
+                            Select a provider who accepts {selectedPayer.name} and speaks {selectedLanguage.toLowerCase()}.
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                        {availableProviders.map(renderProviderCard)}
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-stone-50 via-orange-50/30 to-stone-100">
-            {/* Header */}
-            <div className="bg-white border-b border-stone-200 px-6 py-6">
-                <div className="max-w-6xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                        <button 
-                            onClick={onBackToInsurance}
-                            className="p-2 hover:bg-stone-100 rounded-lg transition-colors flex items-center space-x-2 text-slate-600 hover:text-slate-800"
-                        >
-                            <ArrowLeft className="w-5 h-5" />
-                            <span>Back to Insurance</span>
-                        </button>
-                    </div>
-                    
+            <div className="max-w-6xl mx-auto py-16 px-4">
+                {/* Header with back button */}
+                <div className="flex items-center justify-between mb-12">
+                    <button
+                        onClick={onBackToInsurance}
+                        className="flex items-center space-x-2 text-[#BF9C73] hover:text-[#A8875F] transition-colors group"
+                    >
+                        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                        <span className="text-lg font-medium">Back to insurance search</span>
+                    </button>
+                </div>
+
+                {/* Insurance Banner */}
+                <div className="bg-white rounded-3xl shadow-xl p-8 mb-8">
                     <div className="text-center">
-                        <h1 className="text-2xl font-bold text-slate-800 font-['Newsreader']">
-                            Available Appointments
+                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Check className="w-8 h-8 text-green-600" />
+                        </div>
+                        <h1 className="text-3xl font-light text-[#091747] mb-4 font-['Newsreader']">
+                            We're in-network with {selectedPayer.name}!
                         </h1>
-                        <p className="text-slate-600 mt-1">
-                            Showing all providers who accept {selectedPayer.name}
+                        <p className="text-lg text-slate-600">
+                            {selectedProvider 
+                                ? `Viewing availability for ${selectedProvider.first_name} ${selectedProvider.last_name}`
+                                : `Showing availability from all providers who accept ${selectedPayer.name}`
+                            }
+                            {selectedLanguage !== 'English' && ` and speak ${selectedLanguage}`}
                         </p>
                     </div>
-                    
-                    <div className="w-32"> {/* Spacer for centering */}</div>
                 </div>
-            </div>
 
-            <div className="max-w-6xl mx-auto px-6 py-8">
-                <div className="grid lg:grid-cols-2 gap-12">
-                    {/* Calendar Section */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-8">
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-medium text-slate-800">
-                                {format(currentMonth, 'MMMM yyyy')}
-                            </h2>
-                            <div className="flex space-x-2">
-                                <button
-                                    type="button"
-                                    onClick={() => navigateMonth('prev')}
-                                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                                    aria-label="Previous month"
-                                >
-                                    <ChevronLeft className="w-5 h-5 text-slate-600" />
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => navigateMonth('next')}
-                                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                                    aria-label="Next month"
-                                >
-                                    <ChevronRight className="w-5 h-5 text-slate-600" />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Day Labels */}
-                        <div className="grid grid-cols-7 gap-2 mb-4">
-                            {dayLabels.map((label, index) => (
-                                <div key={index} className="text-center text-sm font-medium text-slate-500 py-2">
-                                    {label}
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Calendar Grid */}
-                        <div className="grid grid-cols-7 gap-2">
-                            {getCalendarDays().map((day, index) => {
-                                if (day.getTime() === 0) {
-                                    return <div key={index} /> // Empty cell
-                                }
-                                
-                                const isPast = day < new Date().setHours(0, 0, 0, 0)
-                                const isCurrentMonth = isSameMonth(day, currentMonth)
-                                
-                                return (
+                <div className="grid lg:grid-cols-3 gap-8">
+                    {/* Calendar */}
+                    <div className="lg:col-span-2">
+                        <div className="bg-white rounded-3xl shadow-xl p-8">
+                            {/* Calendar Header */}
+                            <div className="flex items-center justify-between mb-8">
+                                <h2 className="text-2xl font-light text-[#091747] font-['Newsreader']">
+                                    {format(currentMonth, 'MMMM yyyy')}
+                                </h2>
+                                <div className="flex items-center space-x-2">
                                     <button
-                                        key={index}
-                                        type="button"
-                                        onClick={() => handleDateClick(day)}
-                                        disabled={isPast}
-                                        className={`
-                                            aspect-square rounded-xl text-sm font-medium transition-all duration-200 flex items-center justify-center
-                                            ${isPast
-                                                ? 'text-slate-300 cursor-not-allowed'
-                                                : 'text-slate-700 hover:bg-orange-100 hover:scale-105'
-                                            }
-                                            ${!isCurrentMonth
-                                                ? 'text-slate-300'
-                                                : ''
-                                            }
-                                            ${isToday(day)
-                                                ? 'bg-blue-500 text-white shadow-md'
-                                                : ''
-                                            }
-                                            ${selectedDate && isSameDay(day, selectedDate)
-                                                ? 'bg-orange-300 text-slate-800 shadow-md scale-105'
-                                                : ''
-                                            }
-                                        `}
+                                        onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                                        className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
                                     >
-                                        {format(day, 'd')}
+                                        <ChevronLeft className="w-5 h-5 text-slate-600" />
                                     </button>
-                                )
-                            })}
+                                    <button
+                                        onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                                        className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                                    >
+                                        <ChevronRight className="w-5 h-5 text-slate-600" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Day Labels */}
+                            <div className="grid grid-cols-7 gap-2 mb-4">
+                                {dayLabels.map(day => (
+                                    <div key={day} className="text-center text-sm font-medium text-slate-600 py-2">
+                                        {day}
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Calendar Grid */}
+                            <div className="grid grid-cols-7 gap-2">
+                                {paddedDays.map((day, index) => {
+                                    if (!day) {
+                                        return <div key={index} className="aspect-square" />
+                                    }
+
+                                    const isSelected = selectedDate && isSameDay(day, selectedDate)
+                                    const isCurrentMonth = isSameMonth(day, currentMonth)
+                                    const hasAvailability = hasAvailabilityForDate(day)
+                                    const isPast = day < new Date(new Date().setHours(0, 0, 0, 0))
+
+                                    return (
+                                        <button
+                                            key={index}
+                                            onClick={() => !isPast && hasAvailability && setSelectedDate(day)}
+                                            disabled={isPast || !hasAvailability}
+                                            className={`
+                                                aspect-square rounded-lg text-sm font-medium transition-colors relative
+                                                ${isSelected 
+                                                    ? 'bg-[#BF9C73] text-white' 
+                                                    : hasAvailability && !isPast
+                                                        ? 'hover:bg-[#BF9C73]/10 text-slate-800'
+                                                        : 'text-slate-400 cursor-not-allowed'
+                                                }
+                                                ${!isCurrentMonth ? 'opacity-30' : ''}
+                                                ${isToday(day) ? 'ring-2 ring-[#BF9C73] ring-opacity-50' : ''}
+                                            `}
+                                        >
+                                            {format(day, 'd')}
+                                            {hasAvailability && !isPast && (
+                                                <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2">
+                                                    <div className="w-1 h-1 bg-[#17DB4E] rounded-full" />
+                                                </div>
+                                            )}
+                                        </button>
+                                    )
+                                })}
+                            </div>
                         </div>
                     </div>
 
-                    {/* Time Slots Section */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-8">
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-medium text-slate-800">
-                                Available times
-                            </h2>
-                            {loading && (
-                                <div className="flex items-center text-sm text-slate-600">
-                                    <Clock className="w-4 h-4 mr-2 animate-spin" />
-                                    Loading...
+                    {/* Time Slots */}
+                    <div className="space-y-6">
+                        {/* Action Buttons */}
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => setShowProviderSelection(true)}
+                                className="w-full py-3 px-4 bg-white border-2 border-[#BF9C73] text-[#BF9C73] hover:bg-[#BF9C73] hover:text-white rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
+                            >
+                                <Users className="w-5 h-5" />
+                                <span>Pick my provider first instead</span>
+                            </button>
+
+                            <button
+                                onClick={() => setShowLanguageSelection(!showLanguageSelection)}
+                                className="w-full py-3 px-4 bg-white border-2 border-blue-300 text-blue-600 hover:bg-blue-50 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
+                            >
+                                <Globe className="w-5 h-5" />
+                                <span>Language: {selectedLanguage}</span>
+                            </button>
+
+                            {showLanguageSelection && (
+                                <div className="bg-white rounded-xl shadow-lg border p-4 space-y-2">
+                                    {(['English', 'Spanish', 'Portuguese'] as Language[]).map((lang) => (
+                                        <button
+                                            key={lang}
+                                            onClick={() => {
+                                                setSelectedLanguage(lang)
+                                                setShowLanguageSelection(false)
+                                            }}
+                                            className={`w-full text-left py-2 px-3 rounded-lg transition-colors ${
+                                                selectedLanguage === lang 
+                                                    ? 'bg-blue-50 text-blue-600 font-medium' 
+                                                    : 'hover:bg-stone-50'
+                                            }`}
+                                        >
+                                            {lang}
+                                        </button>
+                                    ))}
                                 </div>
                             )}
                         </div>
 
-                        {error && (
-                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-                                <p className="text-red-700 text-sm">{error}</p>
-                                <p className="text-red-600 text-xs mt-1">Using demo data for now</p>
-                            </div>
-                        )}
+                        {/* Available Times */}
+                        {selectedDate && (
+                            <div className="bg-white rounded-2xl shadow-xl p-6">
+                                <h3 className="text-lg font-medium text-[#091747] mb-4 font-['Newsreader']">
+                                    Available Times - {format(selectedDate, 'MMM d')}
+                                </h3>
 
-                        {selectedDate ? (
-                            <div className="space-y-3">
-                                <p className="text-sm text-slate-600 mb-4">
-                                    {format(selectedDate, 'EEEE, MMMM d, yyyy')}
-                                </p>
-
-                                {consolidatedSlots.length > 0 ? (
-                                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                                        {consolidatedSlots.map((slot) => (
-                                            <button
-                                                key={slot.time}
-                                                type="button"
-                                                onClick={() => handleTimeSlotClick(slot)}
-                                                className={`
-                                                    w-full p-4 rounded-xl text-left transition-all duration-200 border-2
-                                                    ${slot.isSelected
-                                                        ? 'border-orange-400 bg-orange-50 shadow-md'
-                                                        : 'border-stone-200 hover:border-orange-200 hover:bg-orange-50'
-                                                    }
-                                                `}
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <p className="font-medium text-slate-800">
-                                                            {slot.displayTime}
-                                                        </p>
-                                                        {slot.providerCount > 1 && (
-                                                            <p className="text-xs text-slate-500 mt-1 flex items-center">
-                                                                <Users className="w-3 h-3 mr-1" />
-                                                                {slot.providerCount} providers available
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    {slot.isSelected && (
-                                                        <Check className="w-5 h-5 text-orange-600" />
-                                                    )}
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
+                                {loading && (
                                     <div className="text-center py-8">
-                                        <CalendarIcon className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                                        <p className="text-slate-500">
-                                            No appointments available on this date
-                                        </p>
-                                        <p className="text-sm text-slate-400 mt-2">
-                                            Please select another date
-                                        </p>
+                                        <div className="animate-spin w-8 h-8 border-2 border-[#BF9C73] border-t-transparent rounded-full mx-auto mb-4" />
+                                        <p className="text-slate-600">Loading availability...</p>
                                     </div>
                                 )}
 
-                                {selectedSlot && (
-                                    <div className="mt-6 pt-6 border-t border-stone-200">
-                                        <button
-                                            type="button"
-                                            onClick={handleConfirmSlot}
-                                            className="w-full py-4 bg-[#BF9C73] text-white rounded-xl font-medium hover:bg-[#A8875F] transition-colors shadow-lg"
+                                {error && (
+                                    <div className="text-center py-8">
+                                        <p className="text-red-600 mb-4">{error}</p>
+                                        <button 
+                                            onClick={() => fetchAvailabilityForDate(selectedDate)}
+                                            className="text-[#BF9C73] hover:underline"
                                         >
-                                            Book This Appointment
+                                            Try again
                                         </button>
                                     </div>
                                 )}
-                            </div>
-                        ) : (
-                            <div className="text-center py-12">
-                                <CalendarIcon className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                                <p className="text-slate-500 text-lg mb-2">
-                                    Select a date
-                                </p>
-                                <p className="text-sm text-slate-400">
-                                    Choose a date from the calendar to see available appointment times
-                                </p>
+
+                                {!loading && !error && (
+                                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                                        {consolidatedSlots.length === 0 ? (
+                                            <p className="text-slate-600 text-center py-8">
+                                                No availability for this date. Please select another date.
+                                            </p>
+                                        ) : (
+                                            consolidatedSlots.map((slot) => (
+                                                <button
+                                                    key={slot.time}
+                                                    onClick={() => handleSlotSelection(slot)}
+                                                    className="w-full flex items-center justify-between p-3 border border-stone-200 rounded-lg hover:border-[#BF9C73] hover:bg-[#BF9C73]/5 transition-colors"
+                                                >
+                                                    <div className="flex items-center space-x-3">
+                                                        <Clock className="w-4 h-4 text-slate-600" />
+                                                        <span className="font-medium">{slot.displayTime}</span>
+                                                    </div>
+                                                    {slot.providerCount > 1 && (
+                                                        <span className="text-sm text-slate-600 bg-stone-100 px-2 py-1 rounded">
+                                                            {slot.providerCount} providers available
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

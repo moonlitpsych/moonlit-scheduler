@@ -1,8 +1,9 @@
 'use client'
 
-import { InsuranceInfo, PatientInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
+import { InsuranceInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
 import { useState } from 'react'
 
+// Import view components (ensure these match your actual imports)
 import CalendarView from './views/CalendarView'
 import ConfirmationView from './views/ConfirmationView'
 import InsuranceFutureView from './views/InsuranceFutureView'
@@ -10,51 +11,39 @@ import InsuranceInfoView from './views/InsuranceInfoView'
 import InsuranceNotAcceptedView from './views/InsuranceNotAcceptedView'
 import PayerSearchView from './views/PayerSearchView'
 import ROIView from './views/ROIView'
-import WelcomeView, { BookingScenario } from './views/WelcomeView'
+import WaitlistConfirmationView from './views/WaitlistConfirmationView'
+import WelcomeView from './views/WelcomeView'
 
-type BookingStep =
+export type BookingStep =
     | 'welcome'
     | 'payer-search'
     | 'insurance-not-accepted'
     | 'insurance-future'
+    | 'waitlist-confirmation'
     | 'calendar'
     | 'insurance-info'
     | 'roi'
     | 'confirmation'
 
-interface BookingState {
+export type BookingScenario = 'self' | 'third-party' | 'case-manager'
+
+export interface BookingState {
     step: BookingStep
     bookingScenario: BookingScenario
     selectedPayer?: Payer
     payerAcceptanceStatus?: 'not-accepted' | 'future' | 'active'
+    bookingMode?: 'normal' | 'from-effective-date' // NEW: for "book anyway" functionality
     selectedTimeSlot?: TimeSlot
-    patientInfo?: PatientInfo
     insuranceInfo?: InsuranceInfo
     roiContacts: ROIContact[]
     appointmentId?: string
-    caseManagerInfo?: {
-        name: string
-        email: string
-        phone?: string
-        organization?: string
-    }
-    communicationPreferences?: {
-        sendToPatient: boolean
-        sendToCaseManager: boolean
-        patientHasEmail: boolean
-    }
 }
 
 export default function BookingFlow() {
     const [state, setState] = useState<BookingState>({
         step: 'welcome',
         bookingScenario: 'self',
-        roiContacts: [],
-        communicationPreferences: {
-            sendToPatient: true,
-            sendToCaseManager: false,
-            patientHasEmail: true
-        }
+        roiContacts: []
     })
 
     const updateState = (updates: Partial<BookingState>) => {
@@ -65,45 +54,17 @@ export default function BookingFlow() {
         setState(prev => ({ ...prev, step }))
     }
 
+    // Navigation handlers
     const handleWelcomeSelection = (scenario: BookingScenario) => {
-        console.log('Welcome selection:', scenario)
-        
-        const updates: Partial<BookingState> = {
-            bookingScenario: scenario,
-        }
-
-        switch (scenario) {
-            case 'self':
-                updates.communicationPreferences = {
-                    sendToPatient: true,
-                    sendToCaseManager: false,
-                    patientHasEmail: true
-                }
-                break
-            case 'referral':
-                updates.communicationPreferences = {
-                    sendToPatient: true,
-                    sendToCaseManager: false,
-                    patientHasEmail: true
-                }
-                break
-            case 'case-manager':
-                updates.communicationPreferences = {
-                    sendToPatient: false,
-                    sendToCaseManager: true,
-                    patientHasEmail: false
-                }
-                break
-        }
-
-        updateState(updates)
+        updateState({ bookingScenario: scenario })
         goToStep('payer-search')
     }
 
     const handlePayerSelected = (payer: Payer, acceptanceStatus: BookingState['payerAcceptanceStatus']) => {
-        console.log('Payer selected:', payer.name, 'Status:', acceptanceStatus)
-        
-        updateState({ selectedPayer: payer, payerAcceptanceStatus: acceptanceStatus })
+        updateState({ 
+            selectedPayer: payer, 
+            payerAcceptanceStatus: acceptanceStatus 
+        })
 
         switch (acceptanceStatus) {
             case 'not-accepted':
@@ -118,8 +79,16 @@ export default function BookingFlow() {
         }
     }
 
+    const handleCashPaymentSelected = () => {
+        // Clear payer info for cash payment
+        updateState({
+            selectedPayer: undefined,
+            payerAcceptanceStatus: undefined
+        })
+        goToStep('calendar')
+    }
+
     const handleTimeSlotSelected = (timeSlot: TimeSlot) => {
-        console.log('Time slot selected:', timeSlot)
         updateState({ selectedTimeSlot: timeSlot })
         goToStep('insurance-info')
     }
@@ -131,7 +100,33 @@ export default function BookingFlow() {
 
     const handleROISubmitted = (roiContacts: ROIContact[]) => {
         updateState({ roiContacts })
+        // Here you would actually submit the appointment to your backend
+        // For now, just go to confirmation
         goToStep('confirmation')
+    }
+
+    const handleWaitlistSubmitted = () => {
+        goToStep('waitlist-confirmation')
+    }
+
+    const handleWaitForEffectiveDate = () => {
+        // This could add them to a different type of waitlist
+        // For now, treat same as waitlist
+        goToStep('waitlist-confirmation')
+    }
+
+    const handleBookAnyway = () => {
+        // Set booking mode to only show dates from effective date forward
+        updateState({ 
+            bookingMode: 'from-effective-date',
+            payerAcceptanceStatus: 'active' // Treat as active but with date restrictions
+        })
+        goToStep('calendar')
+    }
+
+    // Back navigation handlers
+    const handleBackToWelcome = () => {
+        goToStep('welcome')
     }
 
     const handleBackToInsurance = () => {
@@ -142,23 +137,27 @@ export default function BookingFlow() {
         goToStep('calendar')
     }
 
-    const handleBackToWelcome = () => {
-        goToStep('welcome')
+    const handleRestartFlow = () => {
+        setState({
+            step: 'welcome',
+            bookingScenario: 'self',
+            roiContacts: []
+        })
     }
 
-    const renderCurrentView = () => {
+    // Main render function
+    const renderCurrentStep = () => {
         switch (state.step) {
             case 'welcome':
                 return (
-                    <WelcomeView
-                        onSelection={handleWelcomeSelection}
-                    />
+                    <WelcomeView onSelection={handleWelcomeSelection} />
                 )
 
             case 'payer-search':
                 return (
                     <PayerSearchView
                         onPayerSelected={handlePayerSelected}
+                        onCashPayment={handleCashPaymentSelected}
                         bookingScenario={state.bookingScenario}
                         onBack={handleBackToWelcome}
                     />
@@ -183,9 +182,9 @@ export default function BookingFlow() {
                 return (
                     <InsuranceNotAcceptedView
                         selectedPayer={state.selectedPayer}
-                        bookingScenario={state.bookingScenario}
-                        onLeadSubmitted={() => goToStep('confirmation')}
                         onBackToPayers={handleBackToInsurance}
+                        onCashPayment={handleCashPaymentSelected}
+                        onWaitlistSubmitted={handleWaitlistSubmitted}
                     />
                 )
 
@@ -208,42 +207,57 @@ export default function BookingFlow() {
                 return (
                     <InsuranceFutureView
                         selectedPayer={state.selectedPayer}
-                        bookingScenario={state.bookingScenario}
-                        onLeadSubmitted={() => goToStep('confirmation')}
                         onBackToPayers={handleBackToInsurance}
+                        onCashPayment={handleCashPaymentSelected}
+                        onWaitForEffectiveDate={handleWaitForEffectiveDate}
+                        onBookAnyway={handleBookAnyway}
                     />
                 )
 
-            case 'calendar':
+            case 'waitlist-confirmation':
                 if (!state.selectedPayer) {
                     return (
                         <div className="min-h-screen flex items-center justify-center bg-stone-50">
                             <div className="text-center space-y-4">
-                                <p className="text-stone-600">Please select your insurance first.</p>
+                                <p className="text-stone-600">Insurance information missing.</p>
                                 <button 
-                                    onClick={handleBackToInsurance}
+                                    onClick={handleRestartFlow}
                                     className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
                                 >
-                                    Back to Insurance Selection
+                                    Start Over
                                 </button>
                             </div>
                         </div>
                     )
                 }
                 return (
-                    <CalendarView
+                    <WaitlistConfirmationView
                         selectedPayer={state.selectedPayer}
+                        onReturnHome={handleRestartFlow}
+                    />
+                )
+
+            case 'calendar':
+                if (!state.selectedPayer && state.payerAcceptanceStatus !== undefined) {
+                    // This means they're paying cash - we should still show calendar
+                    // but with different messaging
+                }
+                
+                return (
+                    <CalendarView
+                        selectedPayer={state.selectedPayer!}
                         onTimeSlotSelected={handleTimeSlotSelected}
                         onBackToInsurance={handleBackToInsurance}
+                        bookingMode={state.bookingMode}
                     />
                 )
 
             case 'insurance-info':
-                if (!state.selectedPayer || !state.selectedTimeSlot) {
+                if (!state.selectedTimeSlot) {
                     return (
                         <div className="min-h-screen flex items-center justify-center bg-stone-50">
                             <div className="text-center space-y-4">
-                                <p className="text-stone-600">Appointment information missing.</p>
+                                <p className="text-stone-600">Please select a time slot first.</p>
                                 <button 
                                     onClick={handleBackToCalendar}
                                     className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
@@ -256,11 +270,9 @@ export default function BookingFlow() {
                 }
                 return (
                     <InsuranceInfoView
-                        selectedPayer={state.selectedPayer}
+                        selectedPayer={state.selectedPayer!}
                         selectedTimeSlot={state.selectedTimeSlot}
                         bookingScenario={state.bookingScenario}
-                        caseManagerInfo={state.caseManagerInfo}
-                        communicationPreferences={state.communicationPreferences!}
                         onSubmit={handleInsuranceInfoSubmitted}
                         onBack={handleBackToCalendar}
                     />
@@ -269,9 +281,7 @@ export default function BookingFlow() {
             case 'roi':
                 return (
                     <ROIView
-                        patientInfo={state.patientInfo}
                         bookingScenario={state.bookingScenario}
-                        caseManagerInfo={state.caseManagerInfo}
                         onSubmit={handleROISubmitted}
                         onBack={() => goToStep('insurance-info')}
                     />
@@ -280,24 +290,10 @@ export default function BookingFlow() {
             case 'confirmation':
                 return (
                     <ConfirmationView
-                        appointmentId={state.appointmentId}
-                        patientInfo={state.patientInfo}
+                        selectedPayer={state.selectedPayer}
                         selectedTimeSlot={state.selectedTimeSlot}
                         bookingScenario={state.bookingScenario}
-                        caseManagerInfo={state.caseManagerInfo}
-                        communicationPreferences={state.communicationPreferences}
-                        onStartOver={() => {
-                            setState({
-                                step: 'welcome',
-                                bookingScenario: 'self',
-                                roiContacts: [],
-                                communicationPreferences: {
-                                    sendToPatient: true,
-                                    sendToCaseManager: false,
-                                    patientHasEmail: true
-                                }
-                            })
-                        }}
+                        onStartOver={handleRestartFlow}
                     />
                 )
 
@@ -305,9 +301,9 @@ export default function BookingFlow() {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-stone-50">
                         <div className="text-center space-y-4">
-                            <p className="text-stone-600">Something went wrong.</p>
+                            <p className="text-stone-600">Unknown step: {state.step}</p>
                             <button 
-                                onClick={handleBackToWelcome}
+                                onClick={handleRestartFlow}
                                 className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
                             >
                                 Start Over
@@ -320,7 +316,7 @@ export default function BookingFlow() {
 
     return (
         <div className="min-h-screen">
-            {renderCurrentView()}
+            {renderCurrentStep()}
         </div>
     )
 }

@@ -14,31 +14,53 @@ interface TimeSlot {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
-        const { provider_id, date } = body
+        const { payer_id, date } = body
 
-        if (!provider_id || !date) {
+        if (!payer_id || !date) {
             return NextResponse.json(
-                { success: false, error: 'provider_id and date are required' },
+                { success: false, error: 'payer_id and date are required' },
                 { status: 400 }
             )
         }
 
-        console.log('🔍 Fetching provider availability for:', { provider_id, date })
+        console.log('🔍 Fetching merged availability for:', { payer_id, date })
 
-        // Step 1: Verify provider exists and is active
-        const { data: provider, error: providerError } = await supabase
-            .from('providers')
-            .select('id, first_name, last_name, is_active')
-            .eq('id', provider_id)
-            .eq('is_active', true)
-            .single()
+        // Step 1: Get providers who accept this payer
+        const { data: networks, error: networksError } = await supabase
+            .from('provider_payer_networks')
+            .select(`
+                provider_id,
+                providers!inner(
+                    id,
+                    first_name,
+                    last_name,
+                    is_active
+                )
+            `)
+            .eq('payer_id', payer_id)
+            .eq('status', 'active')
+            .eq('providers.is_active', true)
 
-        if (providerError || !provider) {
-            console.error('❌ Provider not found or inactive:', providerError)
+        if (networksError) {
+            console.error('❌ Error fetching provider networks:', networksError)
             return NextResponse.json(
-                { success: false, error: 'Provider not found or inactive' },
-                { status: 404 }
+                { success: false, error: 'Failed to fetch provider networks' },
+                { status: 500 }
             )
+        }
+
+        const acceptingProviders = networks?.map(n => n.provider_id) || []
+        console.log('👥 Providers accepting this payer:', acceptingProviders.length)
+
+        if (acceptingProviders.length === 0) {
+            return NextResponse.json({
+                success: true,
+                data: {
+                    availableSlots: [],
+                    providersCount: 0,
+                    message: 'No providers currently accept this insurance'
+                }
+            })
         }
 
         // Step 2: Convert date to day of week (0 = Sunday, 1 = Monday, etc.)
@@ -46,11 +68,11 @@ export async function POST(request: NextRequest) {
         const dayOfWeek = targetDate.getDay()
         console.log('📅 Target date day of week:', dayOfWeek)
 
-        // Step 3: Get availability for this provider on this day of week
+        // Step 3: Get availability for these providers on this day of week
         const { data: availability, error: availabilityError } = await supabase
             .from('provider_availability')
             .select('*')
-            .eq('provider_id', provider_id)
+            .in('provider_id', acceptingProviders)
             .eq('day_of_week', dayOfWeek)
             .eq('is_recurring', true)
 
@@ -78,10 +100,7 @@ export async function POST(request: NextRequest) {
             success: true,
             data: {
                 availableSlots: timeSlots,
-                provider: {
-                    id: provider.id,
-                    name: `${provider.first_name} ${provider.last_name}`
-                },
+                providersCount: acceptingProviders.length,
                 availabilityRecords: availability?.length || 0,
                 date,
                 dayOfWeek
@@ -89,7 +108,7 @@ export async function POST(request: NextRequest) {
         })
 
     } catch (error) {
-        console.error('💥 Error in provider availability API:', error)
+        console.error('💥 Error in merged availability API:', error)
         return NextResponse.json(
             { success: false, error: 'Internal server error' },
             { status: 500 }
