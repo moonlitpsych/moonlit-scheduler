@@ -3,7 +3,7 @@
 import { Payer } from '@/types/database'
 import { useEffect, useState } from 'react'
 
-interface Provider {
+export interface Provider {
     id: string
     first_name: string
     last_name: string
@@ -18,7 +18,7 @@ interface Provider {
 
 interface ProviderSelectionViewProps {
     selectedPayer: Payer
-    onProviderSelected: (providerId: string) => void
+    onProviderSelected: (provider: Provider) => void
     onBackToMergedCalendar: () => void
     onBack: () => void
 }
@@ -134,7 +134,7 @@ export default function ProviderSelectionView({
                                 <ProviderCard
                                     key={provider.id}
                                     provider={provider}
-                                    onSelect={() => onProviderSelected(provider.id)}
+                                    onSelect={() => onProviderSelected(provider)}
                                 />
                             ))}
                         </div>
