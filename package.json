@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "tsc tests/enrichPayerWithStatus.test.ts src/lib/services/payerStatus.ts --module commonjs --target es2019 --outDir build-tests --esModuleInterop && node build-tests/tests/enrichPayerWithStatus.test.js && rm -rf build-tests",
     "athena:test": "jest tests/integration/athena",
     "athena:sync": "node scripts/athena-sync.js",
     "athena:validate": "node scripts/validate-athena-config.js",
