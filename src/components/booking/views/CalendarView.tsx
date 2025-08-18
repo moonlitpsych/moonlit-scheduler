@@ -107,9 +107,11 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
     // EMERGENCY FIX: Multiple API endpoint attempts with different strategies
     const fetchAvailabilityForDate = async (date: Date) => {
+        // Allow a fallback payer ID for cash payments or fetch all providers when missing
+        const payerId = selectedPayer?.id || 'cash-payment'
+
         if (!selectedPayer?.id) {
-            console.error('No payer selected')
-            return
+            console.warn('No payer selected, using cash-payment id to fetch all providers')
         }
 
         setLoading(true)
@@ -118,7 +120,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         try {
             const dateString = format(date, 'yyyy-MM-dd')
             console.log('🔍 EMERGENCY: Attempting multiple API strategies for:', {
-                payer_id: selectedPayer.id,
+                payer_id: payerId,
                 date: dateString
             })
 
@@ -128,7 +130,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             // STRATEGY 1: Try the merged-availability endpoint (GET)
             try {
                 console.log('📡 STRATEGY 1: Trying GET /api/patient-booking/merged-availability')
-                const response1 = await fetch(`/api/patient-booking/merged-availability?payer_id=${selectedPayer.id}&date=${dateString}`, {
+                const response1 = await fetch(`/api/patient-booking/merged-availability?payer_id=${payerId}&date=${dateString}`, {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
@@ -160,7 +162,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            payer_id: selectedPayer.id,
+                            payer_id: payerId,
                             date: dateString
                         })
                     })
@@ -194,7 +196,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     // Travis (35ab086b-2894-446d-9ab5-3d41613017ad) has Sunday availability 09:00-17:00
                     // DMBA payer_id is 8bd0bedb-226e-4253-bfeb-46ce835ef2a8
                     
-                    if (selectedPayer.id === '8bd0bedb-226e-4253-bfeb-46ce835ef2a8') { // DMBA
+                    if (payerId === '8bd0bedb-226e-4253-bfeb-46ce835ef2a8') { // DMBA
                         if (dayOfWeek === 0) { // Sunday - Travis availability
                             apiSlots = [
                                 { date: dateString, time: '09:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },

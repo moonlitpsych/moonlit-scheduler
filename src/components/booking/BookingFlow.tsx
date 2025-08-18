@@ -80,9 +80,9 @@ export default function BookingFlow() {
     }
 
     const handleCashPaymentSelected = () => {
-        // Clear payer info for cash payment
+        // Use a dummy payer for cash payments so calendar can render
         updateState({
-            selectedPayer: undefined,
+            selectedPayer: { id: 'cash-payment', name: 'Cash Payment' } as Payer,
             payerAcceptanceStatus: undefined
         })
         goToStep('calendar')
@@ -238,14 +238,25 @@ export default function BookingFlow() {
                 )
 
             case 'calendar':
-                if (!state.selectedPayer && state.payerAcceptanceStatus !== undefined) {
-                    // This means they're paying cash - we should still show calendar
-                    // but with different messaging
+                if (!state.selectedPayer) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+                            <div className="text-center space-y-4">
+                                <p className="text-stone-600">Please select a payer or cash option first.</p>
+                                <button
+                                    onClick={handleBackToInsurance}
+                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
+                                >
+                                    Back to Insurance Selection
+                                </button>
+                            </div>
+                        </div>
+                    )
                 }
-                
+
                 return (
                     <CalendarView
-                        selectedPayer={state.selectedPayer!}
+                        selectedPayer={state.selectedPayer}
                         onTimeSlotSelected={handleTimeSlotSelected}
                         onBackToInsurance={handleBackToInsurance}
                         bookingMode={state.bookingMode}
