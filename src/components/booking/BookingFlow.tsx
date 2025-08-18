@@ -2,6 +2,7 @@
 
 import { InsuranceInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
 import { useState } from 'react'
+import ProgressBar from './ProgressBar'
 
 // Import view components (ensure these match your actual imports)
 import CalendarView from './views/CalendarView'
@@ -30,6 +31,8 @@ export type BookingScenario = 'self' | 'third-party' | 'case-manager'
 export interface BookingState {
     step: BookingStep
     bookingScenario: BookingScenario
+    currentStep: number
+    totalSteps: number
     selectedPayer?: Payer
     payerAcceptanceStatus?: 'not-accepted' | 'future' | 'active'
     bookingMode?: 'normal' | 'from-effective-date' // NEW: for "book anyway" functionality
@@ -43,6 +46,8 @@ export default function BookingFlow() {
     const [state, setState] = useState<BookingState>({
         step: 'welcome',
         bookingScenario: 'self',
+        currentStep: 1,
+        totalSteps: 6,
         roiContacts: []
     })
 
@@ -50,14 +55,19 @@ export default function BookingFlow() {
         setState(prev => ({ ...prev, ...updates }))
     }
 
-    const goToStep = (step: BookingStep) => {
-        setState(prev => ({ ...prev, step }))
+    const goToStep = (step: BookingStep, currentStep: number, totalSteps?: number) => {
+        setState(prev => ({
+            ...prev,
+            step,
+            currentStep,
+            totalSteps: totalSteps ?? prev.totalSteps
+        }))
     }
 
     // Navigation handlers
     const handleWelcomeSelection = (scenario: BookingScenario) => {
         updateState({ bookingScenario: scenario })
-        goToStep('payer-search')
+        goToStep('payer-search', 2)
     }
 
     const handlePayerSelected = (payer: Payer, acceptanceStatus: BookingState['payerAcceptanceStatus']) => {
@@ -68,13 +78,13 @@ export default function BookingFlow() {
 
         switch (acceptanceStatus) {
             case 'not-accepted':
-                goToStep('insurance-not-accepted')
+                goToStep('insurance-not-accepted', 3, 4)
                 break
             case 'future':
-                goToStep('insurance-future')
+                goToStep('insurance-future', 3, 4)
                 break
             case 'active':
-                goToStep('calendar')
+                goToStep('calendar', 3, 6)
                 break
         }
     }
@@ -85,62 +95,64 @@ export default function BookingFlow() {
             selectedPayer: { id: 'cash-payment', name: 'Cash Payment' } as Payer,
             payerAcceptanceStatus: undefined
         })
-        goToStep('calendar')
+        goToStep('calendar', 3, 6)
     }
 
     const handleTimeSlotSelected = (timeSlot: TimeSlot) => {
         updateState({ selectedTimeSlot: timeSlot })
-        goToStep('insurance-info')
+        goToStep('insurance-info', state.currentStep + 1)
     }
 
     const handleInsuranceInfoSubmitted = (insuranceInfo: InsuranceInfo) => {
         updateState({ insuranceInfo })
-        goToStep('roi')
+        goToStep('roi', state.currentStep + 1)
     }
 
     const handleROISubmitted = (roiContacts: ROIContact[]) => {
         updateState({ roiContacts })
         // Here you would actually submit the appointment to your backend
         // For now, just go to confirmation
-        goToStep('confirmation')
+        goToStep('confirmation', state.currentStep + 1)
     }
 
     const handleWaitlistSubmitted = () => {
-        goToStep('waitlist-confirmation')
+        goToStep('waitlist-confirmation', state.currentStep + 1)
     }
 
     const handleWaitForEffectiveDate = () => {
         // This could add them to a different type of waitlist
         // For now, treat same as waitlist
-        goToStep('waitlist-confirmation')
+        goToStep('waitlist-confirmation', state.currentStep + 1)
     }
 
     const handleBookAnyway = () => {
         // Set booking mode to only show dates from effective date forward
-        updateState({ 
+        updateState({
             bookingMode: 'from-effective-date',
             payerAcceptanceStatus: 'active' // Treat as active but with date restrictions
         })
-        goToStep('calendar')
+        goToStep('calendar', 4, 7)
     }
 
     // Back navigation handlers
     const handleBackToWelcome = () => {
-        goToStep('welcome')
+        goToStep('welcome', 1, 6)
     }
 
     const handleBackToInsurance = () => {
-        goToStep('payer-search')
+        goToStep('payer-search', 2)
     }
 
     const handleBackToCalendar = () => {
-        goToStep('calendar')
+        goToStep('calendar', state.currentStep - 1)
     }
 
     const handleRestartFlow = () => {
         setState({
             step: 'welcome',
             bookingScenario: 'self',
+            currentStep: 1,
+            totalSteps: 6,
             roiContacts: []
         })
     }
@@ -294,7 +306,7 @@ export default function BookingFlow() {
                     <ROIView
                         bookingScenario={state.bookingScenario}
                         onSubmit={handleROISubmitted}
-                        onBack={() => goToStep('insurance-info')}
+                        onBack={() => goToStep('insurance-info', state.currentStep - 1)}
                     />
                 )
 
@@ -327,6 +339,7 @@ export default function BookingFlow() {
 
     return (
         <div className="min-h-screen">
+            <ProgressBar currentStep={state.currentStep} totalSteps={state.totalSteps} />
             {renderCurrentStep()}
         </div>
     )
