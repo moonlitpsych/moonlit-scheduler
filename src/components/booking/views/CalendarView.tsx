@@ -10,6 +10,7 @@ interface CalendarViewProps {
     selectedPayer?: Payer
     onTimeSlotSelected: (slot: TimeSlot) => void
     onBackToInsurance: () => void
+    onSwitchToProviderList: () => void
 }
 
 interface ConsolidatedTimeSlot {
@@ -28,7 +29,7 @@ interface AvailableSlot {
     provider_name?: string
 }
 
-export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance }: CalendarViewProps) {
+export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance, onSwitchToProviderList }: CalendarViewProps) {
     const [currentMonth, setCurrentMonth] = useState(new Date())
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
@@ -309,6 +310,13 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     <p className="text-xl text-[#091747]/70 mb-6 font-['Newsreader']">
                         Showing merged availability for all providers who accept {selectedPayer?.name}
                     </p>
+                    <button
+                        type="button"
+                        onClick={onSwitchToProviderList}
+                        className="px-6 py-2 bg-white text-[#091747] rounded-xl border border-[#BF9C73] hover:bg-[#FEF8F1] transition-colors font-['Newsreader']"
+                    >
+                        View Providers
+                    </button>
                 </div>
 
                 {/* Insurance Banner */}

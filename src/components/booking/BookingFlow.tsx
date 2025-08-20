@@ -5,6 +5,8 @@ import { useState } from 'react'
 
 // Import view components (ensure these match your actual imports)
 import CalendarView from './views/CalendarView'
+import ProviderSelectionView, { type Provider } from './views/ProviderSelectionView'
+import ProviderCalendarView from './views/ProviderCalendarView'
 import ConfirmationView from './views/ConfirmationView'
 import InsuranceFutureView from './views/InsuranceFutureView'
 import InsuranceInfoView from './views/InsuranceInfoView'
@@ -21,6 +23,8 @@ export type BookingStep =
     | 'insurance-future'
     | 'waitlist-confirmation'
     | 'calendar'
+    | 'provider-selection'
+    | 'provider-calendar'
     | 'insurance-info'
     | 'roi'
     | 'confirmation'
@@ -34,6 +38,7 @@ export interface BookingState {
     payerAcceptanceStatus?: 'not-accepted' | 'future' | 'active'
     bookingMode?: 'normal' | 'from-effective-date' // NEW: for "book anyway" functionality
     selectedTimeSlot?: TimeSlot
+    selectedProvider?: Provider
     insuranceInfo?: InsuranceInfo
     roiContacts: ROIContact[]
     appointmentId?: string
@@ -88,6 +93,24 @@ export default function BookingFlow() {
         goToStep('calendar')
     }
 
+    const handleSwitchToProviderList = () => {
+        goToStep('provider-selection')
+    }
+
+    const handleProviderSelected = (provider: Provider) => {
+        updateState({ selectedProvider: provider, selectedTimeSlot: undefined })
+        goToStep('provider-calendar')
+    }
+
+    const handleBackToProviders = () => {
+        goToStep('provider-selection')
+    }
+
+    const handleBackToMergedCalendar = () => {
+        updateState({ selectedProvider: undefined, selectedTimeSlot: undefined })
+        goToStep('calendar')
+    }
+
     const handleTimeSlotSelected = (timeSlot: TimeSlot) => {
         updateState({ selectedTimeSlot: timeSlot })
         goToStep('insurance-info')
@@ -130,11 +153,16 @@ export default function BookingFlow() {
     }
 
     const handleBackToInsurance = () => {
+        updateState({ selectedPayer: undefined, selectedProvider: undefined, selectedTimeSlot: undefined })
         goToStep('payer-search')
     }
 
     const handleBackToCalendar = () => {
-        goToStep('calendar')
+        if (state.selectedProvider) {
+            goToStep('provider-calendar')
+        } else {
+            goToStep('calendar')
+        }
     }
 
     const handleRestartFlow = () => {
@@ -259,7 +287,58 @@ export default function BookingFlow() {
                         selectedPayer={state.selectedPayer}
                         onTimeSlotSelected={handleTimeSlotSelected}
                         onBackToInsurance={handleBackToInsurance}
-                        bookingMode={state.bookingMode}
+                        onSwitchToProviderList={handleSwitchToProviderList}
+                    />
+                )
+
+            case 'provider-selection':
+                if (!state.selectedPayer) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+                            <div className="text-center space-y-4">
+                                <p className="text-stone-600">Please select a payer first.</p>
+                                <button
+                                    onClick={handleBackToInsurance}
+                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
+                                >
+                                    Back to Insurance Selection
+                                </button>
+                            </div>
+                        </div>
+                    )
+                }
+                return (
+                    <ProviderSelectionView
+                        selectedPayer={state.selectedPayer}
+                        onProviderSelected={handleProviderSelected}
+                        onBackToMergedCalendar={handleBackToMergedCalendar}
+                        onBack={handleBackToInsurance}
+                    />
+                )
+
+            case 'provider-calendar':
+                if (!state.selectedPayer || !state.selectedProvider) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+                            <div className="text-center space-y-4">
+                                <p className="text-stone-600">Please select a provider first.</p>
+                                <button
+                                    onClick={handleBackToProviders}
+                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
+                                >
+                                    Back to Providers
+                                </button>
+                            </div>
+                        </div>
+                    )
+                }
+                return (
+                    <ProviderCalendarView
+                        selectedPayer={state.selectedPayer}
+                        selectedProvider={state.selectedProvider}
+                        onTimeSlotSelected={handleTimeSlotSelected}
+                        onBackToProviders={handleBackToProviders}
+                        onBackToMerged={handleBackToMergedCalendar}
                     />
                 )
 
