@@ -8,11 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test": "tsc tests/enrichPayerWithStatus.test.ts src/lib/services/payerStatus.ts --module commonjs --target es2019 --outDir build-tests --esModuleInterop && node build-tests/tests/enrichPayerWithStatus.test.js && rm -rf build-tests",
-    "athena:test": "jest tests/integration/athena",
-    "athena:sync": "node scripts/athena-sync.js",
-    "athena:validate": "node scripts/validate-athena-config.js",
-    "db:migrate:athena": "node scripts/run-athena-migrations.js",
-    "athena:monitor": "node scripts/monitor-athena-sync.js"
+    "athena:test": "tsx scripts/test-athena-connection.ts",
+    "athena:sync": "tsx scripts/sync-athena-data.ts",
+    "athena:sync:providers": "tsx scripts/sync-athena-data.ts --providers-only",
+    "athena:sync:full": "tsx scripts/sync-athena-data.ts --availability --appointments"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.10.0",
@@ -43,6 +42,7 @@
     "postcss": "^8.5.6",
     "supertest": "^7.1.4",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.4",
     "typescript": "^5"
   }
 }

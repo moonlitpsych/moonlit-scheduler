@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
 
         // Test 8: Provider-payer relationships  
         const { count: relationshipsCount, error: relationshipsError } = await supabase
-            .from('provider_payer_relationships')
+            .from('provider_payer_networks')
             .select('*', { count: 'exact', head: true })
 
         const response = {

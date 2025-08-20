@@ -1,6 +1,5 @@
 // src/app/api/patient-booking/merged-availability/route.ts
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { supabase } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface AvailableSlot {
@@ -21,7 +20,6 @@ interface AvailableSlot {
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = createRouteHandlerClient({ cookies })
         const { payer_id, date, startDate, endDate, appointmentDuration = 60 } = await request.json()
 
         // Support both single date and date range requests
@@ -56,7 +54,7 @@ export async function POST(request: NextRequest) {
                 )
             `)
             .eq('payer_id', payer_id)
-            .eq('status', 'active')
+            .eq('status', 'in_network')
             .eq('providers.is_active', true)
 
         if (networksError) {

@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
                 )
             `)
             .eq('payer_id', payer_id)
-            .eq('status', 'active')
+            .eq('status', 'in_network')
             .eq('providers.is_active', true)
 
         if (networksError) {
