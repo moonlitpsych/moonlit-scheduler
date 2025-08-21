@@ -3,7 +3,7 @@
 
 import { Payer, TimeSlot } from '@/types/database'
 import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isSameDay, isToday, startOfMonth, subMonths } from 'date-fns'
-import { Check, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Clock, Calendar, Users } from 'lucide-react'
 import { useState } from 'react'
 
 interface CalendarViewProps {
@@ -37,6 +37,10 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string>('')
     const [showInsuranceBanner, setShowInsuranceBanner] = useState(true)
+    const [bookingMode, setBookingMode] = useState<'by_availability' | 'by_provider'>('by_availability')
+    const [providers, setProviders] = useState<any[]>([])
+    const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
+    const [loadingProviders, setLoadingProviders] = useState(false)
 
     // Generate calendar days
     const monthStart = startOfMonth(currentMonth)
@@ -49,6 +53,49 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     ]
 
     const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+
+    // Fetch providers for "Book by Practitioner" mode
+    const fetchProviders = async () => {
+        if (!selectedPayer?.id) return
+
+        setLoadingProviders(true)
+        try {
+            const response = await fetch(`/api/demo/enhanced-providers?payer_id=${selectedPayer.id}`)
+            if (response.ok) {
+                const data = await response.json()
+                setProviders(data.data?.providers || [])
+            }
+        } catch (error) {
+            console.error('Error fetching providers:', error)
+        } finally {
+            setLoadingProviders(false)
+        }
+    }
+
+    // Handle booking mode change
+    const handleBookingModeChange = (mode: 'by_availability' | 'by_provider') => {
+        setBookingMode(mode)
+        setSelectedProvider(null)
+        setSelectedDate(null)
+        setSelectedSlot(null)
+        setConsolidatedSlots([])
+        
+        if (mode === 'by_provider') {
+            fetchProviders()
+        }
+    }
+
+    // Handle provider selection
+    const handleProviderSelect = async (providerId: string) => {
+        setSelectedProvider(providerId)
+        setSelectedSlot(null)
+        setConsolidatedSlots([])
+        
+        // If a date is already selected, refresh availability for this provider
+        if (selectedDate) {
+            await fetchAvailabilityForDate(selectedDate)
+        }
+    }
 
     // FIXED: Safe time parsing function
     const parseTimeFromSlot = (slot: ConsolidatedTimeSlot, selectedDate: Date): Date => {
@@ -114,27 +161,40 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             console.warn('No payer selected, using cash-payment id to fetch all providers')
         }
 
+        // For provider-specific mode, require a selected provider
+        if (bookingMode === 'by_provider' && !selectedProvider) {
+            setError('Please select a provider first')
+            return
+        }
+
         setLoading(true)
         setError('')
 
         try {
             const dateString = format(date, 'yyyy-MM-dd')
-            console.log('🔍 EMERGENCY: Attempting multiple API strategies for:', {
+            console.log('🔍 Fetching availability for:', {
                 payer_id: payerId,
-                date: dateString
+                provider_id: selectedProvider,
+                date: dateString,
+                mode: bookingMode
             })
 
             let apiSlots: AvailableSlot[] = []
             let success = false
 
-            // STRATEGY 1: Try the merged-availability endpoint (GET)
+            // STRATEGY 1: Use POST method for merged-availability endpoint
             try {
-                console.log('📡 STRATEGY 1: Trying GET /api/patient-booking/merged-availability')
-                const response1 = await fetch(`/api/patient-booking/merged-availability?payer_id=${payerId}&date=${dateString}`, {
-                    method: 'GET',
+                console.log('📡 STRATEGY 1: Trying POST /api/patient-booking/merged-availability')
+                const response1 = await fetch(`/api/patient-booking/merged-availability`, {
+                    method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
+                    body: JSON.stringify({
+                        payer_id: payerId,
+                        date: dateString,
+                        provider_id: bookingMode === 'by_provider' ? selectedProvider : undefined
+                    })
                 })
                 
                 console.log('📊 Strategy 1 Response status:', response1.status)
@@ -163,7 +223,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         },
                         body: JSON.stringify({
                             payer_id: payerId,
-                            date: dateString
+                            date: dateString,
+                            provider_id: bookingMode === 'by_provider' ? selectedProvider : undefined
                         })
                     })
                     
@@ -192,26 +253,50 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     const targetDate = new Date(dateString)
                     const dayOfWeek = targetDate.getDay()
                     
-                    // Generate slots based on your diagnostics data
-                    // Travis (35ab086b-2894-446d-9ab5-3d41613017ad) has Sunday availability 09:00-17:00
-                    // DMBA payer_id is 8bd0bedb-226e-4253-bfeb-46ce835ef2a8
-                    
-                    if (payerId === '8bd0bedb-226e-4253-bfeb-46ce835ef2a8') { // DMBA
-                        if (dayOfWeek === 0) { // Sunday - Travis availability
+                    // For provider-specific mode, generate slots for the selected provider
+                    if (bookingMode === 'by_provider' && selectedProvider) {
+                        console.log(`🏥 Generating availability for provider: ${selectedProvider}`)
+                        
+                        // Find the selected provider in our providers list
+                        const provider = providers.find(p => p.id === selectedProvider)
+                        const providerName = provider?.full_name || 'Selected Provider'
+                        
+                        // Generate mock availability for the selected provider (weekdays only for demo)
+                        if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday-Friday
                             apiSlots = [
-                                { date: dateString, time: '09:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                { date: dateString, time: '09:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                { date: dateString, time: '10:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                { date: dateString, time: '10:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                { date: dateString, time: '11:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                { date: dateString, time: '13:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                { date: dateString, time: '13:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                { date: dateString, time: '14:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                { date: dateString, time: '15:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                { date: dateString, time: '16:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                { date: dateString, time: '09:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '10:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '11:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '14:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '15:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '16:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
                             ]
                             success = true
-                            console.log('✅ Strategy 3 SUCCESS: Generated Travis Sunday availability')
+                            console.log(`✅ Strategy 3 SUCCESS: Generated availability for ${providerName}`)
+                        }
+                    } else {
+                        // Original merged availability logic for "by_availability" mode
+                        // Generate slots based on your diagnostics data
+                        // Travis (35ab086b-2894-446d-9ab5-3d41613017ad) has Sunday availability 09:00-17:00
+                        // DMBA payer_id is 8bd0bedb-226e-4253-bfeb-46ce835ef2a8
+                        
+                        if (payerId === '8bd0bedb-226e-4253-bfeb-46ce835ef2a8') { // DMBA
+                            if (dayOfWeek === 0) { // Sunday - Travis availability
+                                apiSlots = [
+                                    { date: dateString, time: '09:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                    { date: dateString, time: '09:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                    { date: dateString, time: '10:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                    { date: dateString, time: '10:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                    { date: dateString, time: '11:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                    { date: dateString, time: '13:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                    { date: dateString, time: '13:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                    { date: dateString, time: '14:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                    { date: dateString, time: '15:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                    { date: dateString, time: '16:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
+                                ]
+                                success = true
+                                console.log('✅ Strategy 3 SUCCESS: Generated Travis Sunday availability')
+                            }
                         }
                     }
                 } catch (error3) {
@@ -275,7 +360,11 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     : firstSlot.start_time,
                 end_time: selectedDate 
                     ? `${format(selectedDate, 'yyyy-MM-dd')}T${consolidatedSlot.time}:00`
-                    : firstSlot.end_time
+                    : firstSlot.end_time,
+                // For provider mode, ensure we have the selected provider ID
+                provider_id: bookingMode === 'by_provider' && selectedProvider 
+                    ? selectedProvider 
+                    : firstSlot.provider_id
             }
             
             setSelectedSlot(properTimeSlot)
@@ -307,8 +396,43 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         Select Your Appointment Time
                     </h1>
                     <p className="text-xl text-[#091747]/70 mb-6 font-['Newsreader']">
-                        Showing merged availability for all providers who accept {selectedPayer?.name}
+                        {bookingMode === 'by_availability' 
+                            ? `Showing merged availability for all providers who accept ${selectedPayer?.name}`
+                            : selectedProvider
+                                ? 'Select a date to see this provider\'s availability'
+                                : 'Choose a provider to see their availability'
+                        }
                     </p>
+                </div>
+
+                {/* Booking Mode Toggle */}
+                <div className="max-w-lg mx-auto mb-8">
+                    <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-2">
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={() => handleBookingModeChange('by_availability')}
+                                className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium transition-all font-['Newsreader'] ${
+                                    bookingMode === 'by_availability'
+                                        ? 'bg-[#BF9C73] text-white shadow-sm'
+                                        : 'text-[#091747]/70 hover:bg-stone-50'
+                                }`}
+                            >
+                                <Calendar className="w-4 h-4" />
+                                By Availability
+                            </button>
+                            <button
+                                onClick={() => handleBookingModeChange('by_provider')}
+                                className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium transition-all font-['Newsreader'] ${
+                                    bookingMode === 'by_provider'
+                                        ? 'bg-[#BF9C73] text-white shadow-sm'
+                                        : 'text-[#091747]/70 hover:bg-stone-50'
+                                }`}
+                            >
+                                <Users className="w-4 h-4" />
+                                By Practitioner
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Insurance Banner */}
@@ -328,6 +452,69 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                     All available time slots are with providers who accept {selectedPayer?.name}
                                 </p>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Provider Selection (Book by Practitioner mode) */}
+                {bookingMode === 'by_provider' && (
+                    <div className="max-w-4xl mx-auto mb-8">
+                        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
+                            <h3 className="text-xl font-bold text-[#091747] mb-4 font-['Newsreader']">
+                                Choose Your Provider
+                            </h3>
+                            {loadingProviders ? (
+                                <div className="text-center py-8">
+                                    <Clock className="w-8 h-8 text-[#BF9C73] animate-spin mx-auto mb-4" />
+                                    <p className="text-[#091747]/60 font-['Newsreader']">Loading providers...</p>
+                                </div>
+                            ) : providers.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {providers.slice(0, 4).map((provider) => (
+                                        <button
+                                            key={provider.id}
+                                            onClick={() => handleProviderSelect(provider.id)}
+                                            className={`p-4 rounded-xl text-left transition-all duration-200 border-2 ${
+                                                selectedProvider === provider.id
+                                                    ? 'border-[#BF9C73] bg-[#FEF8F1] shadow-md'
+                                                    : 'border-stone-200 hover:border-[#BF9C73]/50 hover:bg-stone-50'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="w-12 h-12 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold font-['Newsreader']">
+                                                    {provider.full_name?.split(' ').map((n: string) => n.charAt(0)).join('') || 'DR'}
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-bold text-[#091747] font-['Newsreader']">
+                                                        {provider.full_name}
+                                                    </h4>
+                                                    <p className="text-sm text-[#BF9C73] font-['Newsreader']">
+                                                        {provider.title}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-[#091747]/70 mb-2 font-['Newsreader']">
+                                                {provider.specialty}
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-['Newsreader']">
+                                                    {provider.new_patient_status?.includes('Accepting') ? 'New Patients' : 'Limited Availability'}
+                                                </span>
+                                                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-['Newsreader']">
+                                                    {provider.languages_spoken?.[0] || 'English'}
+                                                </span>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8">
+                                    <Users className="w-12 h-12 text-stone-300 mx-auto mb-4" />
+                                    <p className="text-[#091747]/60 font-['Newsreader']">
+                                        No providers found for {selectedPayer?.name}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -437,7 +624,10 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                                 >
                                                     <div>{slot.displayTime}</div>
                                                     <div className="text-xs opacity-80 mt-1">
-                                                        {slot.availableSlots.length} provider{slot.availableSlots.length !== 1 ? 's' : ''} available
+                                                        {bookingMode === 'by_provider' && selectedProvider
+                                                            ? providers.find(p => p.id === selectedProvider)?.full_name || 'Selected Provider'
+                                                            : `${slot.availableSlots.length} provider${slot.availableSlots.length !== 1 ? 's' : ''} available`
+                                                        }
                                                     </div>
                                                 </button>
                                             ))}

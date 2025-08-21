@@ -122,7 +122,7 @@ class AthenaService {
   ): Promise<any> {
     try {
       const token = await this.getToken()
-      const url = `${this.baseUrl}/${this.practiceId}${endpoint}`
+      const url = `${this.baseUrl}/v1/${this.practiceId}${endpoint}`
 
       console.log(`🌐 Athena API request: ${options.method || 'GET'} ${endpoint}`)
 

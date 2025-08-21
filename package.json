@@ -11,7 +11,10 @@
     "athena:test": "tsx scripts/test-athena-connection.ts",
     "athena:sync": "tsx scripts/sync-athena-data.ts",
     "athena:sync:providers": "tsx scripts/sync-athena-data.ts --providers-only",
-    "athena:sync:full": "tsx scripts/sync-athena-data.ts --availability --appointments"
+    "athena:sync:full": "tsx scripts/sync-athena-data.ts --availability --appointments",
+    "athena:setup": "tsx scripts/athena-production-setup.ts",
+    "supabase:test": "tsx scripts/test-supabase-connection.ts",
+    "demo:enhance-providers": "tsx scripts/enhance-provider-data.ts"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.10.0",
