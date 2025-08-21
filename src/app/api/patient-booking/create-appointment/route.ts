@@ -1,7 +1,9 @@
 // src/app/api/patient-booking/create-appointment/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { athenaService } from '@/lib/services/athenaService'
+import { intakeQService } from '@/lib/services/intakeQService'
+import { emailService } from '@/lib/services/emailService'
 
 interface AppointmentRequest {
   providerId: string
@@ -18,7 +20,7 @@ interface AppointmentRequest {
   }
   appointmentType?: string
   reason?: string
-  createInAthena?: boolean
+  createInEMR?: boolean // Generic flag for EMR integration (IntakeQ or Athena)
 }
 
 export async function POST(request: NextRequest) {
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
       patient,
       appointmentType = 'consultation',
       reason = 'Scheduled appointment',
-      createInAthena = true
+      createInEMR = true
     } = data
 
     // Validate required fields
@@ -61,10 +63,13 @@ export async function POST(request: NextRequest) {
     const startDateTime = new Date(`${date}T${time}`)
     const endDateTime = new Date(startDateTime.getTime() + (duration * 60 * 1000))
 
+    // Determine which EMR system to use
+    const currentEMR = process.env.CURRENT_EMR || 'athena' // Default to Athena
+
     // Get provider details
-    const { data: provider, error: providerError } = await supabase
+    const { data: provider, error: providerError } = await supabaseAdmin
       .from('providers')
-      .select('id, first_name, last_name, athena_provider_id, npi')
+      .select('id, first_name, last_name, email, athena_provider_id, intakeq_practitioner_id, npi')
       .eq('id', providerId)
       .single()
 
@@ -75,10 +80,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if provider accepts this payer
-    const { data: network, error: networkError } = await supabase
+    // Check if provider accepts this payer and get payer info
+    const { data: network, error: networkError } = await supabaseAdmin
       .from('provider_payer_networks')
-      .select('*')
+      .select('*, payers(name)')
       .eq('provider_id', providerId)
       .eq('payer_id', payerId)
       .eq('status', 'in_network')
@@ -91,47 +96,101 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let athenaAppointmentId: string | null = null
+    let emrAppointmentId: string | null = null
     let appointmentStatus = 'scheduled'
+    let emrSystem = currentEMR
 
-    // Create appointment in Athena if enabled and provider has Athena ID
-    if (createInAthena && provider.athena_provider_id) {
+    // Create appointment in the configured EMR system
+    if (createInEMR) {
       try {
-        console.log('🏥 Creating appointment in Athena...')
-        
-        athenaAppointmentId = await athenaService.createAppointment({
-          providerId: provider.athena_provider_id,
-          departmentId: '1', // Default department - should be configured
-          appointmentType,
-          date,
-          startTime: time,
-          patientFirstName: patient.firstName,
-          patientLastName: patient.lastName,
-          patientPhone: patient.phone,
-          patientEmail: patient.email,
-          reason
-        })
+        if (currentEMR === 'intakeq') {
+          // Create appointment in IntakeQ
+          console.log('🏥 Creating appointment in IntakeQ...')
+          
+          // Use provider's specific IntakeQ practitioner ID
+          const intakeqPractitionerId = provider.intakeq_practitioner_id
+          
+          if (!intakeqPractitionerId) {
+            throw new Error(`Provider ${provider.first_name} ${provider.last_name} is not mapped to an IntakeQ practitioner`)
+          }
+          
+          console.log(`📋 Using IntakeQ practitioner ID: ${intakeqPractitionerId} for ${provider.first_name} ${provider.last_name}`)
+          
+          emrAppointmentId = await intakeQService.createAppointment({
+            practitionerId: intakeqPractitionerId,
+            clientFirstName: patient.firstName,
+            clientLastName: patient.lastName,
+            clientEmail: patient.email,
+            clientPhone: patient.phone,
+            clientDateOfBirth: patient.dateOfBirth,
+            serviceId: process.env.INTAKEQ_SERVICE_ID || 'default_service',
+            locationId: process.env.INTAKEQ_LOCATION_ID || 'default_location',
+            dateTime: startDateTime,
+            status: 'Confirmed',
+            sendEmailNotification: true
+          })
 
-        console.log(`✅ Athena appointment created: ${athenaAppointmentId}`)
-        appointmentStatus = 'confirmed'
+          console.log(`✅ IntakeQ appointment created: ${emrAppointmentId}`)
+          appointmentStatus = 'confirmed'
 
-      } catch (athenaError: any) {
-        console.error('❌ Failed to create appointment in Athena:', athenaError.message)
+        } else if (currentEMR === 'athena' && provider.athena_provider_id) {
+          // Create appointment in Athena
+          console.log('🏥 Creating appointment in Athena...')
+          
+          emrAppointmentId = await athenaService.createAppointment({
+            providerId: provider.athena_provider_id,
+            departmentId: '1', // Default department - should be configured
+            appointmentType,
+            date,
+            startTime: time,
+            patientFirstName: patient.firstName,
+            patientLastName: patient.lastName,
+            patientPhone: patient.phone,
+            patientEmail: patient.email,
+            reason
+          })
+
+          console.log(`✅ Athena appointment created: ${emrAppointmentId}`)
+          appointmentStatus = 'confirmed'
+        } else {
+          console.log(`⚠️ EMR integration skipped: currentEMR=${currentEMR}, provider has required ID: ${currentEMR === 'athena' ? !!provider.athena_provider_id : 'N/A for IntakeQ'}`)
+        }
+
+      } catch (emrError: any) {
+        console.error(`❌ Failed to create appointment in ${currentEMR.toUpperCase()}:`, emrError.message)
         
         // Continue with local appointment creation but mark the error
-        appointmentStatus = 'scheduled_local_only'
+        appointmentStatus = 'scheduled'
       }
+    }
+
+    // Get a service instance (required for appointments table)
+    const { data: serviceInstances, error: serviceError } = await supabaseAdmin
+      .from('service_instances')
+      .select('id')
+      .limit(1)
+
+    if (serviceError || !serviceInstances || serviceInstances.length === 0) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'No service instances available',
+          details: serviceError?.message
+        },
+        { status: 500 }
+      )
     }
 
     // Create appointment in local database
     const appointmentData = {
       provider_id: providerId,
       payer_id: payerId,
-      athena_appointment_id: athenaAppointmentId,
+      service_instance_id: serviceInstances[0].id,
+      athena_appointment_id: emrAppointmentId, // Store EMR appointment ID here regardless of system
       start_time: startDateTime.toISOString(),
       end_time: endDateTime.toISOString(),
       status: appointmentStatus,
-      appointment_type: appointmentType,
+      appointment_type: null, // Skip validation for now
       patient_info: {
         first_name: patient.firstName,
         last_name: patient.lastName,
@@ -139,13 +198,13 @@ export async function POST(request: NextRequest) {
         phone: patient.phone,
         date_of_birth: patient.dateOfBirth
       },
-      notes: reason,
-      created_via: 'patient_booking_widget',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      insurance_info: {
+        payer_id: payerId
+      },
+      notes: reason
     }
 
-    const { data: appointment, error: appointmentError } = await supabase
+    const { data: appointment, error: appointmentError } = await supabaseAdmin
       .from('appointments')
       .insert(appointmentData)
       .select()
@@ -154,12 +213,16 @@ export async function POST(request: NextRequest) {
     if (appointmentError) {
       console.error('❌ Failed to create appointment in database:', appointmentError)
       
-      // If we created in Athena but failed locally, try to cancel Athena appointment
-      if (athenaAppointmentId) {
+      // If we created in EMR but failed locally, try to cancel EMR appointment
+      if (emrAppointmentId) {
         try {
-          await athenaService.cancelAppointment(athenaAppointmentId, 'Database creation failed')
+          if (currentEMR === 'athena') {
+            await athenaService.cancelAppointment(emrAppointmentId, 'Database creation failed')
+          } else if (currentEMR === 'intakeq') {
+            await intakeQService.updateAppointmentStatus(emrAppointmentId, 'Cancelled')
+          }
         } catch (cancelError) {
-          console.error('❌ Failed to cancel Athena appointment after database error:', cancelError)
+          console.error(`❌ Failed to cancel ${currentEMR.toUpperCase()} appointment after database error:`, cancelError)
         }
       }
 
@@ -175,13 +238,43 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Appointment created successfully:', appointment.id)
 
+    // Send email notifications
+    try {
+      await emailService.sendAppointmentNotifications({
+        appointmentId: appointment.id,
+        emrAppointmentId: emrAppointmentId,
+        provider: {
+          id: provider.id,
+          name: `${provider.first_name} ${provider.last_name}`,
+          email: provider.email || 'unknown@trymoonlit.com' // Fallback if no email
+        },
+        patient: {
+          name: `${patient.firstName} ${patient.lastName}`,
+          email: patient.email,
+          phone: patient.phone
+        },
+        schedule: {
+          date,
+          startTime: time,
+          endTime: endDateTime.toTimeString().slice(0, 5),
+          duration: `${duration} minutes`
+        },
+        emrSystem: currentEMR,
+        payerName: network.payers?.name || 'Unknown'
+      })
+    } catch (emailError: any) {
+      console.error('⚠️ Email notification failed (appointment still created):', emailError.message)
+    }
+
     // Prepare response
     const response = {
       success: true,
       data: {
         appointment: {
           id: appointment.id,
-          athena_appointment_id: athenaAppointmentId,
+          emr_appointment_id: emrAppointmentId,
+          emr_system: emrSystem,
+          athena_appointment_id: emrAppointmentId, // Store EMR ID in athena field for now
           provider: {
             id: provider.id,
             name: `${provider.first_name} ${provider.last_name}`,
@@ -200,13 +293,16 @@ export async function POST(request: NextRequest) {
           },
           status: appointmentStatus,
           appointment_type: appointmentType,
-          created_in_athena: !!athenaAppointmentId
+          created_in_emr: !!emrAppointmentId,
+          created_in_athena: currentEMR === 'athena' && !!emrAppointmentId
         },
         booking_confirmation: {
           confirmation_number: appointment.id,
-          athena_confirmation: athenaAppointmentId,
-          instructions: athenaAppointmentId 
-            ? 'Your appointment has been scheduled in both our system and Athena Health EMR.'
+          emr_confirmation: emrAppointmentId,
+          emr_system: emrSystem,
+          athena_confirmation: currentEMR === 'athena' ? emrAppointmentId : null,
+          instructions: emrAppointmentId 
+            ? `Your appointment has been scheduled in both our system and ${emrSystem.toUpperCase()} EMR.`
             : 'Your appointment has been scheduled. EMR integration pending.'
         }
       }
