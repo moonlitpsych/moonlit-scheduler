@@ -1,5 +1,7 @@
 // src/app/layout.tsx
 import { AuthProvider } from '@/contexts/AuthContext'
+import Header from '@/components/layout/Header'
+import Footer from '@/components/layout/Footer'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
@@ -7,8 +9,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-    title: 'Moonlit Practitioner Portal',
-    description: 'Manage your schedule and availability',
+    title: 'Moonlit Psychiatry - Professional Psychiatric Care',
+    description: 'We only work with physicians with the best training — both in medicine and in bedside manner. Book your telehealth appointment today.',
 }
 
 export default function RootLayout({
@@ -20,7 +22,13 @@ export default function RootLayout({
         <html lang="en">
             <body className={inter.className}>
                 <AuthProvider>
-                    {children}
+                    <div className="min-h-screen flex flex-col">
+                        <Header />
+                        <main className="flex-grow pt-16">
+                            {children}
+                        </main>
+                        <Footer />
+                    </div>
                 </AuthProvider>
             </body>
         </html>
