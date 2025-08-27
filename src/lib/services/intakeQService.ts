@@ -1,0 +1,243 @@
+// src/lib/services/intakeQService.ts
+interface IntakeQAppointment {
+  PractitionerId: string
+  ClientId: string
+  ServiceId: string
+  LocationId: string
+  Status: 'Confirmed' | 'WaitingConfirmation'
+  UtcDateTime: number // Unix timestamp
+  SendClientEmailNotification?: boolean
+}
+
+interface IntakeQClient {
+  FirstName: string
+  LastName: string
+  Email: string
+  Phone: string
+  DateOfBirth?: string
+}
+
+interface IntakeQAppointmentResponse {
+  Id: number
+  PractitionerId: string
+  ClientId: string
+  ServiceId: string
+  LocationId: string
+  Status: string
+  UtcDateTime: number
+  // ... other response fields
+}
+
+class IntakeQService {
+  private baseUrl = 'https://intakeq.com/api/v1'
+  private apiKey: string
+  private requestCount = 0
+  private dailyRequestCount = 0
+  private lastRequestTime = 0
+  private lastDayReset = new Date().getDate()
+
+  constructor() {
+    this.apiKey = process.env.INTAKEQ_API_KEY || ''
+    if (!this.apiKey) {
+      console.warn('⚠️ IntakeQ API key not found. Set INTAKEQ_API_KEY environment variable.')
+    }
+  }
+
+  private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    // Rate limiting: 10 requests/minute, 500/day
+    const now = Date.now()
+    const currentDay = new Date().getDate()
+    
+    // Reset daily counter if new day
+    if (currentDay !== this.lastDayReset) {
+      this.dailyRequestCount = 0
+      this.lastDayReset = currentDay
+    }
+
+    // Check daily limit
+    if (this.dailyRequestCount >= 500) {
+      throw new Error('Daily API limit reached (500 requests)')
+    }
+
+    // Check per-minute limit (simple throttling)
+    if (now - this.lastRequestTime < 6000 && this.requestCount >= 10) {
+      throw new Error('Rate limit: 10 requests per minute exceeded')
+    }
+
+    if (now - this.lastRequestTime >= 60000) {
+      this.requestCount = 0 // Reset minute counter
+    }
+
+    const url = `${this.baseUrl}${endpoint}`
+    
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Auth-Key': this.apiKey,
+        ...options.headers,
+      },
+    })
+
+    this.requestCount++
+    this.dailyRequestCount++
+    this.lastRequestTime = now
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`IntakeQ API error: ${response.status} ${response.statusText} - ${errorText}`)
+    }
+
+    return response.json()
+  }
+
+  async createClient(clientData: IntakeQClient): Promise<{ Id: string }> {
+    console.log('📝 Creating IntakeQ client...')
+    
+    try {
+      const response = await this.makeRequest<{ ClientId: number }>('/clients', {
+        method: 'POST',
+        body: JSON.stringify(clientData),
+      })
+      
+      console.log(`✅ IntakeQ client created: ${response.ClientId}`)
+      return { Id: response.ClientId.toString() }
+    } catch (error: any) {
+      console.error('❌ Failed to create IntakeQ client:', error.message)
+      throw error
+    }
+  }
+
+  async createAppointment(appointmentData: {
+    practitionerId: string
+    clientFirstName: string
+    clientLastName: string
+    clientEmail: string
+    clientPhone: string
+    clientDateOfBirth?: string
+    serviceId: string
+    locationId: string
+    dateTime: Date
+    status?: 'Confirmed' | 'WaitingConfirmation'
+    sendEmailNotification?: boolean
+  }): Promise<string> {
+    console.log('📅 Creating IntakeQ appointment...')
+
+    try {
+      // Step 1: Create or find client
+      const clientData: IntakeQClient = {
+        FirstName: appointmentData.clientFirstName,
+        LastName: appointmentData.clientLastName,
+        Email: appointmentData.clientEmail,
+        Phone: appointmentData.clientPhone,
+        DateOfBirth: appointmentData.clientDateOfBirth,
+      }
+
+      let clientId: string
+      
+      try {
+        const clientResponse = await this.createClient(clientData)
+        clientId = clientResponse.Id
+      } catch (clientError: any) {
+        // If client creation fails (might already exist), we'll need to handle this
+        // For now, throw the error and handle gracefully in the calling code
+        console.error('❌ Client creation failed:', clientError.message)
+        throw new Error('Failed to create/find client in IntakeQ')
+      }
+
+      // Step 2: Create appointment  
+      // IntakeQ requires timestamps in milliseconds and times must be on 5-minute boundaries
+      const appointmentDateTime = new Date(appointmentData.dateTime)
+      const minutes = appointmentDateTime.getMinutes()
+      const roundedMinutes = Math.round(minutes / 5) * 5
+      appointmentDateTime.setMinutes(roundedMinutes, 0, 0) // Round to 5-min interval, zero seconds/ms
+      
+      const utcTimestamp = appointmentDateTime.getTime()
+      
+      console.log(`🕐 Appointment DateTime: ${appointmentData.dateTime.toISOString()}`)
+      console.log(`🕐 UTC Timestamp: ${utcTimestamp}`)
+      
+      const appointmentPayload: IntakeQAppointment = {
+        PractitionerId: appointmentData.practitionerId,
+        ClientId: clientId,
+        ServiceId: appointmentData.serviceId,
+        LocationId: appointmentData.locationId,
+        Status: appointmentData.status || 'Confirmed',
+        UtcDateTime: utcTimestamp,
+        SendClientEmailNotification: appointmentData.sendEmailNotification ?? true,
+      }
+      
+      console.log('📋 IntakeQ appointment payload:')
+      console.log(JSON.stringify(appointmentPayload, null, 2))
+
+      const response = await this.makeRequest<IntakeQAppointmentResponse>('/appointments', {
+        method: 'POST',
+        body: JSON.stringify(appointmentPayload),
+      })
+
+      const appointmentId = response.Id.toString()
+      console.log(`✅ IntakeQ appointment created: ${appointmentId}`)
+      
+      return appointmentId
+    } catch (error: any) {
+      console.error('❌ Failed to create IntakeQ appointment:', error.message)
+      throw error
+    }
+  }
+
+  async getAppointment(appointmentId: string): Promise<IntakeQAppointmentResponse> {
+    console.log(`🔍 Fetching IntakeQ appointment: ${appointmentId}`)
+    
+    try {
+      const response = await this.makeRequest<IntakeQAppointmentResponse>(`/appointments/${appointmentId}`)
+      return response
+    } catch (error: any) {
+      console.error('❌ Failed to fetch IntakeQ appointment:', error.message)
+      throw error
+    }
+  }
+
+  async updateAppointmentStatus(appointmentId: string, status: 'Confirmed' | 'Cancelled' | 'NoShow'): Promise<void> {
+    console.log(`🔄 Updating IntakeQ appointment ${appointmentId} status to: ${status}`)
+    
+    try {
+      await this.makeRequest(`/appointments/${appointmentId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ Status: status }),
+      })
+      
+      console.log(`✅ IntakeQ appointment ${appointmentId} status updated`)
+    } catch (error: any) {
+      console.error('❌ Failed to update IntakeQ appointment status:', error.message)
+      throw error
+    }
+  }
+
+  // Test connection method
+  async testConnection(): Promise<boolean> {
+    console.log('🔧 Testing IntakeQ connection...')
+    
+    try {
+      // Try to make a simple request to verify API key works
+      // Since we don't have a specific "test" endpoint, we'll try to get practitioners
+      await this.makeRequest('/practitioners')
+      console.log('✅ IntakeQ connection successful')
+      return true
+    } catch (error: any) {
+      console.error('❌ IntakeQ connection failed:', error.message)
+      return false
+    }
+  }
+
+  // Utility method to check rate limits
+  getRateLimitStatus(): { requestsThisMinute: number, requestsToday: number } {
+    return {
+      requestsThisMinute: this.requestCount,
+      requestsToday: this.dailyRequestCount,
+    }
+  }
+}
+
+// Create and export singleton instance
+export const intakeQService = new IntakeQService()
+export default intakeQService

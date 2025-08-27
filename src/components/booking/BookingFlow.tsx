@@ -98,10 +98,60 @@ export default function BookingFlow() {
         goToStep('roi')
     }
 
-    const handleROISubmitted = (roiContacts: ROIContact[]) => {
+    const handleROISubmitted = async (roiContacts: ROIContact[]) => {
         updateState({ roiContacts })
-        // Here you would actually submit the appointment to your backend
-        // For now, just go to confirmation
+        
+        // Create appointment using the Athena-integrated endpoint
+        try {
+            console.log('📅 Creating appointment with Athena integration...')
+            
+            const appointmentData = {
+                providerId: state.selectedTimeSlot?.provider_id,
+                payerId: state.selectedPayer?.id,
+                date: state.selectedTimeSlot?.date || state.selectedTimeSlot?.start_time?.split('T')[0],
+                time: state.selectedTimeSlot?.start_time?.split('T')[1]?.substring(0, 5) || state.selectedTimeSlot?.start_time,
+                patient: {
+                    firstName: state.insuranceInfo?.firstName || '',
+                    lastName: state.insuranceInfo?.lastName || '',
+                    email: state.insuranceInfo?.email || '',
+                    phone: state.insuranceInfo?.phone || '',
+                    dateOfBirth: state.insuranceInfo?.dob || ''
+                },
+                appointmentType: 'consultation',
+                reason: 'Scheduled appointment via booking flow',
+                createInAthena: true
+            }
+
+            console.log('📋 Appointment data:', appointmentData)
+
+            const response = await fetch('/api/patient-booking/create-appointment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(appointmentData)
+            })
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`)
+            }
+
+            const result = await response.json()
+            
+            if (result.success) {
+                console.log('✅ Appointment created successfully:', result.data.appointment.id)
+                updateState({ 
+                    appointmentId: result.data.appointment.id,
+                    roiContacts 
+                })
+            } else {
+                throw new Error(result.error || 'Appointment creation failed')
+            }
+
+        } catch (error: any) {
+            console.error('❌ Appointment creation failed:', error)
+            // Still proceed to confirmation but without appointment ID
+            // User will see the error and can try again
+        }
+        
         goToStep('confirmation')
     }
 
@@ -301,6 +351,8 @@ export default function BookingFlow() {
             case 'confirmation':
                 return (
                     <ConfirmationView
+                        appointmentId={state.appointmentId}
+                        patientInfo={state.insuranceInfo}
                         selectedPayer={state.selectedPayer}
                         selectedTimeSlot={state.selectedTimeSlot}
                         bookingScenario={state.bookingScenario}

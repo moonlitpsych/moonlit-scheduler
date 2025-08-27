@@ -20,7 +20,7 @@ interface AvailableSlot {
 
 export async function POST(request: NextRequest) {
     try {
-        const { payer_id, date, startDate, endDate, appointmentDuration = 60 } = await request.json()
+        const { payer_id, date, startDate, endDate, appointmentDuration = 60, provider_id } = await request.json()
 
         // Support both single date and date range requests
         const requestDate = date || startDate
@@ -33,10 +33,10 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        console.log(`🔍 Getting merged availability for payer ${payer_id} on ${requestDate}`)
+        console.log(`🔍 Getting ${provider_id ? 'provider-specific' : 'merged'} availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
 
         // Step 1: Get providers who accept this payer using CORRECT table name
-        const { data: networks, error: networksError } = await supabase
+        let query = supabase
             .from('provider_payer_networks')
             .select(`
                 provider_id,
@@ -56,6 +56,13 @@ export async function POST(request: NextRequest) {
             .eq('payer_id', payer_id)
             .eq('status', 'in_network')
             .eq('providers.is_active', true)
+
+        // If provider_id is specified, filter for that specific provider
+        if (provider_id) {
+            query = query.eq('provider_id', provider_id)
+        }
+
+        const { data: networks, error: networksError } = await query
 
         if (networksError) {
             console.error('❌ Error fetching provider networks:', networksError)
