@@ -1,12 +1,13 @@
 'use client'
 
-import { PatientInfo, TimeSlot } from '@/types/database'
+import { PatientInfo, TimeSlot, Payer } from '@/types/database'
 import { BookingScenario } from './WelcomeView'
 
 interface ConfirmationViewProps {
     appointmentId?: string
     patientInfo?: PatientInfo
     selectedTimeSlot?: TimeSlot
+    selectedPayer?: Payer
     bookingScenario: BookingScenario
     caseManagerInfo?: {
         name: string
@@ -28,6 +29,7 @@ export default function ConfirmationView({
     appointmentId,
     patientInfo,
     selectedTimeSlot,
+    selectedPayer,
     bookingScenario,
     caseManagerInfo,
     communicationPreferences,
@@ -35,20 +37,30 @@ export default function ConfirmationView({
     onChangeAppointment,
     onChangeInsurance
 }: ConfirmationViewProps) {
-    const formatDateTime = (date: string, startTime: string) => {
-        const dateObj = new Date(date)
-        const [hours, minutes] = startTime.split(':')
-        dateObj.setHours(parseInt(hours), parseInt(minutes))
-        
-        return dateObj.toLocaleString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        })
+    const formatDateTime = (startTime: string) => {
+        try {
+            // startTime is in format "2024-08-27T14:00:00"
+            const dateObj = new Date(startTime)
+            
+            // Check if date is valid
+            if (isNaN(dateObj.getTime())) {
+                console.error('Invalid date:', startTime)
+                return 'Invalid date/time'
+            }
+            
+            return dateObj.toLocaleString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            })
+        } catch (error) {
+            console.error('Error formatting date:', error, startTime)
+            return 'Invalid date/time'
+        }
     }
 
     const getScenarioTitle = () => {
@@ -112,7 +124,7 @@ export default function ConfirmationView({
                                 <div>
                                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Date & Time</h3>
                                     <p className="text-gray-700 mb-2">
-                                        {formatDateTime(selectedTimeSlot.date, selectedTimeSlot.start_time)}
+                                        {formatDateTime(selectedTimeSlot.start_time)}
                                     </p>
                                     {selectedTimeSlot.duration_minutes && (
                                         <p className="text-sm text-gray-600">

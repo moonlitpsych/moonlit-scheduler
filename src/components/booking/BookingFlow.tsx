@@ -4,6 +4,7 @@ import { InsuranceInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
 import { useState } from 'react'
 
 // Import view components (ensure these match your actual imports)
+import AppointmentSummaryView from './views/AppointmentSummaryView'
 import CalendarView from './views/CalendarView'
 import ConfirmationView from './views/ConfirmationView'
 import InsuranceFutureView from './views/InsuranceFutureView'
@@ -23,6 +24,7 @@ export type BookingStep =
     | 'calendar'
     | 'insurance-info'
     | 'roi'
+    | 'appointment-summary'
     | 'confirmation'
 
 export type BookingScenario = 'self' | 'third-party' | 'case-manager'
@@ -100,26 +102,42 @@ export default function BookingFlow() {
 
     const handleROISubmitted = async (roiContacts: ROIContact[]) => {
         updateState({ roiContacts })
-        
-        // Create appointment using the Athena-integrated endpoint
+        goToStep('appointment-summary')
+    }
+
+    const handleAppointmentConfirmed = async () => {
+        // Create appointment using the EMR integration
         try {
-            console.log('📅 Creating appointment with Athena integration...')
+            console.log('📅 Creating appointment with EMR integration...')
+            
+            // Validate required data
+            if (!state.selectedTimeSlot?.provider_id || !state.selectedPayer?.id || !state.selectedTimeSlot?.start_time) {
+                throw new Error('Missing required booking data')
+            }
+            
+            const startTime = state.selectedTimeSlot.start_time
+            const datePart = startTime.split('T')[0]
+            const timePart = startTime.split('T')[1]?.substring(0, 5)
+            
+            if (!datePart || !timePart) {
+                throw new Error('Invalid date/time format in selected time slot')
+            }
             
             const appointmentData = {
-                providerId: state.selectedTimeSlot?.provider_id,
-                payerId: state.selectedPayer?.id,
-                date: state.selectedTimeSlot?.date || state.selectedTimeSlot?.start_time?.split('T')[0],
-                time: state.selectedTimeSlot?.start_time?.split('T')[1]?.substring(0, 5) || state.selectedTimeSlot?.start_time,
+                providerId: state.selectedTimeSlot.provider_id,
+                payerId: state.selectedPayer.id,
+                date: datePart, // Extract date from start_time
+                time: timePart, // Extract HH:MM from start_time
                 patient: {
                     firstName: state.insuranceInfo?.firstName || '',
                     lastName: state.insuranceInfo?.lastName || '',
                     email: state.insuranceInfo?.email || '',
                     phone: state.insuranceInfo?.phone || '',
-                    dateOfBirth: state.insuranceInfo?.dob || ''
+                    dateOfBirth: state.insuranceInfo?.dob || state.insuranceInfo?.dateOfBirth || ''
                 },
                 appointmentType: 'consultation',
                 reason: 'Scheduled appointment via booking flow',
-                createInAthena: true
+                createInEMR: true // ✅ FIXED: Use createInEMR instead of createInAthena
             }
 
             console.log('📋 Appointment data:', appointmentData)
@@ -140,7 +158,7 @@ export default function BookingFlow() {
                 console.log('✅ Appointment created successfully:', result.data.appointment.id)
                 updateState({ 
                     appointmentId: result.data.appointment.id,
-                    roiContacts 
+                    roiContacts: state.roiContacts
                 })
             } else {
                 throw new Error(result.error || 'Appointment creation failed')
@@ -345,6 +363,22 @@ export default function BookingFlow() {
                         bookingScenario={state.bookingScenario}
                         onSubmit={handleROISubmitted}
                         onBack={() => goToStep('insurance-info')}
+                    />
+                )
+
+            case 'appointment-summary':
+                return (
+                    <AppointmentSummaryView
+                        selectedPayer={state.selectedPayer}
+                        selectedTimeSlot={state.selectedTimeSlot}
+                        insuranceInfo={state.insuranceInfo}
+                        roiContacts={state.roiContacts}
+                        bookingScenario={state.bookingScenario}
+                        onConfirmBooking={handleAppointmentConfirmed}
+                        onEditInsurance={() => goToStep('insurance-info')}
+                        onEditTimeSlot={() => goToStep('calendar')}
+                        onEditROI={() => goToStep('roi')}
+                        onBack={() => goToStep('roi')}
                     />
                 )
 

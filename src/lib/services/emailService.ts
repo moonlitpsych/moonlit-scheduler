@@ -28,17 +28,58 @@ class EmailService {
     console.log('📧 Sending appointment notifications...')
     
     try {
-      // Send notification to admin
+      // Always send admin notification
       await this.sendAdminNotification(appointmentDetails)
+      console.log('✅ Admin notification sent successfully')
       
-      // Send notification to practitioner
-      await this.sendPractitionerNotification(appointmentDetails)
+      // IntakeQ handles patient/provider emails natively
+      console.log('ℹ️ Patient/Provider notifications handled by IntakeQ natively')
+      console.log('📧 If IntakeQ emails bounce, they will appear in IntakeQ notifications/logs')
       
-      console.log('✅ All appointment notifications sent successfully')
     } catch (error: any) {
-      console.error('❌ Failed to send appointment notifications:', error.message)
+      console.error('❌ Failed to send admin notification:', error.message)
       // Don't throw - email failure shouldn't break appointment creation
     }
+  }
+
+  // Future method for handling bounced emails from IntakeQ
+  async sendFallbackPatientNotification(appointmentDetails: AppointmentDetails, alternateEmail?: string): Promise<void> {
+    console.log('📧 Sending fallback patient notification...')
+    
+    const subject = `Appointment Confirmation - ${appointmentDetails.schedule.date}`
+    
+    const emailBody = `
+Dear ${appointmentDetails.patient.name.split(' ')[0]},
+
+Your appointment has been successfully scheduled:
+
+APPOINTMENT DETAILS:
+• Provider: ${appointmentDetails.provider.name}
+• Date: ${appointmentDetails.schedule.date}
+• Time: ${appointmentDetails.schedule.startTime}
+• Duration: ${appointmentDetails.schedule.duration}
+• Location: Telehealth (link will be provided separately)
+
+IMPORTANT NOTES:
+• Please arrive 5-10 minutes early for your telehealth appointment
+• You will receive a separate email with the meeting link
+• If you need to reschedule, please call us at least 24 hours in advance
+
+Questions? Contact us at hello@trymoonlit.com or ${appointmentDetails.patient.phone}
+
+Best regards,
+Moonlit Psychiatry Team
+    `.trim()
+
+    const recipientEmail = alternateEmail || appointmentDetails.patient.email
+    
+    await this.sendEmail({
+      to: recipientEmail,
+      subject,
+      body: emailBody
+    })
+
+    console.log(`📧 Fallback patient notification sent to ${recipientEmail}`)
   }
 
   private async sendAdminNotification(details: AppointmentDetails): Promise<void> {
@@ -63,8 +104,8 @@ SYSTEM DETAILS:
 
 NEXT STEPS:
 ✅ Appointment has been automatically created in ${details.emrSystem.toUpperCase()}
-✅ Practitioner has been notified
-⏳ Awaiting practitioner confirmation
+ℹ️ Patient & Practitioner notifications handled by ${details.emrSystem.toUpperCase()} natively
+⏳ Check IntakeQ dashboard to verify appointment appears correctly
 
 ---
 This booking was created through the Moonlit Scheduler widget.
@@ -123,33 +164,54 @@ Moonlit Scheduler Team
   }
 
   private async sendEmail(params: { to: string; subject: string; body: string }): Promise<void> {
-    // For now, this is a placeholder that logs the email
-    // In production, you would integrate with a service like:
-    // - SendGrid
-    // - AWS SES
-    // - Resend
-    // - Nodemailer with SMTP
+    // Check if we have Resend API key configured
+    const resendApiKey = process.env.RESEND_API_KEY
     
-    console.log('📬 EMAIL TO SEND:')
-    console.log(`To: ${params.to}`)
-    console.log(`Subject: ${params.subject}`)
-    console.log('Body:')
-    console.log('---')
-    console.log(params.body)
-    console.log('---\n')
-    
-    // Simulate email sending delay
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    // TODO: Replace with actual email service integration
-    // Example with Resend:
-    // const resend = new Resend(process.env.RESEND_API_KEY)
-    // await resend.emails.send({
-    //   from: 'notifications@trymoonlit.com',
-    //   to: params.to,
-    //   subject: params.subject,
-    //   text: params.body
-    // })
+    if (!resendApiKey) {
+      console.log('⚠️ No RESEND_API_KEY found - logging email instead of sending:')
+      console.log('📬 EMAIL TO SEND:')
+      console.log(`To: ${params.to}`)
+      console.log(`Subject: ${params.subject}`)
+      console.log('Body:')
+      console.log('---')
+      console.log(params.body)
+      console.log('---\n')
+      return
+    }
+
+    try {
+      // Use Resend to send actual emails
+      const { Resend } = await import('resend')
+      const resend = new Resend(resendApiKey)
+
+      const { data, error } = await resend.emails.send({
+        from: process.env.FROM_EMAIL || 'Moonlit Scheduler <notifications@trymoonlit.com>',
+        to: params.to,
+        subject: params.subject,
+        text: params.body,
+      })
+
+      if (error) {
+        throw new Error(`Resend API error: ${error.message}`)
+      }
+
+      console.log(`✅ Email sent successfully to ${params.to} (ID: ${data?.id})`)
+      
+    } catch (error: any) {
+      console.error(`❌ Failed to send email to ${params.to}:`, error.message)
+      
+      // Fallback: log the email content so it's not lost
+      console.log('📬 EMAIL CONTENT (fallback):')
+      console.log(`To: ${params.to}`)
+      console.log(`Subject: ${params.subject}`)
+      console.log('Body:')
+      console.log('---')
+      console.log(params.body)
+      console.log('---\n')
+      
+      // Re-throw error so caller knows sending failed
+      throw new Error(`Email delivery failed: ${error.message}`)
+    }
   }
 }
 

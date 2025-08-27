@@ -1,5 +1,6 @@
 // src/app/api/patient-booking/merged-availability/route.ts
 import { supabase } from '@/lib/supabase'
+import { intakeQService } from '@/lib/services/intakeQService'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface AvailableSlot {
@@ -131,8 +132,13 @@ export async function POST(request: NextRequest) {
 
         console.log(`✅ Generated ${allSlots.length} total time slots`)
 
-        // Group slots by date for easier frontend consumption
-        const slotsByDate = allSlots.reduce((acc, slot) => {
+        // Step 5: Filter out slots that conflict with existing IntakeQ appointments
+        const filteredSlots = await filterConflictingAppointments(allSlots, requestDate)
+        
+        console.log(`🔍 After filtering conflicts: ${filteredSlots.length} available slots (removed ${allSlots.length - filteredSlots.length} conflicts)`)
+
+        // Group filtered slots by date for easier frontend consumption
+        const slotsByDate = filteredSlots.reduce((acc, slot) => {
             if (!acc[slot.date]) {
                 acc[slot.date] = []
             }
@@ -143,10 +149,10 @@ export async function POST(request: NextRequest) {
         const response = {
             success: true,
             data: {
-                totalSlots: allSlots.length,
+                totalSlots: filteredSlots.length,
                 dateRange: { startDate: requestDate, endDate: requestEndDate },
                 slotsByDate,
-                availableSlots: allSlots.slice(0, 50), // Limit for performance
+                availableSlots: filteredSlots.slice(0, 50), // Limit for performance
                 providers: providers.map(p => ({
                     id: p.id,
                     name: `${p.first_name} ${p.last_name}`,
@@ -242,4 +248,80 @@ function generateTimeSlotsFromAvailability(
 
 function formatTime(date: Date): string {
     return date.toTimeString().slice(0, 5) // Returns "HH:MM"
+}
+
+async function filterConflictingAppointments(slots: AvailableSlot[], date: string): Promise<AvailableSlot[]> {
+    console.log(`🔍 Checking for appointment conflicts on ${date}...`)
+    
+    // Group slots by provider to minimize API calls
+    const slotsByProvider = slots.reduce((acc, slot) => {
+        const providerId = slot.providerId
+        if (!acc[providerId]) {
+            acc[providerId] = []
+        }
+        acc[providerId].push(slot)
+        return acc
+    }, {} as Record<string, AvailableSlot[]>)
+
+    const filteredSlots: AvailableSlot[] = []
+    
+    for (const [providerId, providerSlots] of Object.entries(slotsByProvider)) {
+        try {
+            // Get provider's IntakeQ practitioner ID from the first slot
+            // We'll need to look this up from the database
+            const { data: provider, error } = await supabase
+                .from('providers')
+                .select('intakeq_practitioner_id')
+                .eq('id', providerId)
+                .single()
+
+            if (error || !provider?.intakeq_practitioner_id) {
+                console.log(`⚠️ No IntakeQ practitioner ID for provider ${providerId}, skipping conflict check`)
+                // Add all slots for this provider if no IntakeQ mapping
+                filteredSlots.push(...providerSlots)
+                continue
+            }
+
+            // Get existing appointments for this practitioner on this date
+            const existingAppointments = await intakeQService.getAppointmentsForDate(
+                provider.intakeq_practitioner_id, 
+                date
+            )
+
+            console.log(`📅 Provider ${providerId} has ${existingAppointments.length} existing appointments`)
+
+            // Filter out slots that conflict with existing appointments
+            const availableSlots = providerSlots.filter(slot => {
+                const slotStartTime = new Date(`${slot.date}T${slot.time}:00`).getTime()
+                
+                // Check if this slot conflicts with any existing appointment
+                const hasConflict = existingAppointments.some(appointment => {
+                    const appointmentStart = new Date(appointment.StartDate)
+                    const appointmentEnd = new Date(appointment.EndDate || (appointment.StartDate + 60 * 60 * 1000)) // Use EndDate or assume 60min
+                    
+                    const slotStart = new Date(slotStartTime)
+                    const slotEnd = new Date(slotStartTime + 60 * 60 * 1000) // Assume 60min slots
+                    
+                    // Check for overlap
+                    return (slotStart < appointmentEnd && slotEnd > appointmentStart)
+                })
+                
+                if (hasConflict) {
+                    console.log(`⚠️ Slot ${slot.time} conflicts with existing appointment, removing`)
+                }
+                
+                return !hasConflict
+            })
+
+            filteredSlots.push(...availableSlots)
+            console.log(`✅ Provider ${providerId}: ${availableSlots.length}/${providerSlots.length} slots available`)
+
+        } catch (error: any) {
+            console.error(`❌ Error checking conflicts for provider ${providerId}:`, error.message)
+            // Add all slots if conflict check fails
+            filteredSlots.push(...providerSlots)
+        }
+    }
+    
+    return filteredSlots
 }
