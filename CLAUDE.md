@@ -191,6 +191,26 @@ GROUP BY provider_id;
 
 ### **Common Issues and Solutions**
 
+#### "Buttons on welcome page are not clickable"
+This is a React/Next.js build cache issue that occurs occasionally:
+
+**Solution:**
+```bash
+# Stop the development server (Ctrl+C)
+rm -rf .next && rm -rf node_modules/.cache
+npm run dev
+```
+
+**Root causes:**
+- Webpack build cache corruption
+- TypeScript compilation errors from imports
+- Missing Next.js routes manifest
+
+**Prevention:**
+- Always test the welcome page buttons after making component changes
+- If buttons become unclickable, clear build cache immediately
+- Check browser console for React hydration errors
+
 #### "No availability showing"
 1. Check Supabase connection in browser dev tools
 2. Verify `provider_availability_cache` has data for requested dates
