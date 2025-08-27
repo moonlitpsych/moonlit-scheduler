@@ -48,6 +48,14 @@ export default function AppointmentSummaryView({
     const [providerLoading, setProviderLoading] = useState(false)
     
     // Debug logging to understand the data structure
+    useEffect(() => {
+        console.log('🔍 AppointmentSummaryView props:', {
+            selectedTimeSlot,
+            selectedPayer,
+            provider,
+            timeSlotProviderId: selectedTimeSlot?.provider_id
+        })
+    }, [selectedTimeSlot, selectedPayer, provider])
     console.log('🔍 AppointmentSummaryView Debug:', {
         selectedTimeSlot: selectedTimeSlot ? JSON.stringify(selectedTimeSlot, null, 2) : 'undefined',
         selectedPayer: selectedPayer ? JSON.stringify(selectedPayer, null, 2) : 'undefined',

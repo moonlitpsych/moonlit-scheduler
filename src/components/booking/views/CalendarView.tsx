@@ -319,8 +319,10 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 return {
                     start_time: startDateTime,
                     end_time: endDateTime,
-                    provider_id: apiSlot.provider_id,
-                    available: apiSlot.available
+                    provider_id: apiSlot.providerId, // API returns 'providerId', not 'provider_id'
+                    available: apiSlot.isAvailable,  // API returns 'isAvailable', not 'available'
+                    duration_minutes: apiSlot.duration,
+                    provider_name: apiSlot.providerName
                 }
             })
 
@@ -353,19 +355,42 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         try {
             const firstSlot = consolidatedSlot.availableSlots[0]
             
+            console.log('🔍 CalendarView handleSlotClick:', {
+                firstSlot,
+                bookingMode,
+                selectedProvider,
+                firstSlotProviderId: firstSlot?.provider_id
+            })
+            
+            // Calculate end time by adding duration to start time
+            const startTime = selectedDate 
+                ? `${format(selectedDate, 'yyyy-MM-dd')}T${consolidatedSlot.time}:00`
+                : firstSlot.start_time
+            
+            const endTime = selectedDate 
+                ? (() => {
+                    const duration = firstSlot.duration_minutes || 60 // Default to 60 minutes
+                    const startDate = new Date(startTime)
+                    const endDate = new Date(startDate.getTime() + duration * 60 * 1000)
+                    return endDate.toISOString().slice(0, 19) // Remove Z and milliseconds
+                  })()
+                : firstSlot.end_time
+
             const properTimeSlot: TimeSlot = {
                 ...firstSlot,
-                start_time: selectedDate 
-                    ? `${format(selectedDate, 'yyyy-MM-dd')}T${consolidatedSlot.time}:00`
-                    : firstSlot.start_time,
-                end_time: selectedDate 
-                    ? `${format(selectedDate, 'yyyy-MM-dd')}T${consolidatedSlot.time}:00`
-                    : firstSlot.end_time,
+                start_time: startTime,
+                end_time: endTime,
                 // For provider mode, ensure we have the selected provider ID
                 provider_id: bookingMode === 'by_provider' && selectedProvider 
                     ? selectedProvider 
                     : firstSlot.provider_id
             }
+            
+            console.log('🔍 CalendarView properTimeSlot created:', {
+                properTimeSlot,
+                firstSlotProviderId: firstSlot.provider_id,
+                finalProviderId: properTimeSlot.provider_id
+            })
             
             setSelectedSlot(properTimeSlot)
 

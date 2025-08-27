@@ -110,8 +110,22 @@ export default function BookingFlow() {
         try {
             console.log('📅 Creating appointment with EMR integration...')
             
+            // Debug: Log current state
+            console.log('🔍 Current booking state:', {
+                selectedTimeSlot: state.selectedTimeSlot,
+                selectedPayer: state.selectedPayer,
+                insuranceInfo: state.insuranceInfo
+            })
+            
             // Validate required data
             if (!state.selectedTimeSlot?.provider_id || !state.selectedPayer?.id || !state.selectedTimeSlot?.start_time) {
+                console.error('❌ Missing required booking data:', {
+                    hasTimeSlotProviderId: !!state.selectedTimeSlot?.provider_id,
+                    hasPayerId: !!state.selectedPayer?.id,
+                    hasStartTime: !!state.selectedTimeSlot?.start_time,
+                    timeSlot: state.selectedTimeSlot,
+                    payer: state.selectedPayer
+                })
                 throw new Error('Missing required booking data')
             }
             
