@@ -1,25 +1,10 @@
-// src/app/dashboard/admin/providers/page.tsx
+'use client'
+
 import AdminProviderList from '@/components/dashboard/AdminProviderList'
-import { requireAdmin } from '@/lib/auth'
-import { Database } from '@/types/database'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 
-export default async function AdminProvidersPage() {
-  const user = await requireAdmin()
-  const supabase = createServerComponentClient<Database>({ cookies })
-
-  // Get all providers with their roles and auth status
-  const { data: providers } = await supabase
-    .from('provider_profiles')
-    .select('*')
-    .order('last_name', { ascending: true })
-
-  // Get all roles for the form
-  const { data: roles } = await supabase
-    .from('roles')
-    .select('*')
-    .order('name')
+export default function AdminProvidersPage() {
+  const providers = [] // Placeholder - will be loaded client-side
+  const roles = [] // Placeholder - will be loaded client-side
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

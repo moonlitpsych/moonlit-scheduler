@@ -1,6 +1,15 @@
 'use client';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+// Simple HTML replacements for missing UI components
+const Label = ({ children, ...props }: any) => <label {...props}>{children}</label>;
+const Select = ({ children, onValueChange, defaultValue }: any) => (
+  <select onChange={(e) => onValueChange?.(e.target.value)} defaultValue={defaultValue} className="w-full p-2 border border-gray-300 rounded">
+    {children}
+  </select>
+);
+const SelectContent = ({ children }: any) => <>{children}</>;
+const SelectItem = ({ value, children }: any) => <option value={value}>{children}</option>;
+const SelectTrigger = ({ children }: any) => <>{children}</>;
+const SelectValue = ({ placeholder }: any) => <option value="">{placeholder}</option>;
 import { User } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createClient } from '../../../supabase/client';
