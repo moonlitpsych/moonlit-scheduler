@@ -36,7 +36,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const [consolidatedSlots, setConsolidatedSlots] = useState<ConsolidatedTimeSlot[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string>('')
-    const [showInsuranceBanner, setShowInsuranceBanner] = useState(true)
+    // Removed showInsuranceBanner state - redundant with subheader
     const [bookingMode, setBookingMode] = useState<'by_availability' | 'by_provider'>('by_availability')
     const [providers, setProviders] = useState<any[]>([])
     const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
@@ -71,7 +71,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             const response = await fetch(`/api/demo/enhanced-providers?payer_id=${selectedPayer.id}`)
             if (response.ok) {
                 const data = await response.json()
-                setProviders(data.data?.providers || [])
+                console.log('🔍 Provider API response:', data)
+                setProviders(data.providers || data.data?.providers || [])
             }
         } catch (error) {
             console.error('Error fetching providers:', error)
@@ -93,15 +94,67 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         }
     }
 
+    // Find soonest available date for a provider
+    const findSoonestAvailableDate = async (providerId: string): Promise<Date> => {
+        const today = new Date()
+        console.log('🔍 Finding soonest available date for provider:', providerId)
+        
+        // Try today first, then next 30 days
+        for (let i = 0; i < 30; i++) {
+            const testDate = new Date(today)
+            testDate.setDate(today.getDate() + i)
+            
+            console.log('📅 Testing availability for:', format(testDate, 'yyyy-MM-dd'))
+            
+            try {
+                const dateString = format(testDate, 'yyyy-MM-dd')
+                const response = await fetch(`/api/patient-booking/merged-availability`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        payer_id: selectedPayer?.id,
+                        date: dateString,
+                        provider_id: providerId
+                    })
+                })
+                
+                if (response.ok) {
+                    const data = await response.json()
+                    if (data.success && data.data?.availableSlots && data.data.availableSlots.length > 0) {
+                        console.log(`✅ Found availability on ${format(testDate, 'yyyy-MM-dd')} with ${data.data.availableSlots.length} slots`)
+                        return testDate
+                    }
+                }
+            } catch (error) {
+                console.log('❌ Error checking date:', format(testDate, 'yyyy-MM-dd'), error)
+            }
+        }
+        
+        console.log('⚠️ No availability found in next 30 days, defaulting to today')
+        return today
+    }
+
     // Handle provider selection
     const handleProviderSelect = async (providerId: string) => {
+        console.log('🔄 Provider selection starting:', { providerId, bookingMode, currentSelectedProvider: selectedProvider })
+        
         setSelectedProvider(providerId)
         setSelectedSlot(null)
         setConsolidatedSlots([])
         
-        // If a date is already selected, refresh availability for this provider
         if (selectedDate) {
-            await fetchAvailabilityForDate(selectedDate)
+            // If a date is already selected, refresh availability for this provider
+            console.log('📅 Using existing selected date:', selectedDate, 'for provider:', providerId)
+            await fetchAvailabilityForDate(selectedDate, providerId)
+        } else {
+            // Find and load soonest available date
+            console.log('🔍 Finding soonest availability for provider:', providerId)
+            const soonestDate = await findSoonestAvailableDate(providerId)
+            console.log('📅 Setting soonest available date:', format(soonestDate, 'yyyy-MM-dd'), 'for provider:', providerId)
+            setSelectedDate(soonestDate)
+            await fetchAvailabilityForDate(soonestDate, providerId)
         }
     }
 
@@ -180,16 +233,25 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     }
 
     // EMERGENCY FIX: Multiple API endpoint attempts with different strategies
-    const fetchAvailabilityForDate = async (date: Date) => {
+    const fetchAvailabilityForDate = async (date: Date, explicitProviderId?: string) => {
         // Allow a fallback payer ID for cash payments or fetch all providers when missing
         const payerId = selectedPayer?.id || 'cash-payment'
+        const effectiveProviderId = explicitProviderId || selectedProvider
+        
+        console.log('🔍 fetchAvailabilityForDate called:', {
+            date: format(date, 'yyyy-MM-dd'),
+            explicitProviderId,
+            selectedProvider,
+            effectiveProviderId,
+            bookingMode
+        })
 
         if (!selectedPayer?.id) {
             console.warn('No payer selected, using cash-payment id to fetch all providers')
         }
 
         // For provider-specific mode, require a selected provider
-        if (bookingMode === 'by_provider' && !selectedProvider) {
+        if (bookingMode === 'by_provider' && !effectiveProviderId) {
             setError('Please select a provider first')
             return
         }
@@ -201,9 +263,10 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             const dateString = format(date, 'yyyy-MM-dd')
             console.log('🔍 Fetching availability for:', {
                 payer_id: payerId,
-                provider_id: selectedProvider,
+                provider_id: effectiveProviderId,
                 date: dateString,
-                mode: bookingMode
+                mode: bookingMode,
+                willSendProviderIdToAPI: bookingMode === 'by_provider' ? effectiveProviderId : undefined
             })
 
             let apiSlots: AvailableSlot[] = []
@@ -220,7 +283,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     body: JSON.stringify({
                         payer_id: payerId,
                         date: dateString,
-                        provider_id: bookingMode === 'by_provider' ? selectedProvider : undefined
+                        provider_id: bookingMode === 'by_provider' ? effectiveProviderId : undefined
                     })
                 })
                 
@@ -251,7 +314,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         body: JSON.stringify({
                             payer_id: payerId,
                             date: dateString,
-                            provider_id: bookingMode === 'by_provider' ? selectedProvider : undefined
+                            provider_id: bookingMode === 'by_provider' ? effectiveProviderId : undefined
                         })
                     })
                     
@@ -281,22 +344,22 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     const dayOfWeek = targetDate.getDay()
                     
                     // For provider-specific mode, generate slots for the selected provider
-                    if (bookingMode === 'by_provider' && selectedProvider) {
-                        console.log(`🏥 Generating availability for provider: ${selectedProvider}`)
+                    if (bookingMode === 'by_provider' && effectiveProviderId) {
+                        console.log(`🏥 Generating availability for provider: ${effectiveProviderId}`)
                         
                         // Find the selected provider in our providers list
-                        const provider = providers.find(p => p.id === selectedProvider)
+                        const provider = providers.find(p => p.id === effectiveProviderId)
                         const providerName = provider?.full_name || 'Selected Provider'
                         
                         // Generate mock availability for the selected provider (weekdays only for demo)
                         if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday-Friday
                             apiSlots = [
-                                { date: dateString, time: '09:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '10:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '11:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '14:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '15:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '16:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '09:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
+                                { date: dateString, time: '10:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
+                                { date: dateString, time: '11:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
+                                { date: dateString, time: '14:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
+                                { date: dateString, time: '15:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
+                                { date: dateString, time: '16:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
                             ]
                             success = true
                             console.log(`✅ Strategy 3 SUCCESS: Generated availability for ${providerName}`)
@@ -487,26 +550,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     </div>
                 </div>
 
-                {/* Insurance Banner */}
-                {showInsuranceBanner && (
-                    <div className="max-w-2xl mx-auto mb-8 bg-[#BF9C73] text-white rounded-2xl p-6 relative">
-                        <button
-                            onClick={() => setShowInsuranceBanner(false)}
-                            className="absolute top-4 right-4 text-white/80 hover:text-white"
-                        >
-                            ×
-                        </button>
-                        <div className="flex items-center gap-4">
-                            <Check className="w-8 h-8 flex-shrink-0" />
-                            <div>
-                                <h3 className="font-bold mb-2 font-['Newsreader']">Insurance Accepted</h3>
-                                <p className="font-['Newsreader']">
-                                    All available time slots are with providers who accept {selectedPayer?.name}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {/* Insurance Banner - REMOVED: Redundant with subheader */}
 
                 {/* Provider Selection (Book by Practitioner mode) */}
                 {bookingMode === 'by_provider' && (
@@ -550,7 +594,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                             </p>
                                             <div className="flex gap-2">
                                                 <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-['Newsreader']">
-                                                    {provider.new_patient_status?.includes('Accepting') ? 'New Patients' : 'Limited Availability'}
+                                                    {provider.new_patient_status || 'Accepting New Patients'}
                                                 </span>
                                                 <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-['Newsreader']">
                                                     {provider.languages_spoken?.[0] || 'English'}

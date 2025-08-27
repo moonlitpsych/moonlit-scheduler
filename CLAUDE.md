@@ -135,6 +135,26 @@ npm run dev
 # 4. Test at http://localhost:3000
 ```
 
+### **Development Workflow (IMPORTANT)**
+
+**🚨 ALWAYS TEST LOCALLY BEFORE PUSHING TO PRODUCTION**
+
+```bash
+# 1. Make changes locally
+# 2. Test thoroughly at http://localhost:3000 or http://localhost:3001
+# 3. Iterate rapidly with user feedback
+# 4. Only commit/push when features are confirmed working
+# 5. Production deploys automatically from main branch
+
+# For UI/UX changes especially:
+# - Test booking flow end-to-end
+# - Test on mobile and desktop
+# - Verify all interactive elements work
+# - Check console for errors
+```
+
+**Rationale:** Local testing allows rapid iteration and prevents production issues. The production system at `booking.trymoonlit.com` auto-deploys from main branch, so only push confirmed working changes.
+
 ### **Common Tasks**
 
 #### Adding New EMR Systems
