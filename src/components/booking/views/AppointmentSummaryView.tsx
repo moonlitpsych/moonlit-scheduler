@@ -138,20 +138,30 @@ export default function AppointmentSummaryView({
 
     // Use fetched provider if available, otherwise use passed provider
     const displayProvider = provider || fetchedProvider
-    const formatDateTime = (date: string, startTime: string) => {
-        const dateObj = new Date(date)
-        const [hours, minutes] = startTime.split(':')
-        dateObj.setHours(parseInt(hours), parseInt(minutes))
-        
-        return dateObj.toLocaleString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        })
+    const formatDateTime = (startTime: string) => {
+        try {
+            // startTime is in format "2024-08-27T14:00:00" - same as ConfirmationView
+            const dateObj = new Date(startTime)
+            
+            // Check if date is valid
+            if (isNaN(dateObj.getTime())) {
+                console.error('Invalid date:', startTime)
+                return 'Invalid date/time'
+            }
+            
+            return dateObj.toLocaleString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            })
+        } catch (error) {
+            console.error('Error formatting date:', error, startTime)
+            return 'Invalid date/time'
+        }
     }
 
     const getScenarioTitle = () => {
@@ -215,7 +225,7 @@ export default function AppointmentSummaryView({
                                     <div>
                                         <h3 className="text-lg font-semibold text-[#091747] mb-2 font-['Newsreader']">Date & Time</h3>
                                         <p className="text-[#091747]/90 text-lg font-['Newsreader']">
-                                            {formatDateTime(selectedTimeSlot.date, selectedTimeSlot.start_time)}
+                                            {formatDateTime(selectedTimeSlot.start_time)}
                                         </p>
                                         {selectedTimeSlot.duration_minutes && (
                                             <p className="text-sm text-[#091747]/60 mt-1 font-['Newsreader']">
