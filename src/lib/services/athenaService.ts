@@ -55,6 +55,7 @@ class AthenaService {
   private tokenExpiry: Date | null = null
   private requestsPerSecond: number
   private maxRetries: number
+  private isEnabled: boolean = false
 
   constructor() {
     this.baseUrl = process.env.ATHENA_BASE_URL!
@@ -65,17 +66,25 @@ class AthenaService {
     this.requestsPerSecond = parseInt(process.env.ATHENA_REQUESTS_PER_SECOND || '5')
     this.maxRetries = parseInt(process.env.ATHENA_MAX_RETRIES || '3')
 
-    if (!this.baseUrl || !this.tokenUrl || !this.clientId || !this.clientSecret) {
-      throw new Error('Missing required Athena environment variables')
+    const hasRequiredCredentials = this.baseUrl && this.tokenUrl && this.clientId && this.clientSecret
+    
+    if (!hasRequiredCredentials) {
+      console.log('⚠️ Athena credentials not configured - Athena features disabled')
+      this.isEnabled = false
+    } else {
+      console.log('🏥 Athena Service initialized for practice:', this.practiceId)
+      this.isEnabled = true
     }
-
-    console.log('🏥 Athena Service initialized for practice:', this.practiceId)
   }
 
   /**
    * Get OAuth2 access token from Athena
    */
   private async getToken(): Promise<string> {
+    if (!this.isEnabled) {
+      throw new Error('Athena service not enabled')
+    }
+    
     if (this.token && this.tokenExpiry && new Date() < this.tokenExpiry) {
       return this.token
     }
@@ -183,6 +192,10 @@ class AthenaService {
    * Test the connection to Athena API
    */
   async testConnection(): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!this.isEnabled) {
+      return { success: false, error: 'Athena service not enabled - missing credentials' }
+    }
+    
     try {
       console.log('🧪 Testing Athena API connection...')
       
@@ -208,6 +221,11 @@ class AthenaService {
    * Fetch all providers from Athena
    */
   async getProviders(): Promise<AthenaProvider[]> {
+    if (!this.isEnabled) {
+      console.log('⚠️ Athena service disabled - returning empty provider list')
+      return []
+    }
+    
     try {
       console.log('👥 Fetching providers from Athena...')
       
