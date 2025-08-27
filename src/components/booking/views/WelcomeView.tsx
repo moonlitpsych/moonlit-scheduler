@@ -1,6 +1,6 @@
 'use client'
 
-export type BookingScenario = 'self' | 'referral' | 'case-manager'
+export type BookingScenario = 'self' | 'third-party' | 'case-manager'
 
 interface WelcomeViewProps {
     onSelection: (scenario: BookingScenario) => void
@@ -41,7 +41,7 @@ export default function WelcomeView({ onSelection }: WelcomeViewProps) {
 
                     <button
                         type="button"
-                        onClick={() => handleButtonClick('referral')}
+                        onClick={() => handleButtonClick('third-party')}
                         className="
                             w-full py-4 px-6 bg-white hover:bg-[#FEF8F1] 
                             text-[#091747] font-medium text-lg rounded-xl 
