@@ -4,6 +4,7 @@ import { InsuranceInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
 import { useState } from 'react'
 
 // Import view components (ensure these match your actual imports)
+import AppointmentSummaryView from './views/AppointmentSummaryView'
 import CalendarView from './views/CalendarView'
 import ConfirmationView from './views/ConfirmationView'
 import InsuranceFutureView from './views/InsuranceFutureView'
@@ -23,6 +24,7 @@ export type BookingStep =
     | 'calendar'
     | 'insurance-info'
     | 'roi'
+    | 'appointment-summary'
     | 'confirmation'
 
 export type BookingScenario = 'self' | 'third-party' | 'case-manager'
@@ -100,7 +102,10 @@ export default function BookingFlow() {
 
     const handleROISubmitted = async (roiContacts: ROIContact[]) => {
         updateState({ roiContacts })
-        
+        goToStep('appointment-summary')
+    }
+
+    const handleAppointmentConfirmed = async () => {
         // Create appointment using the Athena-integrated endpoint
         try {
             console.log('📅 Creating appointment with Athena integration...')
@@ -139,8 +144,7 @@ export default function BookingFlow() {
             if (result.success) {
                 console.log('✅ Appointment created successfully:', result.data.appointment.id)
                 updateState({ 
-                    appointmentId: result.data.appointment.id,
-                    roiContacts 
+                    appointmentId: result.data.appointment.id
                 })
             } else {
                 throw new Error(result.error || 'Appointment creation failed')
@@ -345,6 +349,22 @@ export default function BookingFlow() {
                         bookingScenario={state.bookingScenario}
                         onSubmit={handleROISubmitted}
                         onBack={() => goToStep('insurance-info')}
+                    />
+                )
+
+            case 'appointment-summary':
+                return (
+                    <AppointmentSummaryView
+                        selectedPayer={state.selectedPayer}
+                        selectedTimeSlot={state.selectedTimeSlot}
+                        insuranceInfo={state.insuranceInfo}
+                        roiContacts={state.roiContacts}
+                        bookingScenario={state.bookingScenario}
+                        onConfirmBooking={handleAppointmentConfirmed}
+                        onEditInsurance={() => goToStep('insurance-info')}
+                        onEditTimeSlot={() => goToStep('calendar')}
+                        onEditROI={() => goToStep('roi')}
+                        onBack={() => goToStep('roi')}
                     />
                 )
 

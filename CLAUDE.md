@@ -304,3 +304,50 @@ npm run dev 2>&1 | tee debug.log
 - Test and confirm each fix works
 
 START WITH PRIORITY 1: Fix the Supabase connection so the calendar shows availability!
+
+
+
+
+
+There are two amateur developers working on this project. Please help them to follow the following logic when it comes time to merge their work. They may need to be hand-held. 
+1. Basic Branch Strategy
+
+  # Always work on feature branches, never directly on main
+  git checkout -b feature/your-feature-name
+  # When done:
+  git push origin feature/your-feature-name
+  # Then create PR/merge request
+
+  2. Before Starting Work
+
+  git checkout main
+  git pull origin main
+  git checkout -b feature/new-feature
+
+  3. Regular Syncing
+
+  # Pull latest main into your branch frequently
+  git checkout main
+  git pull origin main
+  git checkout your-branch
+  git rebase main  # or merge main
+
+  4. Communication Tools
+
+  - Slack/Discord for quick "I'm working on X" updates
+  - GitHub Issues for tracking what each person is doing
+  - PR reviews - even quick ones help catch conflicts early
+
+  5. File/Feature Division
+
+  - You work on booking flow
+  - Partner works on Athena integration
+  - Avoid both editing the same files simultaneously
+
+  6. Environment Setup
+
+  - Use separate .env.local files (never commit these)
+  - Each developer should have their own database/Supabase project for
+  testing
+  - Share credentials via secure channels (not Git)
+
