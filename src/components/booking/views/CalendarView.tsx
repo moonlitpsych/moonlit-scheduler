@@ -4,7 +4,7 @@
 import { Payer, TimeSlot } from '@/types/database'
 import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isSameDay, isToday, startOfMonth, subMonths } from 'date-fns'
 import { Check, ChevronLeft, ChevronRight, Clock, Calendar, Users } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface CalendarViewProps {
     selectedPayer?: Payer
@@ -30,7 +30,7 @@ interface AvailableSlot {
 
 export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance }: CalendarViewProps) {
     const [currentMonth, setCurrentMonth] = useState(new Date())
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+    const [selectedDate, setSelectedDate] = useState<Date | null>(new Date()) // Initialize with today
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
     const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([])
     const [consolidatedSlots, setConsolidatedSlots] = useState<ConsolidatedTimeSlot[]>([])
@@ -53,6 +53,14 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     ]
 
     const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+
+    // Auto-load today's availability when component mounts
+    useEffect(() => {
+        if (selectedPayer?.id && selectedDate) {
+            console.log('🔄 Auto-loading availability for today...')
+            fetchAvailabilityForDate(selectedDate)
+        }
+    }, [selectedPayer?.id]) // Re-run when payer changes
 
     // Fetch providers for "Book by Practitioner" mode
     const fetchProviders = async () => {
@@ -132,8 +140,27 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     }
 
     // Consolidate multiple provider slots into single time slots
+    // Filter out past time slots for same-day appointments
+    const filterFutureTimeSlots = (slots: TimeSlot[], targetDate: Date): TimeSlot[] => {
+        const today = new Date()
+        const isToday = format(targetDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')
+        
+        if (!isToday) {
+            return slots // For future dates, return all slots
+        }
+        
+        const now = new Date()
+        return slots.filter(slot => {
+            const slotDateTime = new Date(slot.start_time)
+            return slotDateTime > now
+        })
+    }
+
     const consolidateTimeSlots = (slots: TimeSlot[]): ConsolidatedTimeSlot[] => {
-        const grouped = slots.reduce((acc, slot) => {
+        // First filter out past time slots if this is for today
+        const filteredSlots = selectedDate ? filterFutureTimeSlots(slots, selectedDate) : slots
+        
+        const grouped = filteredSlots.reduce((acc, slot) => {
             const time = slot.start_time.split('T')[1]?.substring(0, 5) || slot.start_time
             if (!acc[time]) {
                 acc[time] = []
