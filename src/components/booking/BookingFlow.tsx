@@ -101,25 +101,38 @@ export default function BookingFlow() {
     const handleROISubmitted = async (roiContacts: ROIContact[]) => {
         updateState({ roiContacts })
         
-        // Create appointment using the Athena-integrated endpoint
+        // Create appointment using the EMR integration
         try {
-            console.log('📅 Creating appointment with Athena integration...')
+            console.log('📅 Creating appointment with EMR integration...')
+            
+            // Validate required data
+            if (!state.selectedTimeSlot?.provider_id || !state.selectedPayer?.id || !state.selectedTimeSlot?.start_time) {
+                throw new Error('Missing required booking data')
+            }
+            
+            const startTime = state.selectedTimeSlot.start_time
+            const datePart = startTime.split('T')[0]
+            const timePart = startTime.split('T')[1]?.substring(0, 5)
+            
+            if (!datePart || !timePart) {
+                throw new Error('Invalid date/time format in selected time slot')
+            }
             
             const appointmentData = {
-                providerId: state.selectedTimeSlot?.provider_id,
-                payerId: state.selectedPayer?.id,
-                date: state.selectedTimeSlot?.date || state.selectedTimeSlot?.start_time?.split('T')[0],
-                time: state.selectedTimeSlot?.start_time?.split('T')[1]?.substring(0, 5) || state.selectedTimeSlot?.start_time,
+                providerId: state.selectedTimeSlot.provider_id,
+                payerId: state.selectedPayer.id,
+                date: datePart, // Extract date from start_time
+                time: timePart, // Extract HH:MM from start_time
                 patient: {
                     firstName: state.insuranceInfo?.firstName || '',
                     lastName: state.insuranceInfo?.lastName || '',
                     email: state.insuranceInfo?.email || '',
                     phone: state.insuranceInfo?.phone || '',
-                    dateOfBirth: state.insuranceInfo?.dob || ''
+                    dateOfBirth: state.insuranceInfo?.dob || state.insuranceInfo?.dateOfBirth || ''
                 },
                 appointmentType: 'consultation',
                 reason: 'Scheduled appointment via booking flow',
-                createInAthena: true
+                createInEMR: true // ✅ FIXED: Use createInEMR instead of createInAthena
             }
 
             console.log('📋 Appointment data:', appointmentData)

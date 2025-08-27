@@ -1590,3 +1590,42 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
+// Custom types for the booking system
+export interface TimeSlot {
+    start_time: string
+    end_time: string  
+    provider_id: string
+    available: boolean
+    provider_name?: string
+    duration_minutes?: number
+}
+
+export interface PatientInfo {
+    firstName: string
+    lastName: string
+    phone: string
+    email?: string
+    dateOfBirth: string
+    dob?: string
+}
+
+export interface InsuranceInfo extends PatientInfo {
+    memberId?: string
+    groupNumber?: string
+}
+
+export interface ROIContact {
+    name: string
+    email: string
+    phone?: string
+    relationship: string
+}
+
+export interface Payer {
+    id: string
+    name: string
+    payer_type?: string
+    state?: string
+}
+

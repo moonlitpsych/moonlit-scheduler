@@ -100,7 +100,50 @@ export async function POST(request: NextRequest) {
     let appointmentStatus = 'scheduled'
     let emrSystem = currentEMR
 
-    // Create appointment in the configured EMR system
+    // Step 1: Double-booking prevention - Check for conflicts before creating appointment
+    if (createInEMR && currentEMR === 'intakeq' && provider.intakeq_practitioner_id) {
+      console.log('🔍 Checking for appointment conflicts before booking...')
+      
+      try {
+        const existingAppointments = await intakeQService.getAppointmentsForDate(
+          provider.intakeq_practitioner_id, 
+          date
+        )
+        
+        // Check if the requested time conflicts with existing appointments
+        const requestedStartTime = new Date(`${date}T${time}:00`).getTime()
+        const requestedEndTime = requestedStartTime + (duration * 60 * 1000)
+        
+        const hasConflict = existingAppointments.some(appointment => {
+          const appointmentStart = new Date(appointment.StartDate)
+          const appointmentEnd = new Date(appointment.EndDate || (appointment.StartDate + 60 * 60 * 1000)) // Use EndDate or assume 60min
+          
+          const requestedStart = new Date(requestedStartTime)
+          const requestedEnd = new Date(requestedEndTime)
+          
+          return (requestedStart < appointmentEnd && requestedEnd > appointmentStart)
+        })
+        
+        if (hasConflict) {
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: 'Time slot no longer available',
+              details: 'This time slot has been booked by another patient. Please select a different time.'
+            },
+            { status: 409 } // 409 Conflict
+          )
+        }
+        
+        console.log('✅ No conflicts found, proceeding with booking')
+        
+      } catch (conflictCheckError: any) {
+        console.warn('⚠️ Could not check for conflicts, proceeding with booking:', conflictCheckError.message)
+        // Continue with booking if conflict check fails
+      }
+    }
+
+    // Step 2: Create appointment in the configured EMR system
     if (createInEMR) {
       try {
         if (currentEMR === 'intakeq') {

@@ -5,7 +5,10 @@ interface IntakeQAppointment {
   ServiceId: string
   LocationId: string
   Status: 'Confirmed' | 'WaitingConfirmation'
-  UtcDateTime: number // Unix timestamp
+  StartDate: number // Unix timestamp
+  EndDate: number // Unix timestamp
+  StartDateIso: string // ISO string
+  EndDateIso: string // ISO string
   SendClientEmailNotification?: boolean
 }
 
@@ -24,7 +27,10 @@ interface IntakeQAppointmentResponse {
   ServiceId: string
   LocationId: string
   Status: string
-  UtcDateTime: number
+  StartDate: number // Unix timestamp in milliseconds
+  EndDate: number
+  StartDateIso: string // ISO format like "2025-10-01T20:00:00.0000000Z"
+  EndDateIso: string
   // ... other response fields
 }
 
@@ -194,6 +200,61 @@ class IntakeQService {
     } catch (error: any) {
       console.error('❌ Failed to fetch IntakeQ appointment:', error.message)
       throw error
+    }
+  }
+
+  async getAppointmentsForDate(practitionerId: string, date: string): Promise<IntakeQAppointmentResponse[]> {
+    console.log(`🔍 Fetching IntakeQ appointments for practitioner ${practitionerId} on ${date}`)
+    
+    try {
+      // IntakeQ API: Get all appointments and filter by practitioner and date
+      // Note: IntakeQ doesn't have a practitioner-specific endpoint, so we get all and filter
+      const response = await this.makeRequest<IntakeQAppointmentResponse[]>('/appointments')
+      
+      // Convert date to start/end of day timestamps for filtering
+      const targetDate = new Date(date + 'T00:00:00.000Z') // Ensure proper UTC parsing
+      const startOfDay = targetDate.getTime()
+      const endOfDay = targetDate.getTime() + (24 * 60 * 60 * 1000 - 1) // End of day
+      
+      console.log(`🔍 Total appointments fetched: ${response.length}`)
+      
+      // Debug: Show all appointments for this practitioner (any date)
+      const practitionerAppointments = response.filter(apt => apt.PractitionerId === practitionerId)
+      console.log(`📊 Total appointments for practitioner ${practitionerId}: ${practitionerAppointments.length}`)
+      
+      if (practitionerAppointments.length > 0) {
+        console.log('📋 Recent appointments for this practitioner:')
+        practitionerAppointments.slice(0, 5).forEach(apt => {
+          try {
+            const aptDate = new Date(apt.StartDate).toISOString().split('T')[0]
+            const aptTime = new Date(apt.StartDate).toISOString().split('T')[1].substring(0, 5)
+            console.log(`   ${aptDate} ${aptTime} UTC - Status: ${apt.Status} (ID: ${apt.Id})`)
+          } catch (dateError) {
+            console.log(`   Invalid date: ${apt.StartDate} - Status: ${apt.Status} (ID: ${apt.Id})`)
+          }
+        })
+      }
+      
+      // Filter appointments for the target practitioner and date
+      const appointmentsForDate = response.filter(appointment => {
+        const appointmentTime = appointment.StartDate
+        const matchesPractitioner = appointment.PractitionerId === practitionerId
+        const isOnTargetDate = appointmentTime >= startOfDay && appointmentTime <= endOfDay
+        const isNotCancelled = appointment.Status !== 'Cancelled'
+        
+        return matchesPractitioner && isOnTargetDate && isNotCancelled
+      })
+      
+      console.log(`📅 Found ${appointmentsForDate.length} appointments for practitioner ${practitionerId} on ${date}`)
+      console.log(`🔍 Date range: ${startOfDay} to ${endOfDay}`)
+      
+      return appointmentsForDate
+      
+    } catch (error: any) {
+      console.error('❌ Failed to fetch IntakeQ appointments for date:', error.message)
+      // Return empty array instead of throwing to allow availability check to continue
+      console.log('⚠️ Continuing without IntakeQ conflict checking due to API error')
+      return []
     }
   }
 
