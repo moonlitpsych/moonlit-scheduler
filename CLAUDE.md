@@ -15,6 +15,7 @@
 - ✅ **Brand-consistent design system** with Newsreader typography
 - ✅ **Responsive layout components** (Header, Footer, Provider directory)
 - ✅ **Patient testimonials and professional content** sections
+- ✅ **Ways to Pay directory** with live Supabase integration and fuzzy search
 
 ## 🏗️ SYSTEM ARCHITECTURE
 
@@ -36,6 +37,7 @@
 - **Ways to Pay** information section linking to insurance details
 - **States We Serve** section with Utah/Idaho state icons
 - **Provider directory** with filtering by state and new patient availability
+- **Ways to Pay directory** with state-first organization and live database integration
 - **Clean CTA buttons** using brand colors (#BF9C73) with proper sizing
 - **Consistent Newsreader typography** with light font weights throughout
 - **Responsive design** optimized for mobile and desktop experiences
@@ -75,6 +77,16 @@
 - Detailed booking information in emails
 - Error handling with content preservation
 
+#### 🏥 Ways to Pay Directory
+**Files**: `src/app/ways-to-pay/page.tsx`, `src/app/api/ways-to-pay/payers/route.ts`
+- Live Supabase integration displaying insurance/payer information
+- State-first organization (Utah first, then Idaho) with effective date sorting
+- Smart credentialing status filtering (excludes not_started, denied, on_pause, blocked, withdrawn)
+- Fuzzy search functionality with real-time results
+- Compact zebra-striped design optimized for viewport density
+- Status indicators for active vs projected effective dates
+- Self-pay options clearly differentiated from insurance
+
 ### **Database Schema (Supabase)**
 ```sql
 -- Core tables working and populated:
@@ -91,6 +103,7 @@
 - **Homepage (`/`)**: Professional healthcare website with testimonials, CTA buttons, and elegant design
 - **Booking (`/book`)**: Complete booking flow accessible via CTA buttons or direct URL
 - **Provider Directory (`/providers`)**: Searchable provider list with filtering capabilities
+- **Ways to Pay (`/ways-to-pay`)**: Live insurance/payer directory with fuzzy search and state-based organization
 - **All original booking functionality preserved** and accessible through multiple entry points
 
 ### **Booking Flow** (Accessible via `/book` or "Book now" buttons)
@@ -106,6 +119,8 @@
 - `GET/POST /api/patient-booking/merged-availability` - Returns conflict-filtered availability
 - `POST /api/patient-booking/create-appointment` - Creates appointment with conflict checking
 - `POST /api/patient-booking/providers-for-payer` - Returns providers accepting insurance
+- `GET /api/ways-to-pay/payers` - Returns grouped insurance/payer data by state and status
+- `POST /api/setup/add-self-pay` - Utility endpoint to populate self-pay options
 - Various demo and testing endpoints
 
 ### **Real-Time Features**
@@ -121,6 +136,7 @@
 - ✅ **Header with fade opacity** - Dynamic scroll-based styling working perfectly
 - ✅ **Footer with background image** - Tight navigation spacing and beautiful design
 - ✅ **Provider directory** - Filtering and search functionality working
+- ✅ **Ways to Pay directory** - Live insurance data with fuzzy search and state organization
 - ✅ **Calendar displays real availability** from Supabase
 - ✅ **Double-booking prevention** - cannot book same slot twice
 - ✅ **IntakeQ appointment creation** - appears in IntakeQ dashboard
@@ -142,6 +158,7 @@ Last tested: August 27, 2025
 ✅ Header fade opacity on scroll working perfectly
 ✅ Footer background image and navigation display correctly
 ✅ Provider directory with filtering operational
+✅ Ways to Pay directory with live Supabase integration functional
 ✅ Booking flow complete end-to-end (accessible via /book)
 ✅ Double-booking prevention confirmed
 ✅ IntakeQ appointments creating successfully
@@ -357,12 +374,12 @@ Monitor at: http://localhost:3000/api/health (if implemented)
 - **Complete EMR integration** working flawlessly
 - **Brand-consistent design system** with Newsreader typography
 - **Responsive layout** optimized for all devices
-- **13 new files added** including 8 brand assets and 3 layout components
+- **15 new files added** including 8 brand assets, 3 layout components, and Ways to Pay feature
 - **Data consistency improvements** - removed all mock data, using only real Supabase fields
 - **Enhanced provider selection UX** - auto-loading soonest availability, fixed race conditions
 - **Improved booking flow reliability** - consistent behavior across all providers
 
-**The Moonlit Scheduler is now a complete professional healthcare website with integrated booking system - ready for production! 🚀**
+**The Moonlit Scheduler is now a complete professional healthcare website with integrated booking system + live insurance directory - ready for production! 🚀**
 
 ---
 
