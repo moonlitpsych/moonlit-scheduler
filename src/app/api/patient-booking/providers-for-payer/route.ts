@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
                     is_active,
                     languages_spoken,
                     telehealth_enabled,
-                    accepts_new_patients
+                    accepts_new_patients,
+                    profile_image_url
                 )
             `)
             .eq('payer_id', payer_id)
