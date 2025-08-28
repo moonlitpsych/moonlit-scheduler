@@ -27,7 +27,6 @@ export default function ProvidersPage() {
   const [payers, setPayers] = useState<Payer[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedState, setSelectedState] = useState<string>('all')
-  const [showNewPatientsOnly, setShowNewPatientsOnly] = useState(false)
 
   useEffect(() => {
     const fetchProviders = async () => {
@@ -59,8 +58,6 @@ export default function ProvidersPage() {
   }, [])
 
   const filteredProviders = providers.filter(provider => {
-    if (showNewPatientsOnly && !provider.accepts_new_patients) return false
-    
     if (selectedState !== 'all') {
       const hasStateLicense = provider.state_licenses?.some(
         license => license.toLowerCase().includes(selectedState.toLowerCase())
@@ -119,17 +116,6 @@ export default function ProvidersPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showNewPatientsOnly}
-                  onChange={(e) => setShowNewPatientsOnly(e.target.checked)}
-                  className="rounded border-gray-300 text-[#BF9C73] focus:ring-[#BF9C73]"
-                />
-                <span className="text-[#091747] font-['Newsreader']">Accepting new patients only</span>
-              </label>
-            </div>
           </div>
         </div>
 

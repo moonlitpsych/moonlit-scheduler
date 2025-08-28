@@ -138,7 +138,7 @@
 ### **Website Structure & Routes**
 - **Homepage (`/`)**: Professional healthcare website with testimonials, CTA buttons using intent parameters
 - **Booking (`/book`)**: Complete booking flow with dual intent support (`?intent=book` or `?intent=explore`)
-- **Practitioner Directory (`/practitioners`)**: **NEW** Enhanced searchable provider list with filtering by name, specialty, and state
+- **Practitioner Directory (`/practitioners` or `/providers`)**: **NEW** Enhanced searchable provider list with filtering by name, specialty, and state (both routes work interchangeably)
 - **Ways to Pay (`/ways-to-pay`)**: Live insurance/payer directory with fuzzy search and state-based organization
 - **All original booking functionality preserved** and enhanced with dual-intent system
 
