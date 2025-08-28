@@ -1,26 +1,42 @@
 'use client'
 
 export type BookingScenario = 'self' | 'third-party' | 'case-manager'
+export type BookingIntent = 'book' | 'explore'
 
 interface WelcomeViewProps {
     onSelection: (scenario: BookingScenario) => void
+    intent: BookingIntent
 }
 
-export default function WelcomeView({ onSelection }: WelcomeViewProps) {
+export default function WelcomeView({ onSelection, intent }: WelcomeViewProps) {
     const handleButtonClick = (scenario: BookingScenario) => {
         console.log('Button clicked:', scenario) // Debug log
         onSelection(scenario)
     }
+
+    // Different messaging based on intent
+    const messaging = {
+        book: {
+            title: "Who will this appointment be for?",
+            subtitle: "Please select the option that best describes your situation so we can provide the right support."
+        },
+        explore: {
+            title: "Let's see what availability we have for you",
+            subtitle: "To show you the most relevant practitioner availability, let us know what insurance you'd be paying with first."
+        }
+    }
+
+    const currentMessaging = messaging[intent]
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/20 to-[#FEF8F1]">
             <div className="max-w-4xl mx-auto py-16 px-4">
                 <div className="text-center mb-12">
                     <h1 className="text-4xl font-bold text-[#091747] mb-6 font-['Newsreader']">
-                        Who will this appointment be for?
+                        {currentMessaging.title}
                     </h1>
                     <p className="text-xl text-[#091747]/70 max-w-3xl mx-auto leading-relaxed font-['Newsreader']">
-                        Please select the option that best describes your situation so we can provide the right support.
+                        {currentMessaging.subtitle}
                     </p>
                 </div>
 

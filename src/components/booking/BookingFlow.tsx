@@ -28,6 +28,7 @@ export type BookingStep =
     | 'confirmation'
 
 export type BookingScenario = 'self' | 'third-party' | 'case-manager'
+export type BookingIntent = 'book' | 'explore'
 
 export interface BookingState {
     step: BookingStep
@@ -39,13 +40,19 @@ export interface BookingState {
     insuranceInfo?: InsuranceInfo
     roiContacts: ROIContact[]
     appointmentId?: string
+    intent: BookingIntent // NEW: user's intent (book vs explore)
 }
 
-export default function BookingFlow() {
+interface BookingFlowProps {
+    intent?: BookingIntent
+}
+
+export default function BookingFlow({ intent = 'book' }: BookingFlowProps) {
     const [state, setState] = useState<BookingState>({
-        step: 'welcome',
+        step: intent === 'explore' ? 'payer-search' : 'welcome',
         bookingScenario: 'self',
-        roiContacts: []
+        roiContacts: [],
+        intent: intent
     })
 
     const updateState = (updates: Partial<BookingState>) => {
@@ -223,7 +230,8 @@ export default function BookingFlow() {
         setState({
             step: 'welcome',
             bookingScenario: 'self',
-            roiContacts: []
+            roiContacts: [],
+            intent: state.intent // Preserve the original intent
         })
     }
 
@@ -232,15 +240,18 @@ export default function BookingFlow() {
         switch (state.step) {
             case 'welcome':
                 return (
-                    <WelcomeView onSelection={handleWelcomeSelection} />
+                    <WelcomeView 
+                        onSelection={handleWelcomeSelection} 
+                        intent={state.intent}
+                    />
                 )
 
             case 'payer-search':
                 return (
                     <PayerSearchView
                         onPayerSelected={handlePayerSelected}
-                        onCashPayment={handleCashPaymentSelected}
                         bookingScenario={state.bookingScenario}
+                        intent={state.intent}
                         onBack={handleBackToWelcome}
                     />
                 )
@@ -342,6 +353,7 @@ export default function BookingFlow() {
                         onTimeSlotSelected={handleTimeSlotSelected}
                         onBackToInsurance={handleBackToInsurance}
                         bookingMode={state.bookingMode}
+                        intent={state.intent}
                     />
                 )
 
