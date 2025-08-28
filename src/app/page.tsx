@@ -140,7 +140,7 @@ export default function HomePage() {
             We accept most major insurance plans, cash payments, and Medicaid plans to make your care accessible.
           </p>
           <Link 
-            href="/insurance"
+            href="/ways-to-pay"
             className="inline-block bg-[#BF9C73] hover:bg-[#A8865F] text-white px-8 py-4 rounded-xl font-['Newsreader'] transition-all duration-300 hover:shadow-lg hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-[#BF9C73]/20"
             aria-label="Learn about payment options and insurance"
           >
