@@ -20,8 +20,8 @@ export default function Header() {
     }, [])
 
     const navigation = [
-        { name: 'Our practitioners', href: '/providers' },
-        { name: 'Ways to pay', href: '/insurance' },
+        { name: 'Our practitioners', href: '/practitioners' },
+        { name: 'Ways to pay', href: '/ways-to-pay' },
         { name: 'About', href: '/about' }
     ]
 

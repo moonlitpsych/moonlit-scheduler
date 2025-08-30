@@ -1,11 +1,16 @@
-// next.config.js
+// next.config.ts
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
+  output: 'standalone',
   images: {
-    domains: ['alavxdxxttlfprkiwtrq.supabase.co'], // Supabase storage domain
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'alavxdxxttlfprkiwtrq.supabase.co',
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+      }
+    ],
   },
   env: {
     NEXT_PUBLIC_APP_URL: process.env.NODE_ENV === 'production'

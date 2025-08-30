@@ -1,9 +1,11 @@
 'use client'
 
 import ScheduleEditor from '@/components/providers/ScheduleEditor'
+import MonthlyCalendarView from '@/components/providers/MonthlyCalendarView'
 import { Database } from '@/types/database'
 import { formatTimeRange } from '@/utils/timeFormat'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useToast } from '@/contexts/ToastContext'
 import { AlertCircle, AlertTriangle, Calendar, Clock, Plus, Repeat, Settings, Trash2, User, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -63,9 +65,12 @@ export default function DashboardAvailabilityPage() {
     const [editing, setEditing] = useState(false)
     const [showExceptions, setShowExceptions] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [viewMode, setViewMode] = useState<'weekly' | 'monthly'>('weekly')
+    const [editingException, setEditingException] = useState<AvailabilityException | null>(null)
     
     const router = useRouter()
     const supabase = createClientComponentClient<Database>()
+    const toast = useToast()
 
     useEffect(() => {
         loadUserAndProvider()
@@ -188,12 +193,46 @@ export default function DashboardAvailabilityPage() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Header */}
                 <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-[#091747] font-['Newsreader']">
-                        Manage Your Availability
-                    </h1>
-                    <p className="mt-2 text-[#091747]/70">
-                        Set your weekly schedule, time off, and booking preferences.
-                    </p>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold text-[#091747] font-['Newsreader']">
+                                Manage Your Availability
+                            </h1>
+                            <p className="mt-2 text-[#091747]/70">
+                                Set your weekly schedule, time off, and booking preferences.
+                            </p>
+                        </div>
+                        
+                        {/* View Toggle Switch */}
+                        <div className="flex items-center gap-3 bg-white rounded-xl p-2 shadow-sm border border-stone-200">
+                            <button
+                                onClick={() => setViewMode('weekly')}
+                                className={`px-4 py-2 rounded-lg transition-all font-medium ${
+                                    viewMode === 'weekly'
+                                        ? 'bg-[#BF9C73] text-white shadow-sm'
+                                        : 'text-[#091747] hover:bg-stone-50'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Clock className="h-4 w-4" />
+                                    Weekly Schedule
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => setViewMode('monthly')}
+                                className={`px-4 py-2 rounded-lg transition-all font-medium ${
+                                    viewMode === 'monthly'
+                                        ? 'bg-[#BF9C73] text-white shadow-sm'
+                                        : 'text-[#091747] hover:bg-stone-50'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4" />
+                                    Monthly Calendar
+                                </div>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Provider Schedule Management */}
@@ -257,6 +296,7 @@ export default function DashboardAvailabilityPage() {
                         {/* Main Content Grid */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             {/* Weekly Schedule */}
+                            {viewMode === 'weekly' && (
                             <div className="lg:col-span-2">
                                 <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
                                     <div className="flex items-center justify-between mb-6">
@@ -428,6 +468,22 @@ export default function DashboardAvailabilityPage() {
                                     )}
                                 </div>
                             </div>
+                            )}
+
+                            {/* Monthly Calendar View */}
+                            {viewMode === 'monthly' && (
+                            <div className="lg:col-span-2">
+                                <MonthlyCalendarView
+                                    schedule={schedule}
+                                    exceptions={exceptions}
+                                    onAddException={() => setShowExceptions(true)}
+                                    onEditException={(exception) => {
+                                        setEditingException(exception)
+                                        setShowExceptions(true)
+                                    }}
+                                />
+                            </div>
+                            )}
 
                             {/* Provider Info */}
                             <div className="space-y-6">
@@ -480,9 +536,15 @@ export default function DashboardAvailabilityPage() {
             {showExceptions && provider && (
                 <WorkingExceptionManagerModal
                     providerId={provider.id}
-                    onClose={() => setShowExceptions(false)}
+                    editingException={editingException}
+                    toast={toast}
+                    onClose={() => {
+                        setShowExceptions(false)
+                        setEditingException(null)
+                    }}
                     onSave={() => {
                         setShowExceptions(false)
+                        setEditingException(null)
                         loadProviderExceptions(provider.id)
                     }}
                 />
@@ -523,10 +585,14 @@ export default function DashboardAvailabilityPage() {
 // Working Exception Manager Modal - Matches Actual Database Schema
 function WorkingExceptionManagerModal({ 
     providerId, 
+    editingException,
+    toast,
     onClose, 
     onSave 
 }: { 
     providerId: string
+    editingException?: AvailabilityException | null
+    toast: ReturnType<typeof useToast>
     onClose: () => void
     onSave: () => void
 }) {
@@ -546,14 +612,46 @@ function WorkingExceptionManagerModal({
     
     const supabase = createClientComponentClient<Database>()
 
+    // Populate form when editing an existing exception
+    useEffect(() => {
+        if (editingException) {
+            setExceptionType(editingException.exception_type)
+            setExceptionDate(editingException.exception_date)
+            setEndDate(editingException.end_date || '')
+            setStartTime(editingException.start_time || '')
+            setEndTime(editingException.end_time || '')
+            setNote(editingException.note || '')
+            setIsRecurring(editingException.is_recurring || false)
+            setRecurrencePattern(editingException.recurrence_pattern || 'weekly')
+            setRecurrenceInterval(editingException.recurrence_interval || 1)
+            setRecurrenceCount(editingException.recurrence_count || undefined)
+            setRecurrenceEndDate(editingException.recurrence_end_date || '')
+            setRecurrenceDays(editingException.recurrence_days || [])
+        } else {
+            // Reset form for new exception
+            setExceptionType('unavailable')
+            setExceptionDate('')
+            setEndDate('')
+            setStartTime('')
+            setEndTime('')
+            setNote('')
+            setIsRecurring(false)
+            setRecurrencePattern('weekly')
+            setRecurrenceInterval(1)
+            setRecurrenceCount(undefined)
+            setRecurrenceEndDate('')
+            setRecurrenceDays([])
+        }
+    }, [editingException])
+
     const handleSave = async () => {
         if (!exceptionDate) {
-            alert('Please select a date')
+            toast.warning('Date Required', 'Please select a date for the exception')
             return
         }
 
         if ((exceptionType === 'custom_hours' || exceptionType === 'partial_block') && (!startTime || !endTime)) {
-            alert('Please specify start and end times for custom hours or partial blocks')
+            toast.warning('Time Required', 'Please specify start and end times for custom hours or partial blocks')
             return
         }
 
@@ -584,21 +682,41 @@ function WorkingExceptionManagerModal({
 
             console.log('Saving exception data:', exceptionData)
 
-            const { data, error } = await supabase
-                .from('availability_exceptions')
-                .insert([exceptionData])
-                .select()
+            let data, error
+            
+            if (editingException?.id) {
+                // Update existing exception
+                const result = await supabase
+                    .from('availability_exceptions')
+                    .update(exceptionData)
+                    .eq('id', editingException.id)
+                    .select()
+                data = result.data
+                error = result.error
+            } else {
+                // Create new exception
+                const result = await supabase
+                    .from('availability_exceptions')
+                    .insert([exceptionData])
+                    .select()
+                data = result.data
+                error = result.error
+            }
 
             if (error) {
                 console.error('Error saving exception:', error)
-                alert(`Error saving exception: ${error.message}`)
+                toast.error('Save Failed', `Error saving exception: ${error.message}`)
             } else {
                 console.log('Exception saved successfully:', data)
+                toast.success(
+                    editingException ? 'Exception Updated' : 'Exception Created', 
+                    editingException ? 'Your schedule exception has been updated successfully' : 'Your schedule exception has been created successfully'
+                )
                 onSave()
             }
         } catch (err) {
             console.error('Error saving exception:', err)
-            alert(`Error saving exception: ${err}`)
+            toast.error('Unexpected Error', `Error saving exception: ${err}`)
         } finally {
             setSaving(false)
         }
@@ -612,12 +730,42 @@ function WorkingExceptionManagerModal({
         )
     }
 
+    const handleDelete = async () => {
+        if (!editingException?.id) return
+        
+        if (!confirm('Are you sure you want to delete this exception?')) return
+
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('availability_exceptions')
+                .delete()
+                .eq('id', editingException.id)
+
+            if (error) {
+                console.error('Error deleting exception:', error)
+                toast.error('Delete Failed', `Error deleting exception: ${error.message}`)
+            } else {
+                console.log('Exception deleted successfully')
+                toast.success('Exception Deleted', 'Your schedule exception has been removed successfully')
+                onSave()
+            }
+        } catch (err) {
+            console.error('Error deleting exception:', err)
+            toast.error('Unexpected Error', `Error deleting exception: ${err}`)
+        } finally {
+            setSaving(false)
+        }
+    }
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="p-6 border-b border-stone-200">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold text-[#091747]">Add Schedule Exception</h2>
+                        <h2 className="text-xl font-bold text-[#091747]">
+                            {editingException ? 'Edit Schedule Exception' : 'Add Schedule Exception'}
+                        </h2>
                         <button
                             onClick={onClose}
                             className="text-[#091747]/60 hover:text-[#091747] transition-colors"
@@ -820,20 +968,34 @@ function WorkingExceptionManagerModal({
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-stone-200 flex justify-end gap-3">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 text-[#091747] border border-stone-300 rounded-lg hover:bg-stone-50 transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="px-4 py-2 bg-[#BF9C73] hover:bg-[#A88861] text-white rounded-lg transition-colors disabled:opacity-50"
-                    >
-                        {saving ? 'Saving...' : 'Save Exception'}
-                    </button>
+                <div className="p-6 border-t border-stone-200 flex justify-between">
+                    <div>
+                        {editingException && (
+                            <button
+                                onClick={handleDelete}
+                                disabled={saving}
+                                className="px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Delete Exception
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={onClose}
+                            className="px-4 py-2 text-[#091747] border border-stone-300 rounded-lg hover:bg-stone-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="px-4 py-2 bg-[#BF9C73] hover:bg-[#A88861] text-white rounded-lg transition-colors disabled:opacity-50"
+                        >
+                            {saving ? 'Saving...' : editingException ? 'Update Exception' : 'Save Exception'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

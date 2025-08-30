@@ -1,7 +1,9 @@
 'use client'
 
+import PractitionerHeader from '@/components/layout/PractitionerHeader'
 import { Database } from '@/types/database'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { ToastProvider } from '@/contexts/ToastContext'
 import {
   Calendar,
   LogOut,
@@ -49,12 +51,7 @@ export default function DashboardLayout({
     getUser()
   }, [supabase])
 
-  // Redirect /dashboard to /dashboard/availability
-  useEffect(() => {
-    if (pathname === '/dashboard') {
-      router.replace('/dashboard/availability')
-    }
-  }, [pathname, router])
+  // No auto-redirect - dashboard home page now exists
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -72,142 +69,150 @@ export default function DashboardLayout({
   ].filter(item => item.show)
 
   return (
-    <div className="h-screen bg-[#FEF8F1] flex">
-      {/* Mobile sidebar backdrop */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div className={`
-        fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="flex items-center justify-between h-20 px-6 border-b border-stone-200">
-            <div>
-              <h1 className="text-2xl font-bold text-[#091747] font-['Newsreader']">
-                Moonlit
-              </h1>
-              <p className="text-sm text-[#BF9C73]">Provider Dashboard</p>
-            </div>
-            <button
+    <ToastProvider>
+      <div className="min-h-screen bg-[#FEF8F1]">
+        {/* Practitioner Header */}
+        <PractitionerHeader />
+        
+        {/* Dashboard Content */}
+        <div className="h-screen bg-[#FEF8F1] flex pt-16">
+          {/* Mobile sidebar backdrop */}
+          {sidebarOpen && (
+            <div 
+              className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+            />
+          )}
 
-          {/* User info */}
-          <div className="px-6 py-6 border-b border-stone-200 bg-gradient-to-r from-[#BF9C73]/5 to-[#F6B398]/5">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#BF9C73] to-[#F6B398] rounded-full flex items-center justify-center">
-                <span className="text-white font-semibold text-lg">
-                  {provider ? 
-                    `${provider.first_name?.[0] || ''}${provider.last_name?.[0] || ''}` :
-                    user?.email?.[0]?.toUpperCase() || 'U'
-                  }
-                </span>
+          {/* Sidebar */}
+          <div className={`
+            fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0
+            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          `}>
+            <div className="flex flex-col h-full">
+              {/* Logo */}
+              <div className="flex items-center justify-between h-20 px-6 border-b border-stone-200">
+                <div>
+                  <h1 className="text-2xl font-bold text-[#091747] font-['Newsreader']">
+                    Moonlit
+                  </h1>
+                  <p className="text-sm text-[#BF9C73]">Provider Dashboard</p>
+                </div>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="lg:hidden p-2 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-lg font-semibold text-[#091747] truncate font-['Newsreader']">
-                  {provider ? 
-                    `${provider.first_name} ${provider.last_name}` :
-                    'Loading...'
-                  }
-                </p>
-                <p className="text-sm text-[#BF9C73] capitalize truncate">
-                  {provider?.role?.replace('_', ' ') || 'User'}
-                </p>
+
+              {/* User info */}
+              <div className="px-6 py-6 border-b border-stone-200 bg-gradient-to-r from-[#BF9C73]/5 to-[#F6B398]/5">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-[#BF9C73] to-[#F6B398] rounded-full flex items-center justify-center">
+                    <span className="text-white font-semibold text-lg">
+                      {provider ? 
+                        `${provider.first_name?.[0] || ''}${provider.last_name?.[0] || ''}` :
+                        user?.email?.[0]?.toUpperCase() || 'U'
+                      }
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-lg font-semibold text-[#091747] truncate font-['Newsreader']">
+                      {provider ? 
+                        `${provider.first_name} ${provider.last_name}` :
+                        'Loading...'
+                      }
+                    </p>
+                    <p className="text-sm text-[#BF9C73] capitalize truncate">
+                      {provider?.role?.replace('_', ' ') || 'User'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Navigation */}
+              <nav className="flex-1 px-4 py-6 space-y-2">
+                {navigation.map((item) => {
+                  const isActive = pathname === item.href
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      className={`
+                        flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group
+                        ${isActive 
+                          ? 'bg-gradient-to-r from-[#BF9C73] to-[#F6B398] text-white shadow-lg' 
+                          : 'text-[#091747] hover:bg-gradient-to-r hover:from-[#BF9C73]/10 hover:to-[#F6B398]/10 hover:shadow-md'
+                        }
+                      `}
+                      onClick={() => setSidebarOpen(false)}
+                    >
+                      <item.icon className={`mr-4 h-5 w-5 transition-transform duration-200 ${isActive ? 'text-white' : 'text-[#BF9C73] group-hover:scale-110'}`} />
+                      <span className={`font-medium ${isActive ? 'text-white' : 'text-[#091747]'}`}>
+                        {item.name}
+                      </span>
+                      {isActive && (
+                        <div className="ml-auto w-2 h-2 bg-white rounded-full opacity-80" />
+                      )}
+                    </Link>
+                  )
+                })}
+              </nav>
+
+              {/* Bottom section */}
+              <div className="px-4 py-6 border-t border-stone-200">
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center w-full px-4 py-3 text-sm font-medium text-stone-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group"
+                >
+                  <LogOut className="mr-4 h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
+                  <span>Sign Out</span>
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-2">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`
-                    flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group
-                    ${isActive 
-                      ? 'bg-gradient-to-r from-[#BF9C73] to-[#F6B398] text-white shadow-lg' 
-                      : 'text-[#091747] hover:bg-gradient-to-r hover:from-[#BF9C73]/10 hover:to-[#F6B398]/10 hover:shadow-md'
-                    }
-                  `}
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <item.icon className={`mr-4 h-5 w-5 transition-transform duration-200 ${isActive ? 'text-white' : 'text-[#BF9C73] group-hover:scale-110'}`} />
-                  <span className={`font-medium ${isActive ? 'text-white' : 'text-[#091747]'}`}>
-                    {item.name}
-                  </span>
-                  {isActive && (
-                    <div className="ml-auto w-2 h-2 bg-white rounded-full opacity-80" />
-                  )}
-                </Link>
-              )
-            })}
-          </nav>
-
-          {/* Bottom section */}
-          <div className="px-4 py-6 border-t border-stone-200">
+          {/* Mobile sidebar button */}
+          <div className="lg:hidden">
             <button
-              onClick={handleLogout}
-              className="flex items-center w-full px-4 py-3 text-sm font-medium text-stone-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group"
+              onClick={() => setSidebarOpen(true)}
+              className="fixed top-4 left-4 z-30 p-2 bg-white rounded-lg shadow-lg border border-stone-200"
             >
-              <LogOut className="mr-4 h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
-              <span>Sign Out</span>
+              <Menu className="h-6 w-6 text-[#091747]" />
             </button>
           </div>
-        </div>
-      </div>
 
-      {/* Mobile sidebar button */}
-      <div className="lg:hidden">
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-30 p-2 bg-white rounded-lg shadow-lg border border-stone-200"
-        >
-          <Menu className="h-6 w-6 text-[#091747]" />
-        </button>
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar for mobile */}
-        <div className="lg:hidden bg-white border-b border-stone-200 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
-              Moonlit Dashboard
-            </h1>
-            {provider && (
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-[#BF9C73] to-[#F6B398] rounded-full flex items-center justify-center">
-                  <span className="text-white font-medium text-sm">
-                    {`${provider.first_name?.[0] || ''}${provider.last_name?.[0] || ''}`}
-                  </span>
-                </div>
-                <span className="text-sm font-medium text-[#091747]">
-                  {provider.first_name}
-                </span>
+          {/* Main content */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Top bar for mobile */}
+            <div className="lg:hidden bg-white border-b border-stone-200 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <h1 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
+                  Moonlit Dashboard
+                </h1>
+                {provider && (
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-[#BF9C73] to-[#F6B398] rounded-full flex items-center justify-center">
+                      <span className="text-white font-medium text-sm">
+                        {`${provider.first_name?.[0] || ''}${provider.last_name?.[0] || ''}`}
+                      </span>
+                    </div>
+                    <span className="text-sm font-medium text-[#091747]">
+                      {provider.first_name}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Page content */}
+            <main className="flex-1 overflow-y-auto">
+              {children}
+            </main>
           </div>
         </div>
-
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
       </div>
-    </div>
+    </ToastProvider>
   )
 }

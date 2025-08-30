@@ -6,10 +6,14 @@ import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isSameDay, is
 import { Check, ChevronLeft, ChevronRight, Clock, Calendar, Users } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
+export type BookingIntent = 'book' | 'explore'
+
 interface CalendarViewProps {
     selectedPayer?: Payer
     onTimeSlotSelected: (slot: TimeSlot) => void
     onBackToInsurance: () => void
+    bookingMode?: 'normal' | 'from-effective-date'
+    intent: BookingIntent
 }
 
 interface ConsolidatedTimeSlot {
@@ -28,7 +32,7 @@ interface AvailableSlot {
     provider_name?: string
 }
 
-export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance }: CalendarViewProps) {
+export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance, bookingMode, intent }: CalendarViewProps) {
     const [currentMonth, setCurrentMonth] = useState(new Date())
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date()) // Initialize with today
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
@@ -37,7 +41,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string>('')
     // Removed showInsuranceBanner state - redundant with subheader
-    const [bookingMode, setBookingMode] = useState<'by_availability' | 'by_provider'>('by_availability')
+    const [viewMode, setViewMode] = useState<'by_availability' | 'by_provider'>('by_availability')
     const [providers, setProviders] = useState<any[]>([])
     const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
     const [loadingProviders, setLoadingProviders] = useState(false)
@@ -138,7 +142,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
     // Handle provider selection
     const handleProviderSelect = async (providerId: string) => {
-        console.log('🔄 Provider selection starting:', { providerId, bookingMode, currentSelectedProvider: selectedProvider })
+        console.log('🔄 Provider selection starting:', { providerId, viewMode, currentSelectedProvider: selectedProvider })
         
         setSelectedProvider(providerId)
         setSelectedSlot(null)
@@ -447,7 +451,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             
             console.log('🔍 CalendarView handleSlotClick:', {
                 firstSlot,
-                bookingMode,
+                viewMode,
                 selectedProvider,
                 firstSlotProviderId: firstSlot?.provider_id
             })
@@ -471,7 +475,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 start_time: startTime,
                 end_time: endTime,
                 // For provider mode, ensure we have the selected provider ID
-                provider_id: bookingMode === 'by_provider' && selectedProvider 
+                provider_id: viewMode === 'by_provider' && selectedProvider 
                     ? selectedProvider 
                     : firstSlot.provider_id
             }
@@ -496,6 +500,54 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         }
     }
 
+    const handleViewModeChange = async (mode: 'by_availability' | 'by_provider') => {
+        setViewMode(mode)
+        setSelectedProvider(null)
+        setSelectedSlot(null)
+        setConsolidatedSlots([])
+        setAvailableSlots([])
+        
+        if (mode === 'by_provider') {
+            // Fetch providers for this payer
+            if (!selectedPayer?.id) return
+            
+            setLoadingProviders(true)
+            try {
+                const response = await fetch('/api/patient-booking/providers-for-payer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        payer_id: selectedPayer.id,
+                        language: 'English'
+                    })
+                })
+
+                if (response.ok) {
+                    const data = await response.json()
+                    console.log('📋 Providers fetched for by_provider mode:', data)
+                    console.log('📋 data.success:', data.success)
+                    console.log('📋 data.data.providers:', data.data?.providers)
+                    console.log('📋 data.data.providers type:', typeof data.data?.providers, 'length:', data.data?.providers?.length)
+                    if (data.success && data.data?.providers) {
+                        console.log('📋 Setting providers state with:', data.data.providers)
+                        setProviders(data.data.providers)
+                        console.log('📋 providers state should now be:', data.data.providers.length, 'items')
+                    } else {
+                        console.log('📋 NOT setting providers - success:', data.success, 'providers exists:', !!data.data?.providers)
+                    }
+                } else {
+                    console.log('📋 Response not OK:', response.status, response.statusText)
+                }
+            } catch (error) {
+                console.error('❌ Error fetching providers:', error)
+            } finally {
+                setLoadingProviders(false)
+            }
+        }
+    }
+
     const handleNext = () => {
         if (selectedSlot) {
             onTimeSlotSelected(selectedSlot)
@@ -508,10 +560,10 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 {/* Header */}
                 <div className="text-center mb-8">
                     <h1 className="text-4xl font-bold text-[#091747] mb-4 font-['Newsreader']">
-                        Select Your Appointment Time
+                        {intent === 'explore' ? 'Available Appointment Times' : 'Select Your Appointment Time'}
                     </h1>
                     <p className="text-xl text-[#091747]/70 mb-6 font-['Newsreader']">
-                        {bookingMode === 'by_availability' 
+                        {viewMode === 'by_availability' 
                             ? `Showing merged availability for all providers who accept ${selectedPayer?.name}`
                             : selectedProvider
                                 ? 'Select a date to see this provider\'s availability'
@@ -525,9 +577,9 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-2">
                         <div className="grid grid-cols-2 gap-2">
                             <button
-                                onClick={() => handleBookingModeChange('by_availability')}
+                                onClick={() => handleViewModeChange('by_availability')}
                                 className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium transition-all font-['Newsreader'] ${
-                                    bookingMode === 'by_availability'
+                                    viewMode === 'by_availability'
                                         ? 'bg-[#BF9C73] text-white shadow-sm'
                                         : 'text-[#091747]/70 hover:bg-stone-50'
                                 }`}
@@ -536,9 +588,9 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                 By Availability
                             </button>
                             <button
-                                onClick={() => handleBookingModeChange('by_provider')}
+                                onClick={() => handleViewModeChange('by_provider')}
                                 className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium transition-all font-['Newsreader'] ${
-                                    bookingMode === 'by_provider'
+                                    viewMode === 'by_provider'
                                         ? 'bg-[#BF9C73] text-white shadow-sm'
                                         : 'text-[#091747]/70 hover:bg-stone-50'
                                 }`}
@@ -553,7 +605,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 {/* Insurance Banner - REMOVED: Redundant with subheader */}
 
                 {/* Provider Selection (Book by Practitioner mode) */}
-                {bookingMode === 'by_provider' && (
+                {viewMode === 'by_provider' && (
                     <div className="max-w-4xl mx-auto mb-8">
                         <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
                             <h3 className="text-xl font-bold text-[#091747] mb-4 font-['Newsreader']">
@@ -578,14 +630,14 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                         >
                                             <div className="flex items-center gap-3 mb-3">
                                                 <div className="w-12 h-12 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold font-['Newsreader']">
-                                                    {provider.full_name?.split(' ').map((n: string) => n.charAt(0)).join('') || 'DR'}
+                                                    {provider.first_name?.charAt(0) || ''}{provider.last_name?.charAt(0) || ''}
                                                 </div>
                                                 <div>
                                                     <h4 className="font-bold text-[#091747] font-['Newsreader']">
-                                                        {provider.full_name}
+                                                        {provider.first_name} {provider.last_name}
                                                     </h4>
                                                     <p className="text-sm text-[#BF9C73] font-['Newsreader']">
-                                                        {provider.title}
+                                                        {provider.title || provider.role || 'MD'}
                                                     </p>
                                                 </div>
                                             </div>
@@ -721,7 +773,10 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                                     <div>{slot.displayTime}</div>
                                                     <div className="text-xs opacity-80 mt-1">
                                                         {bookingMode === 'by_provider' && selectedProvider
-                                                            ? providers.find(p => p.id === selectedProvider)?.full_name || 'Selected Provider'
+                                                            ? (() => {
+                                                                const provider = providers.find(p => p.id === selectedProvider);
+                                                                return provider ? `${provider.first_name} ${provider.last_name}` : 'Selected Provider';
+                                                            })()
                                                             : `${slot.availableSlots.length} provider${slot.availableSlots.length !== 1 ? 's' : ''} available`
                                                         }
                                                     </div>
@@ -732,8 +787,10 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                         <div className="text-center py-8">
                                             <Clock className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                             <p className="text-slate-500 font-['Newsreader']">
-                                                No available time slots for this date.<br />
-                                                Please try another day.
+                                                {viewMode === 'by_provider' && !selectedProvider 
+                                                    ? "Select a provider to see availability."
+                                                    : "No available time slots for this date.\nPlease try another day."
+                                                }
                                             </p>
                                         </div>
                                     ) : null}

@@ -1,5 +1,5 @@
 // src/app/api/patient-booking/providers-for-payer/route.ts
-import { supabase } from '@/lib/supabase'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         console.log('🔍 Fetching providers for payer:', { payer_id, language })
 
         // FIXED: Use correct table name 'provider_payer_networks' instead of 'provider_payer_relationships'
-        const { data: networks, error: networksError } = await supabase
+        const { data: networks, error: networksError } = await supabaseAdmin
             .from('provider_payer_networks')
             .select(`
                 provider_id,
@@ -32,7 +32,12 @@ export async function POST(request: NextRequest) {
                     is_active,
                     languages_spoken,
                     telehealth_enabled,
-                    accepts_new_patients
+                    accepts_new_patients,
+                    profile_image_url,
+                    provider_licenses(
+                        license_type,
+                        issuing_state
+                    )
                 )
             `)
             .eq('payer_id', payer_id)
@@ -53,7 +58,9 @@ export async function POST(request: NextRequest) {
         let providers = networks?.map(network => ({
             ...network.providers,
             network_effective_date: network.effective_date,
-            network_status: network.status
+            network_status: network.status,
+            // Add license information for state filtering
+            state_licenses: network.providers.provider_licenses?.map(license => license.issuing_state) || []
         })) || []
 
         // Filter by language if specified and not English

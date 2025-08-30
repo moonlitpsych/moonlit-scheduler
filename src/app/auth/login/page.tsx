@@ -5,7 +5,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Eye, EyeOff, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -21,17 +21,22 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClientComponentClient<Database>()
 
- // TEMPORARILY DISABLED TO STOP LOOP
-// useEffect(() => {
-//   const checkAuth = async () => {
-//     const { data: { user } } = await supabase.auth.getUser()
-//     if (user) {
-//       console.log('User already logged in, redirecting...', user.email)
-//       router.push('/dashboard/availability')
-//     }
-//   }
-//   checkAuth()
-// }, [router, supabase.auth])
+  // Auto-redirect if already authenticated - with loop prevention
+  useEffect(() => {
+    const checkAuth = async () => {
+      // Only check auth if we haven't already tried
+      if (loading || error) return
+      
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        console.log('User already logged in, redirecting...', user.email)
+        router.replace('/dashboard')
+      }
+    }
+    
+    // Only run on initial mount
+    checkAuth()
+  }, []) // Empty dependency array prevents loops
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,8 +58,8 @@ export default function LoginPage() {
         console.log('Login successful! User:', data.user.email)
         console.log('Redirecting to dashboard...')
         
-        // Force a hard redirect
-        window.location.href = '/dashboard/availability'
+        // Smooth navigation to dashboard
+        router.replace('/dashboard')
       }
     } catch (err) {
       console.error('Unexpected error:', err)
@@ -202,8 +207,13 @@ export default function LoginPage() {
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setShowPassword(!showPassword)
+                    }}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600 cursor-pointer z-10"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
                       <EyeOff className="h-5 w-5" />
@@ -263,8 +273,13 @@ export default function LoginPage() {
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setShowPassword(!showPassword)
+                    }}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600 cursor-pointer z-10"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
                       <EyeOff className="h-5 w-5" />

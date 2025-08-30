@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { Payer } from '@/types/database'
 import { Calendar, Check, Clock, CreditCard, Loader2, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { BookingScenario } from './WelcomeView'
+import { BookingScenario, BookingIntent } from './WelcomeView'
 
 interface PayerSearchState {
     query: string
@@ -17,10 +17,11 @@ interface PayerSearchState {
 interface PayerSearchViewProps {
     onPayerSelected: (payer: Payer, acceptanceStatus: 'not-accepted' | 'future' | 'active') => void
     bookingScenario: BookingScenario
+    intent: BookingIntent
     onBack?: () => void
 }
 
-export default function PayerSearchView({ onPayerSelected, bookingScenario, onBack }: PayerSearchViewProps) {
+export default function PayerSearchView({ onPayerSelected, bookingScenario, intent, onBack }: PayerSearchViewProps) {
     const [state, setState] = useState<PayerSearchState>({
         query: '',
         results: [],
@@ -130,28 +131,54 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, onBa
     }
 
     const getScenarioTitle = () => {
-        switch (bookingScenario) {
-            case 'self':
-                return 'What insurance do you have?'
-            case 'case-manager':
-                return 'What insurance does the patient have?'
-            case 'referral':
-                return 'What insurance does your patient have?'
-            default:
-                return 'Insurance Information'
+        if (intent === 'explore') {
+            switch (bookingScenario) {
+                case 'self':
+                    return 'What insurance would you be paying with?'
+                case 'case-manager':
+                    return 'What insurance would the patient be paying with?'
+                case 'referral':
+                    return 'What insurance would your patient be paying with?'
+                default:
+                    return 'Insurance Information'
+            }
+        } else {
+            switch (bookingScenario) {
+                case 'self':
+                    return 'What insurance do you have?'
+                case 'case-manager':
+                    return 'What insurance does the patient have?'
+                case 'referral':
+                    return 'What insurance does your patient have?'
+                default:
+                    return 'Insurance Information'
+            }
         }
     }
 
     const getScenarioSubtitle = () => {
-        switch (bookingScenario) {
-            case 'self':
-                return 'Search for your insurance provider below'
-            case 'case-manager':
-                return 'Search for the patient\'s insurance provider'
-            case 'referral':
-                return 'Search for the patient\'s insurance provider'
-            default:
-                return 'Search for insurance provider'
+        if (intent === 'explore') {
+            switch (bookingScenario) {
+                case 'self':
+                    return 'This helps us show you the most relevant practitioner availability'
+                case 'case-manager':
+                    return 'This helps us show you the most relevant practitioner availability for the patient'
+                case 'referral':
+                    return 'This helps us show you the most relevant practitioner availability for your patient'
+                default:
+                    return 'This helps us show you the most relevant practitioner availability'
+            }
+        } else {
+            switch (bookingScenario) {
+                case 'self':
+                    return 'Search for your insurance provider below'
+                case 'case-manager':
+                    return 'Search for the patient\'s insurance provider'
+                case 'referral':
+                    return 'Search for the patient\'s insurance provider'
+                default:
+                    return 'Search for insurance provider'
+            }
         }
     }
 
