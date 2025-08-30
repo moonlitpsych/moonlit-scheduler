@@ -1,6 +1,7 @@
 'use client'
 
 import ScheduleEditor from '@/components/providers/ScheduleEditor'
+import MonthlyCalendarView from '@/components/providers/MonthlyCalendarView'
 import { Database } from '@/types/database'
 import { formatTimeRange } from '@/utils/timeFormat'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
@@ -63,6 +64,7 @@ export default function DashboardAvailabilityPage() {
     const [editing, setEditing] = useState(false)
     const [showExceptions, setShowExceptions] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [viewMode, setViewMode] = useState<'weekly' | 'monthly'>('weekly')
     
     const router = useRouter()
     const supabase = createClientComponentClient<Database>()
@@ -188,12 +190,46 @@ export default function DashboardAvailabilityPage() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Header */}
                 <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-[#091747] font-['Newsreader']">
-                        Manage Your Availability
-                    </h1>
-                    <p className="mt-2 text-[#091747]/70">
-                        Set your weekly schedule, time off, and booking preferences.
-                    </p>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold text-[#091747] font-['Newsreader']">
+                                Manage Your Availability
+                            </h1>
+                            <p className="mt-2 text-[#091747]/70">
+                                Set your weekly schedule, time off, and booking preferences.
+                            </p>
+                        </div>
+                        
+                        {/* View Toggle Switch */}
+                        <div className="flex items-center gap-3 bg-white rounded-xl p-2 shadow-sm border border-stone-200">
+                            <button
+                                onClick={() => setViewMode('weekly')}
+                                className={`px-4 py-2 rounded-lg transition-all font-medium ${
+                                    viewMode === 'weekly'
+                                        ? 'bg-[#BF9C73] text-white shadow-sm'
+                                        : 'text-[#091747] hover:bg-stone-50'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Clock className="h-4 w-4" />
+                                    Weekly Schedule
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => setViewMode('monthly')}
+                                className={`px-4 py-2 rounded-lg transition-all font-medium ${
+                                    viewMode === 'monthly'
+                                        ? 'bg-[#BF9C73] text-white shadow-sm'
+                                        : 'text-[#091747] hover:bg-stone-50'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4" />
+                                    Monthly Calendar
+                                </div>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Provider Schedule Management */}
@@ -257,6 +293,7 @@ export default function DashboardAvailabilityPage() {
                         {/* Main Content Grid */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             {/* Weekly Schedule */}
+                            {viewMode === 'weekly' && (
                             <div className="lg:col-span-2">
                                 <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
                                     <div className="flex items-center justify-between mb-6">
@@ -428,6 +465,18 @@ export default function DashboardAvailabilityPage() {
                                     )}
                                 </div>
                             </div>
+                            )}
+
+                            {/* Monthly Calendar View */}
+                            {viewMode === 'monthly' && (
+                            <div className="lg:col-span-2">
+                                <MonthlyCalendarView
+                                    schedule={schedule}
+                                    exceptions={exceptions}
+                                    onAddException={() => setShowExceptions(true)}
+                                />
+                            </div>
+                            )}
 
                             {/* Provider Info */}
                             <div className="space-y-6">
