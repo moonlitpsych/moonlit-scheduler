@@ -4,11 +4,13 @@ import {
     CalendarDays,
     ChevronRight,
     Clock,
+    FileText,
     Home,
     LogOut,
     Settings,
     User,
-    Users
+    Users,
+    Video
 } from 'lucide-react';
 import React, { useState } from 'react';
 
@@ -43,6 +45,12 @@ const DashboardSidebar: React.FC<SidebarProps> = ({
     { id: 'availability', label: 'My Availability', icon: Calendar, href: '/dashboard/availability', section: 'scheduling' },
     { id: 'calendar', label: 'My Calendar', icon: CalendarDays, href: '/dashboard/calendar', section: 'scheduling' },
     { id: 'exceptions', label: 'Schedule Exceptions', icon: Clock, href: '/dashboard/exceptions', section: 'scheduling' },
+    
+    // Clinical Work Section
+    { id: 'appointments', label: 'Appointments', icon: Calendar, href: '/dashboard/appointments', section: 'clinical' },
+    { id: 'patients', label: 'Patient Records', icon: Users, href: '/dashboard/patients', section: 'clinical' },
+    { id: 'notes', label: 'Clinical Notes', icon: FileText, href: '/dashboard/notes', section: 'clinical' },
+    { id: 'visits', label: 'Virtual Visits', icon: Video, href: '/dashboard/visits', section: 'clinical' },
     
     // Personal Profile Section
     { id: 'profile', label: 'Edit Profile', icon: User, href: '/dashboard/profile', section: 'profile' },

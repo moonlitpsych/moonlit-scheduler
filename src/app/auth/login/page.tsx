@@ -317,7 +317,7 @@ export default function LoginPage() {
         </div>
 
         {/* Help Text */}
-        <div className="mt-8 text-center">
+        <div className="mt-8 text-center space-y-3">
           <p className="text-sm text-[#091747]/70">
             Need help accessing your account?{' '}
             <a 
@@ -327,6 +327,17 @@ export default function LoginPage() {
               Contact Admin
             </a>
           </p>
+          
+          <div className="border-t border-stone-200 pt-4">
+            <p className="text-sm text-[#091747]/60 mb-2">Are you a healthcare provider?</p>
+            <Link 
+              href="/auth/provider-signup"
+              className="inline-flex items-center text-[#BF9C73] hover:text-[#BF9C73]/80 font-medium text-sm transition-colors"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Join Moonlit as a Provider
+            </Link>
+          </div>
         </div>
       </div>
     </div>
