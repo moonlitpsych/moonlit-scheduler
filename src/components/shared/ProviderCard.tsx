@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, useState, useEffect } from 'react'
+import { ReactNode } from 'react'
 
 export interface Provider {
     id: string
@@ -89,7 +89,7 @@ export default function ProviderCard({
             showAvailability: false
         },
         directory: {
-            containerClass: 'bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 border border-[#F0F0F0] overflow-hidden',
+            containerClass: 'bg-white rounded-xl border-2 border-stone-200 hover:border-[#BF9C73]/50 hover:bg-stone-50 transition-all duration-200 overflow-hidden',
             showSpecialties: true,
             showLanguages: false,
             showAvailability: true
@@ -258,69 +258,6 @@ export default function ProviderCard({
         )
     }
 
-    // State for insurance data
-    const [insuranceData, setInsuranceData] = useState<any>(null)
-    const [loadingInsurance, setLoadingInsurance] = useState(false)
-
-    // Fetch insurance data for directory variant
-    useEffect(() => {
-        if (variant === 'directory' && provider.id) {
-            setLoadingInsurance(true)
-            fetch(`/api/providers/${provider.id}/insurance`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        setInsuranceData(data.data)
-                    }
-                })
-                .catch(err => console.error('Failed to load insurance data:', err))
-                .finally(() => setLoadingInsurance(false))
-        }
-    }, [provider.id, variant])
-
-    const renderInsuranceInfo = () => {
-        if (variant !== 'directory') return null
-        
-        return (
-            <div className="mb-8">
-                <h4 className="text-sm font-medium text-[#091747] mb-3 font-['Newsreader']">Ways You Can Pay</h4>
-                {loadingInsurance ? (
-                    <div className="flex items-center gap-2 text-sm text-[#8B7355] font-['Newsreader']">
-                        <div className="w-4 h-4 border-2 border-[#BF9C73] border-t-transparent rounded-full animate-spin"></div>
-                        Loading insurance information...
-                    </div>
-                ) : (
-                    <div className="flex flex-wrap gap-2">
-                        {/* Self-pay options */}
-                        <span className="px-4 py-2 bg-[#FEF8F1] text-[#BF9C73] border border-[#E6D7C3] text-sm rounded-lg font-['Newsreader']">
-                            Cash | Credit | ACH
-                        </span>
-                        
-                        {/* Medicaid plans */}
-                        {insuranceData?.insurance_types?.medicaid?.length > 0 && (
-                            <span className="px-4 py-2 bg-[#F8F6F1] text-[#8B7355] border border-[#E6D7C3] text-sm rounded-lg font-['Newsreader']">
-                                Utah Medicaid Fee-for-Service
-                            </span>
-                        )}
-                        
-                        {/* Commercial plans */}
-                        {insuranceData?.insurance_types?.commercial?.length > 0 && (
-                            <span className="px-4 py-2 bg-[#F8F6F1] text-[#8B7355] border border-[#E6D7C3] text-sm rounded-lg font-['Newsreader']">
-                                Most Major Insurance Plans
-                            </span>
-                        )}
-                        
-                        {/* Fallback if no data */}
-                        {!insuranceData && !loadingInsurance && (
-                            <span className="px-4 py-2 bg-[#F8F6F1] text-[#8B7355] border border-[#E6D7C3] text-sm rounded-lg font-['Newsreader']">
-                                Most Major Insurance Plans
-                            </span>
-                        )}
-                    </div>
-                )}
-            </div>
-        )
-    }
 
     const renderInsurance = () => {
         if (!showInsurance) return null
@@ -391,71 +328,43 @@ export default function ProviderCard({
         )
     }
 
-    // Directory variant (full provider directory page) - HORIZONTAL LAYOUT
+    // Directory variant (full provider directory page) - EXACT CALENDAR VIEW COPY
     if (variant === 'directory') {
         return (
-            <div className={`${currentConfig.containerClass} ${className}`} onClick={handleClick}>
-                {/* True Horizontal Layout with Image Left, Content Right */}
-                <div className="flex items-start gap-8 p-8">
-                    {/* Left: Provider Image */}
-                    <div className="flex-shrink-0">
-                        {renderImage()}
+            <button
+                className={`p-4 rounded-xl text-left transition-all duration-200 border-2 ${
+                    selected 
+                        ? 'border-[#BF9C73] bg-[#FEF8F1] shadow-md'
+                        : 'border-stone-200 hover:border-[#BF9C73]/50 hover:bg-stone-50'
+                } ${className}`}
+                onClick={onClick}
+            >
+                <div className="flex items-center gap-3 mb-3">
+                    <div className="w-12 h-12 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold font-['Newsreader']">
+                        {provider.first_name?.charAt(0) || ''}{provider.last_name?.charAt(0) || ''}
                     </div>
-
-                    {/* Right: Provider Information */}
-                    <div className="flex-1 min-w-0">
-                        {/* Header with Name and Role */}
-                        <div className="mb-6">
-                            <h3 className="text-3xl font-['Newsreader'] text-[#091747] font-normal mb-2">
-                                Dr. {provider.first_name} {provider.last_name}
-                            </h3>
-                            {provider.title && (
-                                <p className="text-[#BF9C73] text-xl font-['Newsreader'] mb-3">
-                                    {provider.title}
-                                </p>
-                            )}
-                            
-                            {/* Role Badge */}
-                            {provider.role && (
-                                <span className="inline-block px-4 py-2 bg-[#FEF8F1] text-[#BF9C73] border border-[#BF9C73] text-sm font-medium rounded-full font-['Newsreader']">
-                                    {provider.role}
-                                </span>
-                            )}
-                        </div>
-
-                        {/* Accepting New Patients */}
-                        {provider.accepts_new_patients && (
-                            <div className="mb-6">
-                                <div className="inline-flex items-center px-4 py-2 bg-[#F0F8F0] text-[#2D5016] rounded-lg font-['Newsreader'] text-sm font-medium border border-[#9BC53D]/30">
-                                    <span className="w-2 h-2 bg-[#4CAF50] rounded-full mr-2"></span>
-                                    Accepting new patients
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Insurance Information - Real data from database */}
-                        {renderInsuranceInfo()}
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-4">
-                            {actionButton && (
-                                <button
-                                    type="button"
-                                    onClick={actionButton.onClick}
-                                    className="bg-[#BF9C73] hover:bg-[#A8865F] text-white py-3 px-8 rounded-xl font-['Newsreader'] text-center transition-colors font-medium text-lg shadow-sm"
-                                >
-                                    {actionButton.text}
-                                </button>
-                            )}
-                            {customAction && (
-                                <div className="flex-1">
-                                    {customAction}
-                                </div>
-                            )}
-                        </div>
+                    <div>
+                        <h4 className="font-bold text-[#091747] font-['Newsreader']">
+                            {provider.first_name} {provider.last_name}
+                        </h4>
+                        <p className="text-sm text-[#BF9C73] font-['Newsreader']">
+                            {provider.title || provider.role || 'MD'}
+                        </p>
                     </div>
                 </div>
-            </div>
+                <p className="text-sm text-[#091747]/70 mb-2 font-['Newsreader']">
+                    {provider.specialty}
+                </p>
+                <div className="flex gap-2">
+                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-['Newsreader']">
+                        {provider.new_patient_status || 'Accepting New Patients'}
+                    </span>
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-['Newsreader']">
+                        {provider.languages_spoken?.[0] || 'English'}
+                    </span>
+                </div>
+                {customAction}
+            </button>
         )
     }
 

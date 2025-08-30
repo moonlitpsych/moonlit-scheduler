@@ -1,5 +1,6 @@
 'use client'
 
+import PractitionerHeader from '@/components/layout/PractitionerHeader'
 import { Database } from '@/types/database'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import {
@@ -72,7 +73,12 @@ export default function DashboardLayout({
   ].filter(item => item.show)
 
   return (
-    <div className="h-screen bg-[#FEF8F1] flex">
+    <div className="min-h-screen bg-[#FEF8F1]">
+      {/* Practitioner Header */}
+      <PractitionerHeader />
+      
+      {/* Dashboard Content */}
+      <div className="h-screen bg-[#FEF8F1] flex pt-16">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
@@ -208,6 +214,7 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+    </div>
     </div>
   )
 }

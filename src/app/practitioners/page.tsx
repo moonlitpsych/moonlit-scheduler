@@ -9,7 +9,6 @@ export default function PractitionersPage() {
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedState, setSelectedState] = useState<string>('all')
-  const [showNewPatientsOnly, setShowNewPatientsOnly] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
@@ -60,8 +59,6 @@ export default function PractitionersPage() {
       if (!matchesName && !matchesSpecialty) return false
     }
     
-    // New patients filter
-    if (showNewPatientsOnly && !provider.accepts_new_patients) return false
     
     // State filter
     if (selectedState !== 'all') {
@@ -132,18 +129,6 @@ export default function PractitionersPage() {
                 </select>
               </div>
 
-              {/* New Patients Filter */}
-              <div className="flex items-center gap-4 pt-6">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showNewPatientsOnly}
-                    onChange={(e) => setShowNewPatientsOnly(e.target.checked)}
-                    className="rounded border-gray-300 text-[#BF9C73] focus:ring-[#BF9C73]"
-                  />
-                  <span className="text-[#091747] font-['Newsreader']">Accepting new patients only</span>
-                </label>
-              </div>
             </div>
           </div>
 
@@ -153,7 +138,6 @@ export default function PractitionersPage() {
               Showing {filteredProviders.length} of {Array.isArray(providers) ? providers.length : 0} practitioners
               {searchQuery && ` matching "${searchQuery}"`}
               {selectedState !== 'all' && ` in ${selectedState}`}
-              {showNewPatientsOnly && ' (accepting new patients only)'}
             </p>
           </div>
         </div>
@@ -215,11 +199,10 @@ export default function PractitionersPage() {
                   Clear search
                 </button>
               )}
-              {(selectedState !== 'all' || showNewPatientsOnly) && (
+              {selectedState !== 'all' && (
                 <button
                   onClick={() => {
                     setSelectedState('all')
-                    setShowNewPatientsOnly(false)
                   }}
                   className="px-6 py-3 bg-white hover:bg-[#FEF8F1] text-[#091747] rounded-lg font-['Newsreader'] border-2 border-[#BF9C73] transition-colors"
                 >
