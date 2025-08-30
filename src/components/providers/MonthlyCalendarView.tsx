@@ -27,9 +27,10 @@ interface MonthlyCalendarViewProps {
     schedule: AvailabilityBlock[]
     exceptions: AvailabilityException[]
     onAddException: () => void
+    onEditException?: (exception: AvailabilityException) => void
 }
 
-export default function MonthlyCalendarView({ schedule, exceptions, onAddException }: MonthlyCalendarViewProps) {
+export default function MonthlyCalendarView({ schedule, exceptions, onAddException, onEditException }: MonthlyCalendarViewProps) {
     const [currentDate, setCurrentDate] = useState(new Date())
     
     // Get first day of current month and number of days
@@ -190,8 +191,12 @@ export default function MonthlyCalendarView({ schedule, exceptions, onAddExcepti
                             {dayExceptions.map((exception, idx) => (
                                 <div
                                     key={`exception-${exception.id || idx}-${day}`}
-                                    className={`text-xs px-2 py-1 rounded mb-1 border ${getExceptionColor(exception.exception_type)}`}
-                                    title={`${exception.exception_type}: ${exception.note || ''}`}
+                                    className={`text-xs px-2 py-1 rounded mb-1 border cursor-pointer hover:opacity-80 transition-opacity ${getExceptionColor(exception.exception_type)}`}
+                                    title={`Click to edit: ${exception.exception_type}${exception.note ? ' - ' + exception.note : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onEditException?.(exception)
+                                    }}
                                 >
                                     <div className="flex items-center gap-1">
                                         {exception.exception_type === 'vacation' && <Calendar className="h-3 w-3" />}

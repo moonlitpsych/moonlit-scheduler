@@ -21,17 +21,22 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClientComponentClient<Database>()
 
- // TEMPORARILY DISABLED TO STOP LOOP
-// useEffect(() => {
-//   const checkAuth = async () => {
-//     const { data: { user } } = await supabase.auth.getUser()
-//     if (user) {
-//       console.log('User already logged in, redirecting...', user.email)
-//       router.push('/dashboard/availability')
-//     }
-//   }
-//   checkAuth()
-// }, [router, supabase.auth])
+  // Auto-redirect if already authenticated - with loop prevention
+  useEffect(() => {
+    const checkAuth = async () => {
+      // Only check auth if we haven't already tried
+      if (loading || error) return
+      
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        console.log('User already logged in, redirecting...', user.email)
+        router.replace('/dashboard')
+      }
+    }
+    
+    // Only run on initial mount
+    checkAuth()
+  }, []) // Empty dependency array prevents loops
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,8 +58,8 @@ export default function LoginPage() {
         console.log('Login successful! User:', data.user.email)
         console.log('Redirecting to dashboard...')
         
-        // Force a hard redirect
-        window.location.href = '/dashboard/availability'
+        // Smooth navigation to dashboard
+        router.replace('/dashboard')
       }
     } catch (err) {
       console.error('Unexpected error:', err)

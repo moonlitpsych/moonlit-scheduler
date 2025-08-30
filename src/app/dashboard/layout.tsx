@@ -2,6 +2,7 @@
 
 import { Database } from '@/types/database'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { ToastProvider } from '@/contexts/ToastContext'
 import {
   Calendar,
   LogOut,
@@ -49,12 +50,7 @@ export default function DashboardLayout({
     getUser()
   }, [supabase])
 
-  // Redirect /dashboard to /dashboard/availability
-  useEffect(() => {
-    if (pathname === '/dashboard') {
-      router.replace('/dashboard/availability')
-    }
-  }, [pathname, router])
+  // No auto-redirect - dashboard home page now exists
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -72,7 +68,8 @@ export default function DashboardLayout({
   ].filter(item => item.show)
 
   return (
-    <div className="h-screen bg-[#FEF8F1] flex">
+    <ToastProvider>
+      <div className="h-screen bg-[#FEF8F1] flex">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
@@ -209,5 +206,6 @@ export default function DashboardLayout({
         </main>
       </div>
     </div>
+    </ToastProvider>
   )
 }
