@@ -161,17 +161,6 @@ export default function PractitionersPage() {
                   },
                   variant: 'primary'
                 }}
-                customAction={
-                  <button 
-                    className="w-full mt-2 text-[#BF9C73] hover:text-[#A8865F] text-sm font-['Newsreader'] py-2 transition-colors"
-                    onClick={() => {
-                      // TODO: Navigate to individual provider page or open modal
-                      console.log('About provider clicked:', provider.id)
-                    }}
-                  >
-                    ► About {provider.first_name ? `Dr. ${provider.last_name}` : 'Provider'}
-                  </button>
-                }
               />
             ))}
           </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { ReactNode } from 'react'
+import { useProviderModal } from '@/contexts/ProviderModalContext'
 
 export interface Provider {
     id: string
@@ -61,6 +62,7 @@ export default function ProviderCard({
     className = '',
     onClick
 }: ProviderCardProps) {
+    const { openModal } = useProviderModal()
     const displayName = provider.full_name || `${provider.first_name} ${provider.last_name}`
     const initials = `${provider.first_name.charAt(0)}${provider.last_name.charAt(0)}`
 
@@ -107,7 +109,15 @@ export default function ProviderCard({
     const handleClick = () => {
         if (onClick) {
             onClick()
+        } else if (variant === 'directory') {
+            // For directory variant, open modal by default
+            openModal(provider)
         }
+    }
+
+    const handleMoreClick = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        openModal(provider)
     }
 
     // Helper to convert Google Drive links to direct image URLs
@@ -308,6 +318,16 @@ export default function ProviderCard({
         )
     }
 
+    const renderMoreButton = () => {
+        return (
+            <button
+                onClick={handleMoreClick}
+                className="w-full mt-2 text-[#BF9C73] hover:text-[#A8865F] text-sm font-['Newsreader'] py-2 transition-colors text-left"
+            >
+                More
+            </button>
+        )
+    }
     // Compact variant (for confirmation pages, inline displays)
     if (variant === 'compact') {
         return (
@@ -328,16 +348,16 @@ export default function ProviderCard({
         )
     }
 
-    // Directory variant (full provider directory page) - EXACT CALENDAR VIEW COPY
+    // Directory variant (full provider directory page) - WITH MODAL INTEGRATION
     if (variant === 'directory') {
         return (
-            <button
-                className={`p-4 rounded-xl text-left transition-all duration-200 border-2 ${
+            <div
+                className={`p-4 rounded-xl text-left transition-all duration-200 border-2 cursor-pointer ${
                     selected 
                         ? 'border-[#BF9C73] bg-[#FEF8F1] shadow-md'
                         : 'border-stone-200 hover:border-[#BF9C73]/50 hover:bg-stone-50'
                 } ${className}`}
-                onClick={onClick}
+                onClick={handleClick}
             >
                 <div className="flex items-center gap-3 mb-3">
                     <div className="w-12 h-12 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold font-['Newsreader']">
@@ -363,8 +383,8 @@ export default function ProviderCard({
                         {provider.languages_spoken?.[0] || 'English'}
                     </span>
                 </div>
-                {customAction}
-            </button>
+                {renderMoreButton()}
+            </div>
         )
     }
 
