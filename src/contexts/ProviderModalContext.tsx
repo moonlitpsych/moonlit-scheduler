@@ -28,8 +28,14 @@ interface ProviderModalProviderProps {
 export function ProviderModalProvider({ children }: ProviderModalProviderProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [provider, setProvider] = useState<Provider | null>(null)
+    const [mounted, setMounted] = useState(false)
     const router = useRouter()
     const searchParams = useSearchParams()
+
+    // Ensure this only runs on client
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     // Generate URL slug from provider name
     const generateSlug = (provider: Provider) => {
@@ -75,8 +81,10 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
         router.push(newUrl, { scroll: false })
     }
 
-    // Handle browser back button
+    // Handle browser back button - client-side only
     useEffect(() => {
+        if (!mounted) return
+
         const handlePopState = () => {
             const providerSlug = searchParams.get('provider')
             if (!providerSlug && isOpen) {
@@ -87,10 +95,12 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
 
         window.addEventListener('popstate', handlePopState)
         return () => window.removeEventListener('popstate', handlePopState)
-    }, [isOpen, searchParams])
+    }, [mounted, isOpen, searchParams])
 
-    // Handle initial URL state
+    // Handle initial URL state - client-side only
     useEffect(() => {
+        if (!mounted) return
+
         const providerSlug = searchParams.get('provider')
         if (providerSlug && !isOpen) {
             // In a real implementation, we'd fetch provider data by slug
@@ -101,7 +111,7 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
                 setIsOpen(true)
             }
         }
-    }, [searchParams, isOpen])
+    }, [mounted, searchParams, isOpen])
 
     // ESC key handler
     useEffect(() => {
