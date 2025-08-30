@@ -3,7 +3,7 @@
 import { Database } from '@/types/database'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useToast } from '@/contexts/ToastContext'
-import { Camera, Save, User, Phone, Mail, MapPin, Languages, GraduationCap, Settings, FileText } from 'lucide-react'
+import { Camera, Save, User, Languages, GraduationCap, Settings, FileText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 type Provider = Database['public']['Tables']['providers']['Row']
@@ -15,9 +15,6 @@ export default function ProviderProfileForm() {
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
-    email: '',
-    phone_number: '',
-    address: '',
     title: '',
     languages_spoken: [] as string[],
     what_i_look_for_in_a_patient: '',
@@ -26,7 +23,6 @@ export default function ProviderProfileForm() {
     residency_org: '',
     accepts_new_patients: true,
     telehealth_enabled: true,
-    npi: '',
     profile_image_url: ''
   })
   
@@ -59,9 +55,6 @@ export default function ProviderProfileForm() {
       setFormData({
         first_name: providerData.first_name || '',
         last_name: providerData.last_name || '',
-        email: providerData.email || '',
-        phone_number: providerData.phone_number || '',
-        address: providerData.address || '',
         title: providerData.title || '',
         languages_spoken: providerData.languages_spoken || [],
         what_i_look_for_in_a_patient: providerData.what_i_look_for_in_a_patient || '',
@@ -70,7 +63,6 @@ export default function ProviderProfileForm() {
         residency_org: providerData.residency_org || '',
         accepts_new_patients: providerData.accepts_new_patients ?? true,
         telehealth_enabled: providerData.telehealth_enabled ?? true,
-        npi: providerData.npi || '',
         profile_image_url: providerData.profile_image_url || ''
       })
     } catch (error) {
@@ -107,9 +99,6 @@ export default function ProviderProfileForm() {
         .update({
           first_name: formData.first_name,
           last_name: formData.last_name,
-          email: formData.email,
-          phone_number: formData.phone_number,
-          address: formData.address,
           title: formData.title,
           languages_spoken: formData.languages_spoken,
           what_i_look_for_in_a_patient: formData.what_i_look_for_in_a_patient,
@@ -118,7 +107,6 @@ export default function ProviderProfileForm() {
           residency_org: formData.residency_org,
           accepts_new_patients: formData.accepts_new_patients,
           telehealth_enabled: formData.telehealth_enabled,
-          npi: formData.npi,
           profile_image_url: formData.profile_image_url,
           modified_date: new Date().toISOString()
         })
@@ -126,12 +114,15 @@ export default function ProviderProfileForm() {
 
       if (error) {
         console.error('Error updating profile:', error)
-        toast.error('Save Error', 'Failed to update profile')
+        toast.error('Save Error', `Failed to update profile: ${error.message}`)
         return
       }
 
+      console.log('Profile updated successfully')
       toast.success('Profile Updated', 'Your profile has been saved successfully')
-      await loadProviderData() // Reload to get latest data
+      
+      // Reload provider data to reflect changes
+      await loadProviderData()
     } catch (error) {
       console.error('Error saving profile:', error)
       toast.error('Save Error', 'An unexpected error occurred')
@@ -236,61 +227,9 @@ export default function ProviderProfileForm() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-[#091747] mb-2">NPI Number</label>
-            <input
-              type="text"
-              value={formData.npi}
-              onChange={(e) => handleInputChange('npi', e.target.value)}
-              className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent transition-colors"
-              placeholder="Enter your NPI number"
-            />
-          </div>
         </div>
       </div>
 
-      {/* Contact Information */}
-      <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
-        <div className="flex items-center mb-6">
-          <Phone className="h-5 w-5 text-[#BF9C73] mr-2" />
-          <h3 className="text-lg font-semibold text-[#091747] font-['Newsreader']">Contact Information</h3>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-[#091747] mb-2">Email Address</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent transition-colors"
-              placeholder="Enter your email"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[#091747] mb-2">Phone Number</label>
-            <input
-              type="tel"
-              value={formData.phone_number}
-              onChange={(e) => handleInputChange('phone_number', e.target.value)}
-              className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent transition-colors"
-              placeholder="Enter your phone number"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-[#091747] mb-2">Address</label>
-            <textarea
-              value={formData.address}
-              onChange={(e) => handleInputChange('address', e.target.value)}
-              rows={3}
-              className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent transition-colors"
-              placeholder="Enter your address"
-            />
-          </div>
-        </div>
-      </div>
 
       {/* Languages */}
       <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
