@@ -328,7 +328,6 @@ export default function ProviderCard({
             </button>
         )
     }
-
     // Compact variant (for confirmation pages, inline displays)
     if (variant === 'compact') {
         return (
