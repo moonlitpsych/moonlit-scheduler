@@ -5,6 +5,7 @@ import { Payer, TimeSlot } from '@/types/database'
 import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isSameDay, isToday, startOfMonth, subMonths } from 'date-fns'
 import { Check, ChevronLeft, ChevronRight, Clock, Calendar, Users } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import ProviderCard, { Provider } from '@/components/shared/ProviderCard'
 
 export type BookingIntent = 'book' | 'explore'
 
@@ -619,40 +620,14 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                             ) : providers.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {providers.slice(0, 4).map((provider) => (
-                                        <button
+                                        <ProviderCard
                                             key={provider.id}
+                                            provider={provider as Provider}
+                                            variant="selection"
+                                            selected={selectedProvider === provider.id}
                                             onClick={() => handleProviderSelect(provider.id)}
-                                            className={`p-4 rounded-xl text-left transition-all duration-200 border-2 ${
-                                                selectedProvider === provider.id
-                                                    ? 'border-[#BF9C73] bg-[#FEF8F1] shadow-md'
-                                                    : 'border-stone-200 hover:border-[#BF9C73]/50 hover:bg-stone-50'
-                                            }`}
-                                        >
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-12 h-12 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold font-['Newsreader']">
-                                                    {provider.first_name?.charAt(0) || ''}{provider.last_name?.charAt(0) || ''}
-                                                </div>
-                                                <div>
-                                                    <h4 className="font-bold text-[#091747] font-['Newsreader']">
-                                                        {provider.first_name} {provider.last_name}
-                                                    </h4>
-                                                    <p className="text-sm text-[#BF9C73] font-['Newsreader']">
-                                                        {provider.title || provider.role || 'MD'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <p className="text-sm text-[#091747]/70 mb-2 font-['Newsreader']">
-                                                {provider.specialty}
-                                            </p>
-                                            <div className="flex gap-2">
-                                                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-['Newsreader']">
-                                                    {provider.new_patient_status || 'Accepting New Patients'}
-                                                </span>
-                                                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-['Newsreader']">
-                                                    {provider.languages_spoken?.[0] || 'English'}
-                                                </span>
-                                            </div>
-                                        </button>
+                                            className="cursor-pointer"
+                                        />
                                     ))}
                                 </div>
                             ) : (
@@ -710,7 +685,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                             aspect-square flex items-center justify-center text-sm rounded-md transition-all duration-200 font-['Newsreader']
                                             ${!day ? 'invisible' : ''}
                                             ${day && day < new Date().setHours(0, 0, 0, 0) ? 'text-slate-400 cursor-not-allowed' : ''}
-                                            ${day && isToday(day) ? 'bg-blue-500 text-white font-medium' : ''}
+                                            ${day && isToday(day) ? 'bg-[#2C5F6F] text-white font-medium' : ''}
                                             ${day && selectedDate && isSameDay(day, selectedDate) ? 'bg-[#BF9C73] text-white font-medium' : ''}
                                             ${day && !isToday(day) && (!selectedDate || !isSameDay(day, selectedDate)) && day >= new Date().setHours(0, 0, 0, 0) ? 'hover:bg-stone-100 text-slate-700' : ''}
                                         `}

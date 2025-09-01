@@ -4,7 +4,7 @@ import { useProviderModal } from '@/contexts/ProviderModalContext'
 import { Provider } from '@/components/shared/ProviderCard'
 
 export default function ProviderModal() {
-    const { isOpen, provider, closeModal } = useProviderModal()
+    const { isOpen, provider, closeModal, showBookButton } = useProviderModal()
 
     if (!isOpen || !provider) return null
 
@@ -199,8 +199,8 @@ export default function ProviderModal() {
 
                         {/* Action Buttons */}
                         <div className="flex flex-col sm:flex-row gap-4 mt-10 pt-8 border-t border-gray-200">
-                            {/* Only show Book button if provider is bookable */}
-                            {provider.is_bookable !== false && (
+                            {/* Only show Book button if provider is bookable AND we're in directory context */}
+                            {provider.is_bookable !== false && showBookButton && (
                                 <button
                                     onClick={() => {
                                         // Navigate to provider-specific booking
@@ -213,7 +213,7 @@ export default function ProviderModal() {
                             )}
                             <button
                                 onClick={closeModal}
-                                className={`${provider.is_bookable !== false ? 'flex-1' : 'w-full'} bg-white hover:bg-gray-50 text-[#091747] py-4 px-8 rounded-xl font-['Newsreader'] border-2 border-gray-200 hover:border-gray-300 transition-colors font-medium text-lg`}
+                                className={`${provider.is_bookable !== false && showBookButton ? 'flex-1' : 'w-full'} bg-white hover:bg-gray-50 text-[#091747] py-4 px-8 rounded-xl font-['Newsreader'] border-2 border-gray-200 hover:border-gray-300 transition-colors font-medium text-lg`}
                             >
                                 Close
                             </button>
