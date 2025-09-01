@@ -11,6 +11,11 @@ export interface Provider {
     title?: string
     profile_image_url?: string
     bio?: string
+    about?: string // About text from database
+    what_i_look_for_in_a_patient?: string // What they look for in patients
+    med_school_org?: string // Medical school
+    med_school_grad_year?: number // Graduation year
+    residency_org?: string // Residency organization
     specialties?: string[]
     languages_spoken?: string[]
     accepts_new_patients?: boolean

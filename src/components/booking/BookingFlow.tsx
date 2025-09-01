@@ -11,6 +11,7 @@ import InsuranceFutureView from './views/InsuranceFutureView'
 import InsuranceInfoView from './views/InsuranceInfoView'
 import InsuranceNotAcceptedView from './views/InsuranceNotAcceptedView'
 import PayerSearchView from './views/PayerSearchView'
+import ProviderInsuranceMismatchView from './views/ProviderInsuranceMismatchView'
 import ROIView from './views/ROIView'
 import WaitlistConfirmationView from './views/WaitlistConfirmationView'
 import WelcomeView from './views/WelcomeView'
@@ -19,6 +20,7 @@ export type BookingStep =
     | 'welcome'
     | 'payer-search'
     | 'insurance-not-accepted'
+    | 'provider-insurance-mismatch' // NEW: for provider-specific insurance issues
     | 'insurance-future'
     | 'waitlist-confirmation'
     | 'calendar'
@@ -45,9 +47,17 @@ export interface BookingState {
 
 interface BookingFlowProps {
     intent?: BookingIntent
+    selectedProviderId?: string // For provider-specific booking
+    selectedProvider?: any // The provider object with name info
+    providerSpecific?: boolean // Whether this is a provider-specific flow
 }
 
-export default function BookingFlow({ intent = 'book' }: BookingFlowProps) {
+export default function BookingFlow({ 
+    intent = 'book', 
+    selectedProviderId,
+    selectedProvider,
+    providerSpecific = false 
+}: BookingFlowProps) {
     const [state, setState] = useState<BookingState>({
         step: intent === 'explore' ? 'payer-search' : 'welcome',
         bookingScenario: 'self',
@@ -69,12 +79,36 @@ export default function BookingFlow({ intent = 'book' }: BookingFlowProps) {
         goToStep('payer-search')
     }
 
-    const handlePayerSelected = (payer: Payer, acceptanceStatus: BookingState['payerAcceptanceStatus']) => {
+    const handlePayerSelected = async (payer: Payer, acceptanceStatus: BookingState['payerAcceptanceStatus']) => {
         updateState({ 
             selectedPayer: payer, 
             payerAcceptanceStatus: acceptanceStatus 
         })
 
+        // If this is provider-specific booking, check if this specific provider accepts the insurance
+        if (providerSpecific && selectedProviderId && acceptanceStatus === 'active') {
+            try {
+                console.log('🔍 Checking provider-specific insurance acceptance...')
+                const response = await fetch(`/api/providers/${selectedProviderId}/accepts-insurance`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ payer_id: payer.id })
+                })
+
+                const data = await response.json()
+                
+                if (data.success && !data.accepts) {
+                    // Provider doesn't accept this insurance, show mismatch screen
+                    goToStep('provider-insurance-mismatch')
+                    return
+                }
+            } catch (error) {
+                console.error('❌ Error checking provider insurance:', error)
+                // Continue with normal flow if check fails
+            }
+        }
+
+        // Normal flow
         switch (acceptanceStatus) {
             case 'not-accepted':
                 goToStep('insurance-not-accepted')
@@ -278,6 +312,37 @@ export default function BookingFlow({ intent = 'book' }: BookingFlowProps) {
                         onBackToPayers={handleBackToInsurance}
                         onCashPayment={handleCashPaymentSelected}
                         onWaitlistSubmitted={handleWaitlistSubmitted}
+                    />
+                )
+
+            case 'provider-insurance-mismatch':
+                if (!state.selectedPayer || !selectedProviderId) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+                            <div className="text-center space-y-4">
+                                <p className="text-stone-600">Provider or insurance information missing.</p>
+                                <button 
+                                    onClick={handleBackToInsurance}
+                                    className="px-6 py-3 bg-[#BF9C73] text-white rounded-xl hover:bg-[#A8875F] transition-colors"
+                                >
+                                    Back to Insurance Selection
+                                </button>
+                            </div>
+                        </div>
+                    )
+                }
+                return (
+                    <ProviderInsuranceMismatchView
+                        state={state}
+                        providerName={selectedProvider ? `${selectedProvider.first_name} ${selectedProvider.last_name}` : 'Provider'}
+                        insuranceName={state.selectedPayer.name}
+                        onContinueWithOthers={() => {
+                            // Redirect to general booking
+                            window.location.href = '/book?intent=book'
+                        }}
+                        onJoinWaitlist={() => {
+                            goToStep('waitlist-confirmation')
+                        }}
                     />
                 )
 

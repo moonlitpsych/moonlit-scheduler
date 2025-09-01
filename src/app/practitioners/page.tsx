@@ -157,7 +157,7 @@ export default function PractitionersPage() {
                 actionButton={{
                   text: `Book ${provider.first_name ? `Dr. ${provider.last_name}` : 'Appointment'}`,
                   onClick: () => {
-                    window.location.href = `/book?provider=${provider.id}`
+                    window.location.href = `/book/provider/${provider.id}?intent=book`
                   },
                   variant: 'primary'
                 }}
