@@ -8,10 +8,17 @@ export interface Provider {
     title?: string
     profile_image_url?: string
     bio?: string
+    about?: string // About text from database
+    what_i_look_for_in_a_patient?: string // What they look for in patients
+    med_school_org?: string // Medical school
+    med_school_grad_year?: number // Graduation year
+    residency_org?: string // Residency organization
     specialty?: string // Single specialty (from some APIs)
     specialties?: string[] // Multiple specialties array
     languages_spoken?: string[]
     accepts_new_patients?: boolean
+    availability?: string  // Provider availability status from database
+    is_bookable?: boolean  // Whether provider can be booked by patients
     new_patient_status?: string // Custom status message
     next_available?: string
     state_licenses?: string[]

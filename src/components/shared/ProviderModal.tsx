@@ -101,14 +101,14 @@ export default function ProviderModal() {
                                     </p>
                                 )}
 
-                                {provider.role && (
+                                {(provider.provider_type || provider.role) && (
                                     <span className="inline-block px-4 py-2 bg-[#FEF8F1] text-[#BF9C73] border border-[#BF9C73] text-sm font-medium rounded-full font-['Newsreader'] mb-4">
-                                        {provider.role}
+                                        {provider.provider_type || provider.role}
                                     </span>
                                 )}
 
-                                {/* Accepting New Patients */}
-                                {provider.accepts_new_patients && (
+                                {/* Accepting New Patients - only show for bookable providers */}
+                                {provider.is_bookable !== false && provider.accepts_new_patients && (
                                     <div className="mb-6">
                                         <div className="inline-flex items-center px-4 py-2 bg-[#F0F8F0] text-[#2D5016] rounded-lg font-['Newsreader'] text-sm font-medium border border-[#9BC53D]/30">
                                             <span className="w-2 h-2 bg-[#4CAF50] rounded-full mr-2"></span>
@@ -129,7 +129,7 @@ export default function ProviderModal() {
                                         {provider.languages_spoken.map((language, index) => (
                                             <span 
                                                 key={index}
-                                                className="px-3 py-2 bg-[#E6D7C3] text-[#8B7355] rounded-lg font-['Newsreader'] text-sm"
+                                                className="px-3 py-2 bg-[#FEF8F1] text-[#BF9C73] rounded-lg font-['Newsreader'] text-sm border border-[#BF9C73]/30"
                                             >
                                                 {language}
                                             </span>
@@ -155,54 +155,65 @@ export default function ProviderModal() {
                                 </div>
                             )}
 
-                            {/* Bio/Description */}
-                            {provider.bio && (
+                            {/* About - no title, just content */}
+                            {provider.about && (
                                 <div>
-                                    <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">About Dr. {provider.last_name}</h3>
                                     <p className="text-[#091747]/80 font-['Newsreader'] leading-relaxed">
-                                        {provider.bio}
+                                        {provider.about}
                                     </p>
                                 </div>
                             )}
 
-                            {/* Placeholder sections for future data */}
-                            <div>
-                                <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">What I look for in patients</h3>
-                                <p className="text-[#091747]/70 font-['Newsreader'] italic">
-                                    Information coming soon - this will be customized for each provider.
-                                </p>
-                            </div>
-
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div>
                                     <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">Medical School</h3>
-                                    <p className="text-[#091747]/70 font-['Newsreader'] italic">
-                                        Information coming soon
-                                    </p>
+                                    {provider.med_school_org ? (
+                                        <div className="text-[#091747]/80 font-['Newsreader']">
+                                            <p className="font-medium">{provider.med_school_org}</p>
+                                            {provider.med_school_grad_year && (
+                                                <p className="text-sm text-[#091747]/60 mt-1">
+                                                    Graduated {provider.med_school_grad_year}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="text-[#091747]/70 font-['Newsreader'] italic">
+                                            Information coming soon
+                                        </p>
+                                    )}
                                 </div>
                                 <div>
                                     <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">Residency</h3>
-                                    <p className="text-[#091747]/70 font-['Newsreader'] italic">
-                                        Information coming soon
-                                    </p>
+                                    {provider.residency_org ? (
+                                        <p className="text-[#091747]/80 font-['Newsreader'] font-medium">
+                                            {provider.residency_org}
+                                        </p>
+                                    ) : (
+                                        <p className="text-[#091747]/70 font-['Newsreader'] italic">
+                                            Information coming soon
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
                         {/* Action Buttons */}
                         <div className="flex flex-col sm:flex-row gap-4 mt-10 pt-8 border-t border-gray-200">
-                            <button
-                                onClick={() => {
-                                    // Navigate to booking with this provider
-                                    window.location.href = `/book?provider=${provider.id}`
-                                }}
-                                className="flex-1 bg-[#BF9C73] hover:bg-[#A8865F] text-white py-4 px-8 rounded-xl font-['Newsreader'] text-center transition-colors font-medium text-lg shadow-sm"
-                            >
-                                Book Dr. {provider.last_name}
-                            </button>
+                            {/* Only show Book button if provider is bookable */}
+                            {provider.is_bookable !== false && (
+                                <button
+                                    onClick={() => {
+                                        // Navigate to provider-specific booking
+                                        window.location.href = `/book/provider/${provider.id}?intent=book`
+                                    }}
+                                    className="flex-1 bg-[#BF9C73] hover:bg-[#A8865F] text-white py-4 px-8 rounded-xl font-['Newsreader'] text-center transition-colors font-medium text-lg shadow-sm"
+                                >
+                                    Book Dr. {provider.last_name}
+                                </button>
+                            )}
                             <button
                                 onClick={closeModal}
-                                className="flex-1 bg-white hover:bg-gray-50 text-[#091747] py-4 px-8 rounded-xl font-['Newsreader'] border-2 border-gray-200 hover:border-gray-300 transition-colors font-medium text-lg"
+                                className={`${provider.is_bookable !== false ? 'flex-1' : 'w-full'} bg-white hover:bg-gray-50 text-[#091747] py-4 px-8 rounded-xl font-['Newsreader'] border-2 border-gray-200 hover:border-gray-300 transition-colors font-medium text-lg`}
                             >
                                 Close
                             </button>

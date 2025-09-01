@@ -11,13 +11,22 @@ export interface Provider {
     title?: string
     profile_image_url?: string
     bio?: string
+    about?: string // About text from database
+    what_i_look_for_in_a_patient?: string // What they look for in patients
+    med_school_org?: string // Medical school
+    med_school_grad_year?: number // Graduation year
+    residency_org?: string // Residency organization
     specialties?: string[]
     languages_spoken?: string[]
     accepts_new_patients?: boolean
+    availability?: string  // Provider availability status from database
+    is_bookable?: boolean  // Whether provider can be booked by patients
     new_patient_status?: string // From booking flow
     next_available?: string
     state_licenses?: string[]
     accepted_insurances?: string[]
+    role?: string
+    provider_type?: string
 }
 
 export type ProviderCardVariant = 
@@ -173,8 +182,24 @@ export default function ProviderCard({
     const renderAvailabilityStatus = () => {
         if (!showAvailability || variant === 'directory') return null // Directory handles this differently
 
-        const status = provider.new_patient_status || (provider.accepts_new_patients ? 'Accepting New Patients' : 'Limited Availability')
-        const isAccepting = provider.accepts_new_patients !== false
+        // Prioritize the availability field from database, then fallback to legacy fields
+        let status = 'Limited Availability'
+        let isAccepting = false
+
+        if (provider.availability && typeof provider.availability === 'string') {
+            // Use the availability field from database
+            status = provider.availability
+            isAccepting = provider.availability.toLowerCase().includes('accepting') || 
+                         provider.availability.toLowerCase().includes('available')
+        } else if (provider.new_patient_status) {
+            // Fallback to custom status
+            status = provider.new_patient_status
+            isAccepting = provider.accepts_new_patients !== false
+        } else if (provider.accepts_new_patients !== undefined) {
+            // Fallback to boolean field
+            status = provider.accepts_new_patients ? 'Accepting New Patients' : 'Limited Availability'
+            isAccepting = provider.accepts_new_patients
+        }
         
         return (
             <div className="mb-3">
@@ -233,7 +258,7 @@ export default function ProviderCard({
                     {provider.languages_spoken.slice(0, maxToShow).map((language, index) => (
                         <span
                             key={index}
-                            className="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded font-['Newsreader']"
+                            className="inline-block px-2 py-1 text-xs bg-[#FEF8F1] text-[#BF9C73] border border-[#BF9C73]/30 rounded font-['Newsreader']"
                         >
                             {language}
                         </span>
@@ -376,11 +401,22 @@ export default function ProviderCard({
                     {provider.specialty}
                 </p>
                 <div className="flex gap-2">
-                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-['Newsreader']">
-                        {provider.new_patient_status || 'Accepting New Patients'}
-                    </span>
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-['Newsreader']">
-                        {provider.languages_spoken?.[0] || 'English'}
+                    {/* Only show availability status if provider is bookable */}
+                    {provider.is_bookable !== false && (
+                        <span className={`px-2 py-1 text-xs rounded-full font-['Newsreader'] ${
+                            (provider.availability && typeof provider.availability === 'string' && 
+                             (provider.availability.toLowerCase().includes('accepting') || provider.availability.toLowerCase().includes('available'))) ||
+                            provider.accepts_new_patients !== false
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-orange-100 text-orange-800'
+                        }`}>
+                            {(provider.availability && typeof provider.availability === 'string' ? provider.availability : null) || 
+                             provider.new_patient_status || 
+                             (provider.accepts_new_patients !== false ? 'Accepting New Patients' : 'Limited Availability')}
+                        </span>
+                    )}
+                    <span className="px-2 py-1 bg-[#FEF8F1] text-[#BF9C73] border border-[#BF9C73]/30 text-xs rounded-full font-['Newsreader']">
+                        {provider.provider_type || provider.role || 'provider'}
                     </span>
                 </div>
                 {renderMoreButton()}
@@ -441,7 +477,7 @@ export default function ProviderCard({
                         <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg font-['Newsreader']">
                             {provider.new_patient_status || 'Accepting New Patients'}
                         </span>
-                        <span className="px-2 py-1 bg-[#E6D7C3] text-[#8B7355] text-xs rounded-lg font-['Newsreader']">
+                        <span className="px-2 py-1 bg-[#FEF8F1] text-[#BF9C73] border border-[#BF9C73]/30 text-xs rounded-lg font-['Newsreader']">
                             {provider.languages_spoken?.[0] || 'English'}
                         </span>
                     </div>

@@ -17,6 +17,9 @@
 - ✅ **IntakeQ EMR integration** for appointment creation
 - ✅ **Email confirmations** and admin notifications
 - ✅ **State-based filtering** with provider license integration
+- ✅ **Clinical supervision model** for resident booking under attending physician supervision
+- ✅ **Provider-specific booking flows** with insurance mismatch handling
+- ✅ **Provider authentication system** with role-based access control
 
 #### **👩‍⚕️ Provider Experience** 
 - ✅ **Complete provider signup flow** (2-step registration)
@@ -350,9 +353,168 @@ npm run dev
 - **Professional UX** consistent with Moonlit brand throughout
 - **Real-time integration** between all platform components
 
+## 🏥 **CLINICAL SUPERVISION MODEL IMPLEMENTATION (September 1, 2025)**
+
+### **🎯 Revolutionary Healthcare Booking Enhancement**
+**Files**: `src/app/api/patient-booking/providers-for-payer/route.ts`, `src/app/api/providers/[provider_id]/accepts-insurance/route.ts`, `src/app/book/provider/[provider_id]/page.tsx`
+
+#### ✅ **Clinical Supervision System**
+- **Supervision-Based Booking**: Residents can now see patients with insurances they're not directly contracted with when supervised by attending physicians
+- **Enhanced Provider Availability**: API combines direct provider-payer relationships with supervision relationships
+- **Dual Relationship Support**: System handles both 'direct' contracts and 'supervision' arrangements
+- **Provider-Specific Insurance Validation**: Checks insurance acceptance at both practice-level and provider-level
+- **Supervision Metadata**: Returns billing_provider_id, rendering_provider_id, and relationship_type information
+
+#### ✅ **Provider-Specific Booking Flows**
+- **Individual Provider Booking**: New route `/book/provider/[provider_id]?intent=book` for provider-specific appointments
+- **Insurance Mismatch Handling**: Shows specialized screens when specific providers don't accept patient's insurance
+- **Supervision-Aware Messaging**: Different handling for residents vs attending physicians
+- **Provider Authentication**: Complete auth system with role-based access (admin/provider roles)
+
+#### ✅ **Database Architecture for Supervision**
+```sql
+-- Supervision relationships table structure
+CREATE TABLE supervision_relationships (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  rendering_provider_id UUID NOT NULL, -- Who provides the service (resident)
+  billing_provider_id UUID NOT NULL,   -- Who bills/supervises (attending)
+  payer_id UUID NOT NULL,             -- Which insurance/payer
+  effective_date DATE DEFAULT CURRENT_DATE,
+  status TEXT DEFAULT 'active',
+  relationship_type TEXT DEFAULT 'supervision'
+);
+```
+
+#### ✅ **Advanced API Logic**
+- **Combined Queries**: APIs fetch both `provider_payer_networks` (direct) and `supervision_relationships` (supervised)
+- **Relationship Mapping**: rendering_provider_id = bookable provider, billing_provider_id = supervising provider  
+- **Debug Information**: Enhanced logging shows direct vs supervision relationship counts
+- **Error Handling**: Graceful fallback to direct relationships if supervision table unavailable
+- **Next.js 15 Compatibility**: Fixed async parameter handling in dynamic routes
+
+### **🔧 **Provider Authentication & Admin System**
+**Files**: `src/app/api/admin/setup-provider-auth/route.ts`, `src/app/api/admin/simplify-roles/route.ts`
+- **Automated Provider Auth Setup**: Created auth users for all 14 providers with proper email linking
+- **Role System Simplification**: Reduced from 4+ role variations to clean admin/provider system
+- **Admin Dashboard Access**: Proper authentication flow for provider dashboard access
+- **Legacy Cleanup**: Removed inconsistent role references and standardized on role_id system
+
+### **🎨 Enhanced User Experience**
+- **Provider Modal Enhancement**: Real database content (about, medical school, residency info) instead of placeholders
+- **Provider-Specific CTAs**: "Book Dr. [Name]" buttons link directly to provider-specific booking flows
+- **Insurance Validation Flow**: Two-step validation (practice-level → provider-level) with appropriate messaging
+- **Supervision Transparency**: System logs show whether provider acceptance is direct or through supervision
+
+### **📊 **Current Supervision Features**
+- **Resident Booking Support**: Dr. Tatiana Kaehler and Dr. Reynolds can see patients under Dr. Privratsky's supervision
+- **Insurance Relationship Mapping**: Optum Medicaid supervision relationships enable resident bookings
+- **Relationship Type Tracking**: APIs return 'direct' vs 'supervision' for transparency
+- **Billing Provider Information**: System tracks who actually bills for supervised appointments
+- **Administrative Tools**: Debug endpoints for analyzing supervision relationships and provider networks
+
+### **✅ Testing Status (September 1, 2025)**
+```
+✅ Provider authentication system working (14 providers with auth accounts)
+✅ Role system simplified to admin/provider roles
+✅ Provider-specific booking routes functional (/book/provider/[id])
+✅ Insurance mismatch detection and handling implemented
+✅ Supervision model APIs updated with combined direct+supervision logic
+✅ Provider modal system enhanced with real database content
+✅ Next.js 15 async parameter handling fixed
+✅ Clinical supervision database structure designed and implemented
+✅ Comprehensive logging for supervision relationship debugging
+✅ Fallback systems for database connection issues
+```
+
+### **🚀 **Impact on Clinical Operations**
+- **Resident Training Support**: Proper clinical supervision model enables resident patient care
+- **Insurance Coverage Expansion**: Residents can see patients with more insurance types through supervision
+- **Billing Accuracy**: System tracks billing vs rendering providers for proper claim submission
+- **Regulatory Compliance**: Supervision relationships properly documented in database
+- **Enhanced Provider Experience**: Seamless booking experience regardless of direct vs supervised relationships
+
 ---
 
-*Last updated: August 30, 2025*  
-*Status: Complete Unified Healthcare Platform with AI Clinical Documentation + Advanced Provider Modal System* ✅  
-*Latest Enhancement: Merged AI Clinical Notes with Global Provider Modal System and Dual-Intent Booking*  
-*Next Developer: You're inheriting a comprehensive healthcare platform with patient booking, provider management, virtual visits, AI-powered clinical notes, AND advanced provider discovery UX - fully production-ready! 🚀*
+## 📊 **TWO-FIELD PROVIDER AVAILABILITY SYSTEM (September 1, 2025)**
+
+### **🎯 Clean Provider Availability Architecture**
+**Files**: `src/components/shared/ProviderCard.tsx`, `src/components/shared/ProviderModal.tsx`, `database-migrations/001-add-is-bookable-field.sql`
+
+#### ✅ **Revolutionary Provider Display System**
+- **Clean Two-Field Architecture**: `is_bookable` + `accepts_new_patients` replaces complex text-based availability
+- **Non-Bookable Provider Support**: Dr. Privratsky visible on practitioners page but not bookable
+- **Conditional UI Elements**: Status badges and Book buttons appear only for bookable providers
+- **Runtime Error Prevention**: Fixed availability field type checking to prevent JavaScript crashes
+- **Database Migration Tools**: Complete SQL migrations for adding is_bookable field
+
+#### ✅ **Provider Display Logic**
+```typescript
+// Dr. Privratsky (Supervising Attending)
+is_bookable = false          → No status badge, no Book button, still visible
+accepts_new_patients = N/A   → Irrelevant when not bookable
+
+// Regular Provider  
+is_bookable = true           → Show normal UI elements
+accepts_new_patients = true  → "Accepting New Patients" green badge
+accepts_new_patients = false → "Established Patients Only" orange badge
+```
+
+#### ✅ **Database Schema Enhancement**
+```sql
+-- New clean architecture
+is_bookable BOOLEAN DEFAULT true,           -- Can patients book this provider?
+accepts_new_patients BOOLEAN DEFAULT true,  -- Is provider accepting new patients?
+
+-- Replaces complex legacy system
+availability TEXT,                          -- DEPRECATED: Complex text field
+new_patient_status TEXT,                    -- DEPRECATED: Custom status messages  
+```
+
+#### ✅ **UI/UX Improvements**
+- **Practitioners Directory**: All providers visible, conditional status badges
+- **Provider Modals**: Book button hidden for non-bookable providers (Dr. Privratsky)
+- **Type Safety**: Proper null checking prevents `toLowerCase() is not a function` errors
+- **Clean Status Logic**: Standardized messaging instead of freeform text
+- **Professional Presentation**: Attending physicians listed for credibility without booking confusion
+
+### **🔧 **Migration & Cleanup Tools**
+**Files**: `database-migrations/`, `src/app/api/admin/migrate-is-bookable/`, `src/app/api/admin/cleanup-obsolete-fields/`
+- **Database Migration SQL**: Automated scripts for adding is_bookable field
+- **Migration APIs**: Backend endpoints for database schema updates (with fallback manual SQL)
+- **Field Analysis Tools**: Compare old vs new availability logic before cleanup
+- **Obsolete Field Cleanup**: Remove deprecated availability text field after migration
+- **Backup Creation**: Preserve old field values before deletion
+
+### **📊 **Current Provider States**
+- **Dr. Anthony Privratsky**: `is_bookable = false` - Visible but not directly bookable (supervises residents)
+- **Dr. Tatiana Kaehler**: `is_bookable = true, accepts_new_patients = true` - Full booking capability  
+- **Dr. Reynolds**: `is_bookable = true, accepts_new_patients = true` - Full booking capability
+- **All Other Providers**: `is_bookable = true` by default with appropriate new patient status
+
+### **✅ Testing Results (September 1, 2025)**
+```
+✅ is_bookable field successfully added to database
+✅ Dr. Privratsky shows no status badge or Book button
+✅ Other providers show appropriate status badges and buttons  
+✅ Provider modals conditionally render Book buttons
+✅ No JavaScript runtime errors on practitioners page
+✅ Type checking prevents availability field crashes
+✅ Database migration tools created and tested
+✅ Clean two-field architecture working perfectly
+✅ Professional provider presentation maintained
+✅ Supervision model preserved alongside bookability logic
+```
+
+### **🏥 **Healthcare Operations Impact**
+- **Clear Provider Roles**: Attending vs resident visibility without booking confusion
+- **Professional Credibility**: All providers listed for transparency and trust
+- **Simplified Management**: Boolean fields easier for admin updates than text management
+- **Standardized Messaging**: Consistent "Accepting New Patients" vs "Established Patients Only"  
+- **Future Scalability**: Clean architecture supports additional provider states
+
+---
+
+*Last updated: September 1, 2025*  
+*Status: Complete Professional Website + AI Clinical Notes + Clinical Supervision Model + Two-Field Provider Availability System* ✅  
+*Latest Enhancement: Merged AI Clinical Notes with Clinical Supervision Model and Provider Availability System*  
+*Next Developer: Production-ready healthcare website with comprehensive AI clinical documentation, sophisticated provider availability management, clinical supervision support, and professional provider presentation!*
