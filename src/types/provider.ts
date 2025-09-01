@@ -17,6 +17,8 @@ export interface Provider {
     specialties?: string[] // Multiple specialties array
     languages_spoken?: string[]
     accepts_new_patients?: boolean
+    availability?: string  // Provider availability status from database
+    is_bookable?: boolean  // Whether provider can be booked by patients
     new_patient_status?: string // Custom status message
     next_available?: string
     state_licenses?: string[]

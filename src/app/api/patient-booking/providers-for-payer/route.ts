@@ -113,6 +113,8 @@ export async function POST(request: NextRequest) {
                 languages_spoken,
                 telehealth_enabled,
                 accepts_new_patients,
+                availability,
+                is_bookable,
                 profile_image_url,
                 about,
                 what_i_look_for_in_a_patient,

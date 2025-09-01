@@ -199,18 +199,21 @@ export default function ProviderModal() {
 
                         {/* Action Buttons */}
                         <div className="flex flex-col sm:flex-row gap-4 mt-10 pt-8 border-t border-gray-200">
-                            <button
-                                onClick={() => {
-                                    // Navigate to provider-specific booking
-                                    window.location.href = `/book/provider/${provider.id}?intent=book`
-                                }}
-                                className="flex-1 bg-[#BF9C73] hover:bg-[#A8865F] text-white py-4 px-8 rounded-xl font-['Newsreader'] text-center transition-colors font-medium text-lg shadow-sm"
-                            >
-                                Book Dr. {provider.last_name}
-                            </button>
+                            {/* Only show Book button if provider is bookable */}
+                            {provider.is_bookable !== false && (
+                                <button
+                                    onClick={() => {
+                                        // Navigate to provider-specific booking
+                                        window.location.href = `/book/provider/${provider.id}?intent=book`
+                                    }}
+                                    className="flex-1 bg-[#BF9C73] hover:bg-[#A8865F] text-white py-4 px-8 rounded-xl font-['Newsreader'] text-center transition-colors font-medium text-lg shadow-sm"
+                                >
+                                    Book Dr. {provider.last_name}
+                                </button>
+                            )}
                             <button
                                 onClick={closeModal}
-                                className="flex-1 bg-white hover:bg-gray-50 text-[#091747] py-4 px-8 rounded-xl font-['Newsreader'] border-2 border-gray-200 hover:border-gray-300 transition-colors font-medium text-lg"
+                                className={`${provider.is_bookable !== false ? 'flex-1' : 'w-full'} bg-white hover:bg-gray-50 text-[#091747] py-4 px-8 rounded-xl font-['Newsreader'] border-2 border-gray-200 hover:border-gray-300 transition-colors font-medium text-lg`}
                             >
                                 Close
                             </button>
