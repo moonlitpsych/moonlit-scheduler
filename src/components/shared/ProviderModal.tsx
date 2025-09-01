@@ -101,14 +101,14 @@ export default function ProviderModal() {
                                     </p>
                                 )}
 
-                                {provider.role && (
+                                {(provider.provider_type || provider.role) && (
                                     <span className="inline-block px-4 py-2 bg-[#FEF8F1] text-[#BF9C73] border border-[#BF9C73] text-sm font-medium rounded-full font-['Newsreader'] mb-4">
-                                        {provider.role}
+                                        {provider.provider_type || provider.role}
                                     </span>
                                 )}
 
-                                {/* Accepting New Patients */}
-                                {provider.accepts_new_patients && (
+                                {/* Accepting New Patients - only show for bookable providers */}
+                                {provider.is_bookable !== false && provider.accepts_new_patients && (
                                     <div className="mb-6">
                                         <div className="inline-flex items-center px-4 py-2 bg-[#F0F8F0] text-[#2D5016] rounded-lg font-['Newsreader'] text-sm font-medium border border-[#9BC53D]/30">
                                             <span className="w-2 h-2 bg-[#4CAF50] rounded-full mr-2"></span>
@@ -129,7 +129,7 @@ export default function ProviderModal() {
                                         {provider.languages_spoken.map((language, index) => (
                                             <span 
                                                 key={index}
-                                                className="px-3 py-2 bg-[#E6D7C3] text-[#8B7355] rounded-lg font-['Newsreader'] text-sm"
+                                                className="px-3 py-2 bg-[#FEF8F1] text-[#BF9C73] rounded-lg font-['Newsreader'] text-sm border border-[#BF9C73]/30"
                                             >
                                                 {language}
                                             </span>

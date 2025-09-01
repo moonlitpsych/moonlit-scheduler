@@ -632,7 +632,86 @@ CREATE TABLE supervision_relationships (
 
 ---
 
+## 📊 **TWO-FIELD PROVIDER AVAILABILITY SYSTEM (September 1, 2025)**
+
+### **🎯 Clean Provider Availability Architecture**
+**Files**: `src/components/shared/ProviderCard.tsx`, `src/components/shared/ProviderModal.tsx`, `database-migrations/001-add-is-bookable-field.sql`
+
+#### ✅ **Revolutionary Provider Display System**
+- **Clean Two-Field Architecture**: `is_bookable` + `accepts_new_patients` replaces complex text-based availability
+- **Non-Bookable Provider Support**: Dr. Privratsky visible on practitioners page but not bookable
+- **Conditional UI Elements**: Status badges and Book buttons appear only for bookable providers
+- **Runtime Error Prevention**: Fixed availability field type checking to prevent JavaScript crashes
+- **Database Migration Tools**: Complete SQL migrations for adding is_bookable field
+
+#### ✅ **Provider Display Logic**
+```typescript
+// Dr. Privratsky (Supervising Attending)
+is_bookable = false          → No status badge, no Book button, still visible
+accepts_new_patients = N/A   → Irrelevant when not bookable
+
+// Regular Provider  
+is_bookable = true           → Show normal UI elements
+accepts_new_patients = true  → "Accepting New Patients" green badge
+accepts_new_patients = false → "Established Patients Only" orange badge
+```
+
+#### ✅ **Database Schema Enhancement**
+```sql
+-- New clean architecture
+is_bookable BOOLEAN DEFAULT true,           -- Can patients book this provider?
+accepts_new_patients BOOLEAN DEFAULT true,  -- Is provider accepting new patients?
+
+-- Replaces complex legacy system
+availability TEXT,                          -- DEPRECATED: Complex text field
+new_patient_status TEXT,                    -- DEPRECATED: Custom status messages  
+```
+
+#### ✅ **UI/UX Improvements**
+- **Practitioners Directory**: All providers visible, conditional status badges
+- **Provider Modals**: Book button hidden for non-bookable providers (Dr. Privratsky)
+- **Type Safety**: Proper null checking prevents `toLowerCase() is not a function` errors
+- **Clean Status Logic**: Standardized messaging instead of freeform text
+- **Professional Presentation**: Attending physicians listed for credibility without booking confusion
+
+### **🔧 **Migration & Cleanup Tools**
+**Files**: `database-migrations/`, `src/app/api/admin/migrate-is-bookable/`, `src/app/api/admin/cleanup-obsolete-fields/`
+- **Database Migration SQL**: Automated scripts for adding is_bookable field
+- **Migration APIs**: Backend endpoints for database schema updates (with fallback manual SQL)
+- **Field Analysis Tools**: Compare old vs new availability logic before cleanup
+- **Obsolete Field Cleanup**: Remove deprecated availability text field after migration
+- **Backup Creation**: Preserve old field values before deletion
+
+### **📊 **Current Provider States**
+- **Dr. Anthony Privratsky**: `is_bookable = false` - Visible but not directly bookable (supervises residents)
+- **Dr. Tatiana Kaehler**: `is_bookable = true, accepts_new_patients = true` - Full booking capability  
+- **Dr. Reynolds**: `is_bookable = true, accepts_new_patients = true` - Full booking capability
+- **All Other Providers**: `is_bookable = true` by default with appropriate new patient status
+
+### **✅ Testing Results (September 1, 2025)**
+```
+✅ is_bookable field successfully added to database
+✅ Dr. Privratsky shows no status badge or Book button
+✅ Other providers show appropriate status badges and buttons  
+✅ Provider modals conditionally render Book buttons
+✅ No JavaScript runtime errors on practitioners page
+✅ Type checking prevents availability field crashes
+✅ Database migration tools created and tested
+✅ Clean two-field architecture working perfectly
+✅ Professional provider presentation maintained
+✅ Supervision model preserved alongside bookability logic
+```
+
+### **🏥 **Healthcare Operations Impact**
+- **Clear Provider Roles**: Attending vs resident visibility without booking confusion
+- **Professional Credibility**: All providers listed for transparency and trust
+- **Simplified Management**: Boolean fields easier for admin updates than text management
+- **Standardized Messaging**: Consistent "Accepting New Patients" vs "Established Patients Only"  
+- **Future Scalability**: Clean architecture supports additional provider states
+
+---
+
 *Last updated: September 1, 2025*  
-*Status: Complete Professional Website + Clinical Supervision Model + Provider Authentication System* ✅  
-*Latest Enhancement: Clinical Supervision Model Implementation with Provider-Specific Booking Flows*  
-*Next Developer: Production-ready healthcare website with advanced clinical supervision support enabling residents to provide care under attending physician supervision!*
+*Status: Complete Professional Website + Clinical Supervision Model + Two-Field Provider Availability System* ✅  
+*Latest Enhancement: Clean Provider Availability Architecture with Conditional UI Elements*  
+*Next Developer: Production-ready healthcare website with sophisticated provider availability management, clinical supervision support, and professional provider presentation!*

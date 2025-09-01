@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
                 last_name,
                 title,
                 role,
+                provider_type,
                 is_active,
                 languages_spoken,
                 telehealth_enabled,
