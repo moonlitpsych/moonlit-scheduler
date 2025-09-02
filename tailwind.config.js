@@ -9,17 +9,17 @@ module.exports = {
     theme: {
         extend: {
             colors: {
-                // Moonlit brand colors extracted from Figma designs
+                // Moonlit brand colors - correct brand palette
                 moonlit: {
-                    coral: '#D4A574', // Main coral/salmon button color
-                    'coral-hover': '#C49660',
-                    'coral-light': '#E8C4A0', // Lighter coral for backgrounds
-                    sage: '#9CA3AF', // Neutral sage for text
-                    stone: '#78716C', // Dark stone for headings
+                    navy: '#091747',      // Primary navy text color
+                    brown: '#BF9C73',     // Primary brown accent/button color
+                    'brown-hover': '#A8865F', // Brown hover state
+                    cream: '#FEF8F1',     // Background cream color
+                    orange: '#E67A47',    // Secondary accent orange
                 }
             },
             fontFamily: {
-                sans: ['Inter', 'system-ui', 'sans-serif'],
+                sans: ['Newsreader', 'system-ui', 'serif'], // Brand typography
             },
         },
     },
