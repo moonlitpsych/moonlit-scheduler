@@ -770,8 +770,68 @@ new_patient_status TEXT,                    -- DEPRECATED: Custom status message
 
 ---
 
+## 🧹 **NAVIGATION & CONTACT CLEANUP (September 2, 2025)**
+
+### **🔄 Navigation Cleanup & Enhancement**
+**Files**: `src/components/layout/Header.tsx`, `src/components/layout/Footer.tsx`, `src/app/book/page.tsx`, `src/components/booking/BookingFlow.tsx`
+
+#### ✅ **Broken Link Removal**
+- **Removed "About" Navigation**: Eliminated non-functional "About" links from both header and footer navigation
+- **Streamlined Navigation**: Header now contains only functional links (Our practitioners, Ways to pay, Book now)
+
+#### ✅ **Smart Footer Navigation**
+- **"see a psychiatrist"** → `/book` (direct to booking flow)
+- **"refer someone"** → `/book?scenario=case-manager` (pre-selects referral scenario, skips to insurance selection)
+- **"how to pay"** → `/ways-to-pay` (correct insurance directory destination)
+
+#### ✅ **Enhanced Booking Flow**
+- **Preselected Scenario Support**: Added `preselectedScenario` prop to BookingFlow component
+- **Smart Flow Logic**: Pre-selected scenarios skip welcome screen and go directly to insurance selection
+- **URL Parameter Handling**: Book page now processes `scenario` parameter for direct referral flows
+
+### **📧 Contact Information Standardization**
+**Files**: Multiple booking views, login, and dashboard pages
+
+#### ✅ **Email Address Corrections**
+- **Fixed Invalid Emails**: Replaced all instances of `hello@moonlit.com` with `hello@trymoonlit.com`
+- **Standardized Admin Contacts**: Updated `admin@moonlitpsychiatry.com` to `hello@trymoonlit.com` for consistency
+- **Fixed Display Inconsistencies**: Corrected mismatched href vs display text in contact links
+
+#### ✅ **Updated Components**
+- **PayerSearchView**: Insurance assistance contact email corrected
+- **WaitlistConfirmationView**: Contact email display text fixed to match href
+- **Login Page**: Admin contact email updated to functional address
+- **Dashboard**: Support contact email standardized
+
+### **🐛 Layout Bug Fixes**
+**Files**: `src/app/ways-to-pay/page.tsx`
+
+#### ✅ **Double Footer Resolution**
+- **Root Cause**: Ways-to-pay page included its own Header/Footer while root layout already provided them
+- **Solution**: Removed duplicate layout components from ways-to-pay page
+- **Result**: Clean single header and footer across all pages
+
+### **🎯 User Experience Improvements**
+- **Functional Navigation**: All footer links now lead to appropriate destinations
+- **Streamlined Referrals**: "Refer someone" bypasses welcome screen for faster case manager booking
+- **Consistent Contact**: All user-facing contact information uses the same working email address
+- **Clean Layout**: Eliminated layout duplication issues across the site
+
+### **✅ Testing Results (September 2, 2025)**
+```
+✅ "About" navigation links removed from header and footer
+✅ Footer navigation leads to correct destinations
+✅ "Refer someone" pre-selects case-manager scenario and skips to insurance
+✅ All contact emails updated to hello@trymoonlit.com
+✅ Double footer issue resolved on ways-to-pay page
+✅ Booking flow handles preselected scenarios correctly
+✅ Navigation remains functional and clean across all pages
+```
+
+---
+
 *Last updated: September 2, 2025*  
-*Status: Complete Professional Website + Enhanced Provider Experience + Insurance Mismatch Flow Fix* ✅  
-*Latest Enhancement: ProviderCard System with Rectangular Images, SEO URLs, and Preserved Insurance Flow*  
-*Current Branch: feature/provider-card-analysis*  
-*Next Developer: Production-ready healthcare website with sophisticated provider experience, enhanced UX flows, and comprehensive mobile responsiveness!*
+*Status: Complete Professional Website + Enhanced Provider Experience + Navigation & Contact Cleanup* ✅  
+*Latest Enhancement: Navigation Cleanup, Email Standardization, and Smart Referral Flow*  
+*Current Branch: delete.about*  
+*Next Developer: Production-ready healthcare website with clean navigation, functional contact information, and streamlined booking flows for all user types!*
