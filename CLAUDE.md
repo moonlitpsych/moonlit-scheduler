@@ -635,6 +635,96 @@ CREATE TABLE supervision_relationships (
 
 ---
 
+## 🌍 **APPOINTMENT LANGUAGE SELECTION FEATURE (September 2, 2025)**
+
+### **🎯 Complete Language Selection Implementation**
+**Files**: `src/components/booking/views/CalendarView.tsx`, `src/app/api/patient-booking/available-languages/route.ts`, `src/app/api/patient-booking/request-custom-language/route.ts`, `src/app/api/admin/cleanup-sample-languages/route.ts`, `LANGUAGE_SELECTION_TESTING.md`
+
+#### ✅ **User Story Implementation**
+- **Full User Story**: "As a booking user, I need to know that the language of the appointment will match the language I or my patient needs to hold the appointment in"
+- **Clean UI Design**: Simple checkbox line below calendar, left-aligned without white box styling
+- **Database-Driven**: Language options populated from active provider `languages_spoken` fields
+- **Custom Language Support**: Email notification system for unlisted languages
+- **Provider Filtering**: Automatically filters providers based on selected language
+
+#### ✅ **Technical Architecture**
+```typescript
+// Language State Management
+const [selectedLanguage, setSelectedLanguage] = useState<string>('English')
+const [showLanguageOptions, setShowLanguageOptions] = useState(false)
+const [availableLanguages, setAvailableLanguages] = useState<string[]>([])
+const [customLanguage, setCustomLanguage] = useState<string>('')
+```
+
+#### ✅ **API Endpoints Created**
+- **`GET /api/patient-booking/available-languages`** - Returns all languages from active providers
+- **`POST /api/patient-booking/request-custom-language`** - Sends email for manual language requests  
+- **`POST /api/admin/cleanup-sample-languages`** - Admin utility for test data cleanup
+- **Enhanced merged-availability API** - Now accepts `language` parameter for provider filtering
+
+#### ✅ **Real Data Integration**
+- **Current Languages**: `["English", "Spanish"]` from production provider data
+- **Provider Distribution**: 6 English-speaking providers, 1 Spanish-speaking provider (Dr. Rufus Sweeney)
+- **Language Filtering**: Spanish selection shows only Dr. Sweeney, English shows all providers
+- **Custom Language Flow**: Unlisted languages trigger email to hello@trymoonlit.com
+
+#### ✅ **UI/UX Design**
+- **Positioning**: Below calendar, above navigation buttons for discoverability
+- **Clean Styling**: Simple checkbox and text line, no white box container
+- **Left-Aligned**: Natural integration with page flow
+- **Conditional Rendering**: Language options appear only when checkbox checked
+- **Pending Review System**: Yellow notification box for custom language requests
+
+#### ✅ **Email Notification System**
+```typescript
+// Automatic email trigger for custom languages
+if (selectedLanguage === 'Other' && customLanguage.trim()) {
+    await fetch('/api/patient-booking/request-custom-language', {
+        method: 'POST',
+        body: JSON.stringify({
+            customLanguage: customLanguage.trim(),
+            patientInfo: { /* patient details */ },
+            selectedPayer: selectedPayer,
+            appointmentDetails: { /* appointment preferences */ }
+        })
+    })
+}
+```
+
+#### ✅ **Integration Points**
+- **Provider Filtering**: Updates `providers-for-payer` API calls with language parameter
+- **Availability System**: Enhanced `merged-availability` API with language-based filtering
+- **Slot Selection**: Custom language emails sent automatically when slots are selected
+- **State Management**: Language changes trigger provider and availability updates
+
+### **📊 Current Language Features**
+- **Language Dropdown**: Populated with real provider language capabilities
+- **Provider Filtering**: Real-time filtering based on language selection
+- **Custom Language Requests**: Production-ready email notification system
+- **Admin Cleanup Tools**: Database management utilities for language data
+- **Comprehensive Testing**: Complete testing guide with 7 test scenarios
+
+### **✅ Testing Results (September 2, 2025)**
+```
+✅ Language dropdown populated with real data: ["English", "Spanish"]
+✅ Provider filtering functional: Spanish shows only Dr. Rufus Sweeney
+✅ Custom language input with "Pending Review" messaging working
+✅ Email notification system integrated with slot selection
+✅ API endpoints responding correctly with real provider data
+✅ UI positioned cleanly below calendar, left-aligned without white box
+✅ Mobile responsive design with Moonlit brand styling
+✅ Database cleanup tools working for test data management
+```
+
+### **🚀 Production Readiness**
+- **Real Data**: Using actual provider language capabilities from database
+- **Email Integration**: Connected to existing emailService with fallback logging
+- **Error Handling**: Comprehensive error catching and graceful fallbacks
+- **Performance**: Efficient language queries with proper caching
+- **Documentation**: Complete testing guide and technical specifications
+
+---
+
 ## 📊 **TWO-FIELD PROVIDER AVAILABILITY SYSTEM (September 1, 2025)**
 
 ### **🎯 Clean Provider Availability Architecture**
