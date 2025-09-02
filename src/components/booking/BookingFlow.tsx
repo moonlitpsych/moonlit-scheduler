@@ -337,8 +337,8 @@ export default function BookingFlow({
                         providerName={selectedProvider ? `${selectedProvider.first_name} ${selectedProvider.last_name}` : 'Provider'}
                         insuranceName={state.selectedPayer.name}
                         onContinueWithOthers={() => {
-                            // Redirect to general booking
-                            window.location.href = '/book?intent=book'
+                            // Go directly to calendar view with selected insurance preserved
+                            goToStep('calendar')
                         }}
                         onJoinWaitlist={() => {
                             goToStep('waitlist-confirmation')
