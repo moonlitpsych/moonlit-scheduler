@@ -56,7 +56,7 @@ export default function Header() {
                             </Link>
                         ))}
                         
-                        {/* Enhanced CTA Button */}
+                        {/* CTA Button */}
                         <Link
                             href="/book"
                             className="bg-[#BF9C73] hover:bg-[#A8865F] text-white px-6 py-3 rounded-xl font-['Newsreader'] transition-all duration-200 hover:shadow-lg hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-[#BF9C73]/20"
