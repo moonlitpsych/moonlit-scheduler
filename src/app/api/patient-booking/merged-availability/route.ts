@@ -1,5 +1,5 @@
 // src/app/api/patient-booking/merged-availability/route.ts
-import { supabase } from '@/lib/supabase'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { intakeQService } from '@/lib/services/intakeQService'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -96,8 +96,8 @@ export async function POST(request: NextRequest) {
         const dayOfWeek = targetDate.getDay()
         console.log(`📅 Target date ${requestDate} is day of week ${dayOfWeek} (0=Sun, 1=Mon, etc.)`)
 
-        // Step 3: Get availability for these providers on this day of week
-        const { data: availability, error: availabilityError } = await supabase
+        // Step 3: Get availability for these providers on this day of week (using admin client for RLS access)
+        const { data: availability, error: availabilityError } = await supabaseAdmin
             .from('provider_availability')
             .select('*')
             .in('provider_id', providerIds)
@@ -113,6 +113,12 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`📊 Found ${availability?.length || 0} availability records`)
+        console.log(`🔍 DEBUG: Querying availability for provider IDs:`, providerIds)
+        console.log(`🔍 DEBUG: Looking for day_of_week = ${dayOfWeek}, is_recurring = true`)
+        
+        if (availability && availability.length > 0) {
+            console.log(`📋 DEBUG: Sample availability record:`, availability[0])
+        }
 
         // Step 4: Generate time slots from availability
         const allSlots: AvailableSlot[] = []
@@ -269,7 +275,7 @@ async function filterConflictingAppointments(slots: AvailableSlot[], date: strin
         try {
             // Get provider's IntakeQ practitioner ID from the first slot
             // We'll need to look this up from the database
-            const { data: provider, error } = await supabase
+            const { data: provider, error } = await supabaseAdmin
                 .from('providers')
                 .select('intakeq_practitioner_id')
                 .eq('id', providerId)
