@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 
+// Force dynamic rendering to prevent build issues
+export const dynamic = 'force-dynamic'
+
 export default function SetupAuthPage() {
   const [isRunning, setIsRunning] = useState(false)
   const [results, setResults] = useState(null)

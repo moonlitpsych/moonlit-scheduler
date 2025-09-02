@@ -338,65 +338,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 }
             }
 
-            // STRATEGY 3: Use diagnostics endpoint to get raw data and calculate availability
-            if (!success) {
-                try {
-                    console.log('📡 STRATEGY 3: Using diagnostics data to generate availability')
-                    
-                    // Get day of week for the selected date
-                    const targetDate = new Date(dateString)
-                    const dayOfWeek = targetDate.getDay()
-                    
-                    // For provider-specific mode, generate slots for the selected provider
-                    if (bookingMode === 'by_provider' && effectiveProviderId) {
-                        console.log(`🏥 Generating availability for provider: ${effectiveProviderId}`)
-                        
-                        // Find the selected provider in our providers list
-                        const provider = providers.find(p => p.id === effectiveProviderId)
-                        const providerName = provider?.full_name || 'Selected Provider'
-                        
-                        // Generate mock availability for the selected provider (weekdays only for demo)
-                        if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday-Friday
-                            apiSlots = [
-                                { date: dateString, time: '09:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '10:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '11:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '14:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '15:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '16:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                            ]
-                            success = true
-                            console.log(`✅ Strategy 3 SUCCESS: Generated availability for ${providerName}`)
-                        }
-                    } else {
-                        // Original merged availability logic for "by_availability" mode
-                        // Generate slots based on your diagnostics data
-                        // Travis (35ab086b-2894-446d-9ab5-3d41613017ad) has Sunday availability 09:00-17:00
-                        // DMBA payer_id is 8bd0bedb-226e-4253-bfeb-46ce835ef2a8
-                        
-                        if (payerId === '8bd0bedb-226e-4253-bfeb-46ce835ef2a8') { // DMBA
-                            if (dayOfWeek === 0) { // Sunday - Travis availability
-                                apiSlots = [
-                                    { date: dateString, time: '09:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '09:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '10:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '10:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '11:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '13:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '13:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '14:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '15:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '16:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                ]
-                                success = true
-                                console.log('✅ Strategy 3 SUCCESS: Generated Travis Sunday availability')
-                            }
-                        }
-                    }
-                } catch (error3) {
-                    console.log('❌ Strategy 3 failed:', error3)
-                }
-            }
+            // API now handles fallback logic internally with real provider data
+            // Removed Strategy 3 hardcoded fallbacks - no longer needed
 
             if (!success) {
                 throw new Error('All API strategies failed - please check Next.js dev server restart')

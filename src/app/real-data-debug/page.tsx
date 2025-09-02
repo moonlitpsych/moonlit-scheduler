@@ -1,10 +1,14 @@
 // src/app/real-data-debug/page.tsx
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import dynamic from 'next/dynamic'
 
-export default function RealDataDebugPage() {
+// Force dynamic rendering to prevent build issues
+export const dynamic = 'force-dynamic'
+
+function RealDataDebugContent() {
     const [debugResults, setDebugResults] = useState<any>({})
     const [loading, setLoading] = useState(false)
 
@@ -299,5 +303,33 @@ export default function RealDataDebugPage() {
                 </div>
             </div>
         </div>
+    )
+}
+
+// Dynamically import with SSR disabled to prevent build issues
+const RealDataDebugPage = dynamic(() => Promise.resolve(RealDataDebugContent), {
+    ssr: false,
+    loading: () => (
+        <div className="min-h-screen bg-stone-50 p-8 flex items-center justify-center">
+            <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800 mx-auto mb-4"></div>
+                <p className="text-slate-600">Loading debug interface...</p>
+            </div>
+        </div>
+    )
+})
+
+export default function Page() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-stone-50 p-8 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800 mx-auto mb-4"></div>
+                    <p className="text-slate-600">Loading debug interface...</p>
+                </div>
+            </div>
+        }>
+            <RealDataDebugPage />
+        </Suspense>
     )
 }

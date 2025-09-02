@@ -67,7 +67,13 @@ export default function DashboardPage() {
     const loadDashboardData = async () => {
         try {
             const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+            if (!user) {
+                console.log('No authenticated user found')
+                toast.error('Authentication Required', 'Please log in to access the dashboard')
+                return
+            }
+
+            console.log('Loading provider data for user:', user.id)
 
             // Load provider
             const { data: providerData, error: providerError } = await supabase
@@ -78,9 +84,26 @@ export default function DashboardPage() {
                 .single()
 
             if (providerError || !providerData) {
-                console.error('Provider not found:', providerError)
+                console.error('Provider not found for user:', user.id, 'Error:', providerError)
+                
+                // Check if any provider exists with this auth_user_id (without is_active filter)
+                const { data: anyProvider, error: anyProviderError } = await supabase
+                    .from('providers')
+                    .select('*')
+                    .eq('auth_user_id', user.id)
+                    .single()
+                
+                if (anyProvider && !anyProvider.is_active) {
+                    toast.error('Account Inactive', 'Your provider account is not active. Please contact admin.')
+                } else if (!anyProvider) {
+                    toast.error('Provider Account Not Found', 'No provider profile found for this account. Please contact admin.')
+                } else {
+                    toast.error('Load Error', 'Unable to load provider data. Please try again.')
+                }
                 return
             }
+
+            console.log('Provider loaded successfully:', providerData.first_name, providerData.last_name)
 
             setProvider(providerData)
 
@@ -147,6 +170,45 @@ export default function DashboardPage() {
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#BF9C73] mx-auto"></div>
                     <p className="mt-4 text-[#091747] font-medium">Loading your dashboard...</p>
+                </div>
+            </div>
+        )
+    }
+
+    // If no provider found, show a simple development message
+    if (!provider) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/20 to-[#FEF8F1] flex items-center justify-center">
+                <div className="text-center max-w-md">
+                    <div className="p-6 bg-blue-50 rounded-lg border border-blue-200">
+                        <User className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+                        <h2 className="text-xl font-bold text-[#091747] mb-2">Provider Dashboard</h2>
+                        <p className="text-[#091747]/70 mb-4">
+                            This dashboard requires a provider account. Please access the main features:
+                        </p>
+                        <div className="space-y-3">
+                            <Link 
+                                href="/"
+                                className="inline-block bg-[#BF9C73] text-white px-6 py-2 rounded-lg hover:bg-[#BF9C73]/90 transition-colors"
+                            >
+                                View Homepage
+                            </Link>
+                            <br />
+                            <Link 
+                                href="/practitioners"
+                                className="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                                Browse Providers
+                            </Link>
+                            <br />
+                            <Link 
+                                href="/book"
+                                className="text-[#BF9C73] hover:text-[#BF9C73]/80 text-sm underline"
+                            >
+                                Try Booking Flow
+                            </Link>
+                        </div>
+                    </div>
                 </div>
             </div>
         )

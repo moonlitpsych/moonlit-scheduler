@@ -5,9 +5,13 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Check, Eye, EyeOff, Stethoscope, User } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
+import dynamic from 'next/dynamic'
 
-export default function ProviderSignupPage() {
+// Force dynamic rendering to prevent build issues
+export const dynamic = 'force-dynamic'
+
+function ProviderSignupContent() {
   const [step, setStep] = useState<'auth' | 'profile'>('auth')
   
   // Auth data
@@ -388,5 +392,33 @@ export default function ProviderSignupPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Dynamically import with SSR disabled to prevent build issues
+const ProviderSignupPage = dynamic(() => Promise.resolve(ProviderSignupContent), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100 flex items-center justify-center p-4">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#BF9C73] mx-auto mb-4"></div>
+        <p className="text-[#091747]/70">Loading signup form...</p>
+      </div>
+    </div>
+  )
+})
+
+export default function Page() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#BF9C73] mx-auto mb-4"></div>
+          <p className="text-[#091747]/70">Loading signup form...</p>
+        </div>
+      </div>
+    }>
+      <ProviderSignupPage />
+    </Suspense>
   )
 }
