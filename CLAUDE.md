@@ -1,5 +1,18 @@
 # 🎉 CLAUDE CODE: Moonlit Scheduler - COMPLETE HEALTHCARE PLATFORM + AI NOTES + PROVIDER MODAL SYSTEM
 
+## 🚨 CRITICAL DATABASE POLICY - READ FIRST 🚨
+
+**❌ NEVER CREATE MOCK/SIMULATED DATA IN THE DATABASE**
+- **DO NOT** populate test data, mock rows, or simulated entries in any Supabase tables
+- **DO NOT** insert, update, or modify existing database records  
+- **PRIORITY**: Understand the actual database structure and architecture deeply
+- **APPROACH**: Work with existing real data only - analyze, query, and adapt code to match reality
+- **REASON**: We are focused on making the actual database work with the app, not creating artificial scenarios
+
+*This is the #1 development principle for this codebase - violating this creates deployment issues.*
+
+---
+
 ## 🌟 PROJECT STATUS: COMPREHENSIVE HEALTHCARE PLATFORM WITH AI CLINICAL DOCUMENTATION + ADVANCED PROVIDER DISCOVERY
 
 **Moonlit Scheduler is now a complete healthcare platform with integrated AI note generation, virtual visits, comprehensive patient management, AND advanced provider modal system with dual-intent booking!**

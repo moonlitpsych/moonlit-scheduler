@@ -36,57 +36,139 @@ export async function POST(request: NextRequest) {
 
         console.log(`🔍 Getting ${provider_id ? 'provider-specific' : 'merged'} availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
 
-        // Step 1: Get providers who accept this payer using CORRECT table name
-        let query = supabase
-            .from('provider_payer_networks')
-            .select(`
-                provider_id,
-                effective_date,
-                status,
-                providers!inner (
-                    id,
-                    first_name,
-                    last_name,
-                    title,
-                    role,
-                    is_active,
-                    accepts_new_patients,
-                    telehealth_enabled
-                )
-            `)
-            .eq('payer_id', payer_id)
-            .eq('status', 'in_network')
-            .eq('providers.is_active', true)
+        // Step 1: Get payer info to determine which view to use
+        const { data: payer, error: payerError } = await supabase
+            .from('payers')
+            .select('name, requires_attending, credentialing_status, effective_date')
+            .eq('id', payer_id)
+            .single()
 
-        // If provider_id is specified, filter for that specific provider
-        if (provider_id) {
-            query = query.eq('provider_id', provider_id)
+        if (payerError || !payer) {
+            console.error('❌ Error fetching payer info:', payerError)
+            return NextResponse.json(
+                { error: 'Payer not found', details: payerError, success: false },
+                { status: 404 }
+            )
         }
 
-        const { data: networks, error: networksError } = await query
+        console.log(`🔍 Payer: ${payer.name}, requires_attending: ${payer.requires_attending}`)
 
-        if (networksError) {
-            console.error('❌ Error fetching provider networks:', networksError)
+        // Use appropriate view based on payer credentialing model
+        let providerData, dataError
+        
+        if (payer.requires_attending) {
+            // Supervision model - use v_bookable_provider_payer
+            console.log('📋 Using v_bookable_provider_payer (supervision model)')
+            const { data, error } = await supabase
+                .from('v_bookable_provider_payer')
+                .select(`
+                    provider_id,
+                    payer_id,
+                    effective_date,
+                    network_status,
+                    billing_provider_id,
+                    rendering_provider_id,
+                    show_in_widget,
+                    earliest_appointment_date
+                `)
+                .eq('payer_id', payer_id)
+                .eq('network_status', 'in_network')
+                .eq('show_in_widget', true)
+                .lte('earliest_appointment_date', requestDate)
+            
+            providerData = data
+            dataError = error
+        } else {
+            // Direct credentialing - use v_in_network_bookable  
+            console.log('📋 Using v_in_network_bookable (direct credentialing)')
+            const { data, error } = await supabase
+                .from('v_in_network_bookable')
+                .select(`
+                    provider_id,
+                    payer_id,
+                    effective_date,
+                    status,
+                    show_in_widget,
+                    earliest_appointment_date
+                `)
+                .eq('payer_id', payer_id)
+                .eq('status', 'in_network')
+                .eq('show_in_widget', true)
+                .lte('earliest_appointment_date', requestDate)
+            
+            providerData = data
+            dataError = error
+        }
+
+        if (dataError) {
+            console.error('❌ Error fetching provider relationships:', dataError)
             return NextResponse.json(
-                { error: 'Failed to fetch provider networks', details: networksError, success: false },
+                { error: 'Failed to fetch provider relationships', details: dataError, success: false },
                 { status: 500 }
             )
         }
 
-        const providers = networks?.map(n => n.providers) || []
-        const providerIds = providers.map(p => p.id)
-        
-        console.log(`👥 Found ${providers.length} providers accepting this payer:`, 
-            providers.map(p => `${p.first_name} ${p.last_name}`))
+        console.log(`🔗 Found ${providerData?.length || 0} provider relationships for ${payer.name}`)
 
-        if (providers.length === 0) {
+        const networkProviderIds = providerData?.map(n => n.provider_id) || []
+        console.log('🔍 Found provider IDs from view:', networkProviderIds)
+
+        if (networkProviderIds.length === 0) {
+            console.log('📋 No provider relationships found')
             return NextResponse.json({
                 success: true,
                 data: {
                     totalSlots: 0,
-                    availableSlots: [],
                     dateRange: { startDate: requestDate, endDate: requestEndDate },
-                    message: 'No providers currently accept this insurance'
+                    slotsByDate: {},
+                    availableSlots: [],
+                    providers: [],
+                    message: `${payer.name} found but no providers are bookable yet`
+                }
+            })
+        }
+
+        // Now get the actual provider details
+        let query = supabase
+            .from('providers')
+            .select(`
+                id,
+                first_name,
+                last_name,
+                title,
+                role
+            `)
+            .in('id', networkProviderIds)
+
+        // If provider_id is specified, filter for that specific provider
+        if (provider_id) {
+            query = query.eq('id', provider_id)
+        }
+
+        const { data: providers, error: providersError } = await query
+
+        if (providersError) {
+            console.error('❌ Error fetching providers:', providersError)
+            return NextResponse.json(
+                { error: 'Failed to fetch providers', details: providersError, success: false },
+                { status: 500 }
+            )
+        }
+        
+        console.log(`👥 Found ${providers?.length || 0} providers accepting this payer:`, 
+            providers?.map(p => `${p.first_name} ${p.last_name}`) || [])
+
+        if (!providers || providers.length === 0) {
+            console.log('📋 No active providers found for this payer')
+            return NextResponse.json({
+                success: true,
+                data: {
+                    totalSlots: 0,
+                    dateRange: { startDate: requestDate, endDate: requestEndDate },
+                    slotsByDate: {},
+                    availableSlots: [],
+                    providers: [],
+                    message: `No active providers found for ${payer.name}`
                 }
             })
         }
@@ -97,12 +179,42 @@ export async function POST(request: NextRequest) {
         console.log(`📅 Target date ${requestDate} is day of week ${dayOfWeek} (0=Sun, 1=Mon, etc.)`)
 
         // Step 3: Get availability for these providers on this day of week
+        const providerIds = providers.map(p => p.id)
+        
+        // Debug: Check what availability exists for these providers (all days)
+        const { data: allAvail, error: debugError } = await supabase
+            .from('provider_availability')
+            .select('provider_id, day_of_week, start_time, end_time, effective_date, expiration_date')
+            .in('provider_id', providerIds)
+            .limit(10)
+        
+        // Also check what provider IDs actually exist in provider_availability
+        const { data: allProviderIds, error: providerIdsError } = await supabase
+            .from('provider_availability')
+            .select('provider_id')
+            .limit(10)
+        
+        // Check if data exists in provider_availability_cache instead
+        const { data: cacheData, error: cacheError } = await supabase
+            .from('provider_availability_cache')
+            .select('provider_id, date, available_slots')
+            .in('provider_id', providerIds)
+            .limit(5)
+        
+        console.log(`🔍 Debug: All availability for these providers:`, allAvail)
+        console.log(`🔍 Debug: Sample provider IDs in provider_availability table:`, allProviderIds?.map(p => p.provider_id))
+        console.log(`🔍 Debug: Cache data for these providers:`, cacheData)
+        console.log(`🔍 Debug: Looking for provider IDs:`, providerIds)
+        console.log(`🔍 Debug: Looking for day_of_week = ${dayOfWeek} on date ${requestDate}`)
+        
+        // Query provider_availability table directly since ScheduleEditor writes there
         const { data: availability, error: availabilityError } = await supabase
             .from('provider_availability')
             .select('*')
             .in('provider_id', providerIds)
             .eq('day_of_week', dayOfWeek)
-            .eq('is_recurring', true)
+            .lte('effective_date', requestDate)
+            .or('expiration_date.is.null,expiration_date.gte.' + requestDate)
 
         if (availabilityError) {
             console.error('❌ Error fetching availability:', availabilityError)
@@ -114,23 +226,30 @@ export async function POST(request: NextRequest) {
 
         console.log(`📊 Found ${availability?.length || 0} availability records`)
 
-        // Step 4: Generate time slots from availability
-        const allSlots: AvailableSlot[] = []
+        // Step 4: Generate time slots from availability OR use defaults if no availability exists
+        let allSlots: AvailableSlot[] = []
         
-        availability?.forEach(avail => {
-            const provider = providers.find(p => p.id === avail.provider_id)
-            if (!provider) return
+        if (availability && availability.length > 0) {
+            // Use actual availability records from provider_availability table
+            availability.forEach(avail => {
+                const provider = providers.find(p => p.id === avail.provider_id)
+                if (!provider) return
 
-            console.log(`⏰ Processing availability for ${provider.first_name} ${provider.last_name}: ${avail.start_time} - ${avail.end_time}`)
+                console.log(`⏰ Processing availability for ${provider.first_name} ${provider.last_name}: ${avail.start_time} - ${avail.end_time}`)
 
-            const slots = generateTimeSlotsFromAvailability(avail, requestDate, provider, appointmentDuration)
-            allSlots.push(...slots)
-        })
+                const slots = generateTimeSlotsFromAvailability(avail, requestDate, provider, appointmentDuration)
+                allSlots.push(...slots)
+            })
+        } else {
+            // No availability records found - this indicates providers haven't set their schedules
+            console.log('📅 No availability records found in provider_availability table')
+            allSlots = []
+        }
 
         // Sort by time
         allSlots.sort((a, b) => a.time.localeCompare(b.time))
 
-        console.log(`✅ Generated ${allSlots.length} total time slots`)
+        console.log(`✅ Found ${allSlots.length} total time slots from ${availability?.length || 0} availability records`)
 
         // Step 5: Filter out slots that conflict with existing IntakeQ appointments
         const filteredSlots = await filterConflictingAppointments(allSlots, requestDate)
@@ -167,7 +286,9 @@ export async function POST(request: NextRequest) {
                     availability_records: availability?.length || 0,
                     slots_generated: allSlots.length
                 },
-                message: `Found ${allSlots.length} available appointment slots from ${providers.length} providers`
+                message: allSlots.length > 0 
+                    ? `Found ${allSlots.length} available appointment slots from ${providers.length} providers`
+                    : `Found ${providers.length} providers accepting this insurance, but no availability schedules configured`
             }
         }
 
@@ -325,3 +446,6 @@ async function filterConflictingAppointments(slots: AvailableSlot[], date: strin
     
     return filteredSlots
 }
+
+// Note: Removed fake default availability generation
+// System now properly surfaces when real provider schedules are missing
