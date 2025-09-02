@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getProviderLookupType, parseProviderSlug } from '@/lib/utils/providerSlug'
 
 export async function GET(
     request: NextRequest,
@@ -16,9 +17,11 @@ export async function GET(
         }
 
         console.log('🔍 Fetching provider:', provider_id)
+        
+        const lookupType = getProviderLookupType(provider_id)
+        console.log('🔍 Lookup type:', lookupType)
 
-        // Fetch the specific provider
-        const { data: provider, error: providerError } = await supabaseAdmin
+        let query = supabaseAdmin
             .from('providers')
             .select(`
                 id,
@@ -39,9 +42,38 @@ export async function GET(
                 med_school_grad_year,
                 residency_org
             `)
-            .eq('id', provider_id)
             .eq('is_active', true)
-            .single()
+
+        let provider, providerError
+        
+        if (lookupType === 'uuid') {
+            // Legacy UUID lookup
+            console.log('🔍 Looking up provider by UUID:', provider_id)
+            const result = await query.eq('id', provider_id).single()
+            provider = result.data
+            providerError = result.error
+        } else {
+            // New slug lookup
+            console.log('🔍 Looking up provider by slug:', provider_id)
+            const nameComponents = parseProviderSlug(provider_id)
+            
+            if (!nameComponents) {
+                return NextResponse.json(
+                    { success: false, error: 'Invalid provider identifier format' },
+                    { status: 400 }
+                )
+            }
+            
+            console.log('🔍 Parsed name components:', nameComponents)
+            
+            const result = await query
+                .eq('first_name', nameComponents.first_name)
+                .eq('last_name', nameComponents.last_name)
+                .single()
+                
+            provider = result.data
+            providerError = result.error
+        }
 
         if (providerError) {
             console.error('❌ Error fetching provider:', providerError)

@@ -72,13 +72,17 @@ export default function ProviderCard({
     onClick
 }: ProviderCardProps) {
     const { openModal } = useProviderModal()
-    const displayName = provider.full_name || `${provider.first_name} ${provider.last_name}`
+    const displayName = provider.full_name || `Dr. ${provider.first_name} ${provider.last_name}`
     const initials = `${provider.first_name.charAt(0)}${provider.last_name.charAt(0)}`
 
     // Variant-specific configurations with brand colors
     const config = {
         selection: {
-            containerClass: 'bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden',
+            containerClass: `bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden border-2 ${
+                selected 
+                    ? 'border-[#2C5F6F] bg-[#F8F6F1] shadow-xl scale-[1.02]' 
+                    : 'border-transparent hover:border-[#BF9C73]/50'
+            }`,
             showSpecialties: true,
             showLanguages: true,
             showAvailability: true
@@ -86,8 +90,8 @@ export default function ProviderCard({
         calendar: {
             containerClass: `rounded-xl text-left transition-all duration-200 border-2 overflow-hidden ${
                 selected 
-                    ? 'border-[#2C5F6F] bg-[#F8F6F1] shadow-md' 
-                    : 'border-stone-200 hover:border-[#2C5F6F]/50 hover:bg-stone-50'
+                    ? 'border-[#2C5F6F] bg-[#F8F6F1] shadow-md ring-2 ring-[#2C5F6F]/20' 
+                    : 'border-stone-200 hover:border-[#BF9C73]/50 hover:bg-stone-50'
             }`,
             showSpecialties: false,
             showLanguages: false,
@@ -119,14 +123,18 @@ export default function ProviderCard({
         if (onClick) {
             onClick()
         } else if (variant === 'directory') {
-            // For directory variant, open modal by default
-            openModal(provider)
+            // For directory variant, open modal by default with directory context
+            openModal(provider, 'directory')
         }
     }
 
     const handleMoreClick = (e: React.MouseEvent) => {
         e.stopPropagation()
-        openModal(provider)
+        // Determine context based on variant
+        const context = variant === 'directory' ? 'directory' : 
+                       variant === 'selection' || variant === 'calendar' ? 'booking' :
+                       variant === 'summary' ? 'summary' : 'other'
+        openModal(provider, context)
     }
 
     // Helper to convert Google Drive links to direct image URLs
@@ -144,13 +152,13 @@ export default function ProviderCard({
     }
 
     const renderImage = () => {
-        // Define image dimensions for different variants
+        // Define image dimensions for different variants (responsive)
         const imageDimensions = {
-            selection: 'w-20 h-24',      // 20x24 portrait rectangle
-            calendar: 'w-12 h-14',       // 12x14 smaller rectangle  
-            summary: 'w-16 h-20',        // 16x20 medium rectangle
-            directory: 'w-24 h-28',      // 24x28 larger rectangle for main page
-            compact: 'w-10 h-12'         // 10x12 smallest rectangle
+            selection: 'w-16 h-20 sm:w-20 sm:h-24',      // Smaller on mobile, 20x24 portrait on desktop
+            calendar: 'w-10 h-12 sm:w-12 sm:h-14',       // Smaller on mobile, 12x14 on desktop  
+            summary: 'w-12 h-16 sm:w-16 sm:h-20',        // Smaller on mobile, 16x20 on desktop
+            directory: 'w-16 h-20 sm:w-20 sm:h-24',      // Consistent with selection for mobile
+            compact: 'w-8 h-10 sm:w-10 sm:h-12'          // Smaller on mobile, 10x12 on desktop
         }
 
         const imageClass = imageDimensions[variant] || imageDimensions.directory
@@ -343,23 +351,37 @@ export default function ProviderCard({
         )
     }
 
-    const renderMoreButton = () => {
+    const renderMoreButton = (position: 'bottom' | 'bottom-right' = 'bottom') => {
+        const lastName = provider.last_name || provider.first_name?.split(' ').pop() || ''
+        const buttonText = lastName ? `About Dr. ${lastName}` : 'More'
+        
+        if (position === 'bottom-right') {
+            return (
+                <button
+                    onClick={handleMoreClick}
+                    className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 text-[#BF9C73] hover:text-[#A8865F] text-xs font-['Newsreader'] px-2 py-1 rounded transition-colors bg-white/80 hover:bg-white shadow-sm whitespace-nowrap"
+                >
+                    {buttonText}
+                </button>
+            )
+        }
+        
         return (
             <button
                 onClick={handleMoreClick}
                 className="w-full mt-2 text-[#BF9C73] hover:text-[#A8865F] text-sm font-['Newsreader'] py-2 transition-colors text-left"
             >
-                More
+                {buttonText}
             </button>
         )
     }
     // Compact variant (for confirmation pages, inline displays)
     if (variant === 'compact') {
         return (
-            <div className={`${currentConfig.containerClass} ${className}`} onClick={handleClick}>
+            <div className={`${currentConfig.containerClass} relative ${className} flex-wrap sm:flex-nowrap`} onClick={handleClick}>
                 {renderImage()}
                 <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-[#091747] font-['Newsreader']">
+                    <h4 className="text-xs sm:text-sm font-medium text-[#091747] font-['Newsreader'] leading-tight">
                         {displayName}
                     </h4>
                     {provider.title && (
@@ -369,6 +391,12 @@ export default function ProviderCard({
                     )}
                 </div>
                 {customAction}
+                <button
+                    onClick={handleMoreClick}
+                    className="ml-1 sm:ml-2 text-[#BF9C73] hover:text-[#A8865F] text-xs font-['Newsreader'] px-1 sm:px-2 py-1 transition-colors whitespace-nowrap"
+                >
+                    {provider.last_name ? `About Dr. ${provider.last_name}` : 'More'}
+                </button>
             </div>
         )
     }
@@ -377,7 +405,7 @@ export default function ProviderCard({
     if (variant === 'directory') {
         return (
             <div
-                className={`p-4 rounded-xl text-left transition-all duration-200 border-2 cursor-pointer ${
+                className={`relative p-4 rounded-xl text-left transition-all duration-200 border-2 cursor-pointer ${
                     selected 
                         ? 'border-[#BF9C73] bg-[#FEF8F1] shadow-md'
                         : 'border-stone-200 hover:border-[#BF9C73]/50 hover:bg-stone-50'
@@ -385,22 +413,22 @@ export default function ProviderCard({
                 onClick={handleClick}
             >
                 <div className="flex items-center gap-3 mb-3">
-                    <div className="w-12 h-12 bg-[#BF9C73] rounded-full flex items-center justify-center text-white font-bold font-['Newsreader']">
-                        {provider.first_name?.charAt(0) || ''}{provider.last_name?.charAt(0) || ''}
+                    <div className="flex-shrink-0">
+                        {renderImage()}
                     </div>
-                    <div>
-                        <h4 className="font-bold text-[#091747] font-['Newsreader']">
-                            {provider.first_name} {provider.last_name}
+                    <div className="flex-1"> {/* No right padding needed since no button overlap */}
+                        <h4 className="font-bold text-[#091747] font-['Newsreader'] text-sm sm:text-base leading-tight">
+                            Dr. {provider.first_name} {provider.last_name}
                         </h4>
-                        <p className="text-sm text-[#BF9C73] font-['Newsreader']">
+                        <p className="text-xs sm:text-sm text-[#BF9C73] font-['Newsreader']">
                             {provider.title || provider.role || 'MD'}
                         </p>
                     </div>
                 </div>
-                <p className="text-sm text-[#091747]/70 mb-2 font-['Newsreader']">
+                <p className="text-xs sm:text-sm text-[#091747]/70 mb-2 font-['Newsreader'] leading-relaxed">
                     {provider.specialty}
                 </p>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-1 sm:gap-2"> {/* Clean layout without button padding */}
                     {/* Only show availability status if provider is bookable */}
                     {provider.is_bookable !== false && (
                         <span className={`px-2 py-1 text-xs rounded-full font-['Newsreader'] ${
@@ -419,34 +447,34 @@ export default function ProviderCard({
                         {provider.provider_type || provider.role || 'provider'}
                     </span>
                 </div>
-                {renderMoreButton()}
+                {/* Directory variant doesn't need About button since clicking card opens modal */}
             </div>
         )
     }
 
     // Other variants (selection, calendar, summary)
     return (
-        <div className={`${currentConfig.containerClass} ${className}`} onClick={handleClick}>
+        <div className={`${currentConfig.containerClass} relative ${className}`} onClick={handleClick}>
             {/* Header with image and basic info */}
-            <div className={`flex items-center ${variant === 'summary' ? 'space-x-4' : 'gap-3 mb-3'}`}>
+            <div className={`flex items-center ${variant === 'summary' ? 'space-x-3 sm:space-x-4' : 'gap-2 sm:gap-3 mb-3'}`}>
                 <div className="flex-shrink-0">
                     {renderImage()}
                 </div>
-                <div className="flex-1 min-w-0">
-                    <h4 className={`font-bold text-[#2C5F6F] font-['Newsreader'] ${
-                        variant === 'calendar' ? 'text-sm' : 'text-lg'
+                <div className="flex-1 min-w-0 pr-12 sm:pr-16"> {/* Add padding to avoid button overlap */}
+                    <h4 className={`font-bold text-[#2C5F6F] font-['Newsreader'] leading-tight ${
+                        variant === 'calendar' ? 'text-xs sm:text-sm' : 'text-sm sm:text-base md:text-lg'
                     }`}>
                         {displayName}
                     </h4>
                     {provider.title && (
                         <p className={`text-[#8B7355] font-['Newsreader'] ${
-                            variant === 'calendar' ? 'text-xs' : 'text-sm'
+                            variant === 'calendar' ? 'text-xs' : 'text-xs sm:text-sm'
                         }`}>
                             {provider.title}
                         </p>
                     )}
                     {variant === 'summary' && (
-                        <p className="text-sm text-[#8B7355] font-['Newsreader']">
+                        <p className="text-xs sm:text-sm text-[#8B7355] font-['Newsreader']">
                             Telehealth Appointment
                         </p>
                     )}
@@ -467,23 +495,26 @@ export default function ProviderCard({
 
             {/* Calendar variant shows minimal info */}
             {variant === 'calendar' && (
-                <div>
+                <div className="pr-12 sm:pr-16"> {/* Add padding to avoid button overlap */}
                     {provider.specialty && (
-                        <p className="text-sm text-[#8B7355] mb-2 font-['Newsreader']">
+                        <p className="text-xs sm:text-sm text-[#8B7355] mb-2 font-['Newsreader'] leading-relaxed">
                             {provider.specialty}
                         </p>
                     )}
-                    <div className="flex gap-2">
-                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg font-['Newsreader']">
+                    <div className="flex flex-wrap gap-1 sm:gap-2">
+                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg font-['Newsreader'] whitespace-nowrap">
                             {provider.new_patient_status || 'Accepting New Patients'}
                         </span>
-                        <span className="px-2 py-1 bg-[#FEF8F1] text-[#BF9C73] border border-[#BF9C73]/30 text-xs rounded-lg font-['Newsreader']">
+                        <span className="px-2 py-1 bg-[#FEF8F1] text-[#BF9C73] border border-[#BF9C73]/30 text-xs rounded-lg font-['Newsreader'] whitespace-nowrap">
                             {provider.languages_spoken?.[0] || 'English'}
                         </span>
                     </div>
                     {customAction}
                 </div>
             )}
+            
+            {/* About Dr. X button positioned in bottom right */}
+            {renderMoreButton('bottom-right')}
         </div>
     )
 }

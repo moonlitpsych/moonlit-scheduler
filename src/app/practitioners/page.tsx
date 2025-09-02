@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import ProviderCard from '@/components/shared/ProviderCard'
 import { Provider } from '@/types/provider'
+import { generateProviderSlug } from '@/lib/utils/providerSlug'
 
 export default function PractitionersPage() {
   const [providers, setProviders] = useState<Provider[]>([])
@@ -157,7 +158,8 @@ export default function PractitionersPage() {
                 actionButton={{
                   text: `Book ${provider.first_name ? `Dr. ${provider.last_name}` : 'Appointment'}`,
                   onClick: () => {
-                    window.location.href = `/book/provider/${provider.id}?intent=book`
+                    const slug = generateProviderSlug(provider)
+                    window.location.href = `/book/provider/${slug}?intent=book`
                   },
                   variant: 'primary'
                 }}

@@ -3,12 +3,14 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Provider } from '@/components/shared/ProviderCard'
+import { generateProviderSlug } from '@/lib/utils/providerSlug'
 
 interface ProviderModalContextType {
     isOpen: boolean
     provider: Provider | null
-    openModal: (provider: Provider) => void
+    openModal: (provider: Provider, context?: 'directory' | 'booking' | 'summary' | 'other') => void
     closeModal: () => void
+    showBookButton: boolean
 }
 
 const ProviderModalContext = createContext<ProviderModalContextType | undefined>(undefined)
@@ -28,6 +30,7 @@ interface ProviderModalProviderProps {
 export function ProviderModalProvider({ children }: ProviderModalProviderProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [provider, setProvider] = useState<Provider | null>(null)
+    const [showBookButton, setShowBookButton] = useState(true)
     const [mounted, setMounted] = useState(false)
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -37,10 +40,9 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
         setMounted(true)
     }, [])
 
-    // Generate URL slug from provider name
+    // Generate URL slug from provider name using shared utility
     const generateSlug = (provider: Provider) => {
-        const name = `${provider.first_name}-${provider.last_name}`.toLowerCase()
-        return name.replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-')
+        return generateProviderSlug(provider)
     }
 
     // Parse provider slug from URL
@@ -51,9 +53,13 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
     }
 
     // Open modal with URL update
-    const openModal = (provider: Provider) => {
+    const openModal = (provider: Provider, context: 'directory' | 'booking' | 'summary' | 'other' = 'other') => {
         setProvider(provider)
         setIsOpen(true)
+        
+        // Only show book button for directory context (practitioners page)
+        // Hide it for booking flows, summary pages, etc. to avoid interrupting user journey
+        setShowBookButton(context === 'directory')
         
         // Update URL with provider slug
         const slug = generateSlug(provider)
@@ -147,7 +153,8 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
         isOpen,
         provider,
         openModal,
-        closeModal
+        closeModal,
+        showBookButton
     }
 
     return (
