@@ -43,6 +43,9 @@ export interface BookingState {
     roiContacts: ROIContact[]
     appointmentId?: string
     intent: BookingIntent // NEW: user's intent (book vs explore)
+    // NEW: Third-party booking detection
+    bookingForSomeoneElse?: boolean // Checkbox state on patient info page
+    thirdPartyType?: 'case-manager' | 'referral' // Only appears when checkbox is checked
 }
 
 interface BookingFlowProps {
@@ -61,10 +64,12 @@ export default function BookingFlow({
     preselectedScenario
 }: BookingFlowProps) {
     const [state, setState] = useState<BookingState>({
-        step: preselectedScenario ? 'payer-search' : (intent === 'explore' ? 'payer-search' : 'welcome'),
-        bookingScenario: preselectedScenario || 'self',
+        step: 'payer-search', // NEW: Always start with insurance selection
+        bookingScenario: preselectedScenario || 'self', // Default to 'self' but will be determined later
         roiContacts: [],
-        intent: intent
+        intent: intent,
+        bookingForSomeoneElse: false, // Default to booking for self
+        thirdPartyType: preselectedScenario === 'case-manager' ? 'case-manager' : undefined
     })
 
     const updateState = (updates: Partial<BookingState>) => {
@@ -138,8 +143,20 @@ export default function BookingFlow({
         goToStep('insurance-info')
     }
 
-    const handleInsuranceInfoSubmitted = (insuranceInfo: InsuranceInfo) => {
-        updateState({ insuranceInfo })
+    const handleInsuranceInfoSubmitted = (insuranceInfo: InsuranceInfo, bookingForSomeoneElse?: boolean, thirdPartyType?: 'case-manager' | 'referral') => {
+        // Update booking scenario based on third-party checkbox selection
+        let newScenario: BookingScenario = 'self'
+        if (bookingForSomeoneElse) {
+            newScenario = thirdPartyType === 'case-manager' ? 'case-manager' : 'third-party'
+        }
+
+        updateState({ 
+            insuranceInfo,
+            bookingForSomeoneElse,
+            thirdPartyType,
+            bookingScenario: newScenario
+        })
+        
         goToStep('roi')
     }
 
@@ -288,7 +305,7 @@ export default function BookingFlow({
                         onPayerSelected={handlePayerSelected}
                         bookingScenario={state.bookingScenario}
                         intent={state.intent}
-                        onBack={handleBackToWelcome}
+                        onBack={undefined} // No back button since this is the first step
                     />
                 )
 

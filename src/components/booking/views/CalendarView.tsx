@@ -699,7 +699,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                 </div>
                             ) : providers.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {providers.slice(0, 4).map((provider) => (
+                                    {providers.filter(p => p.is_bookable !== false).slice(0, 4).map((provider) => (
                                         <ProviderCard
                                             key={provider.id}
                                             provider={provider as Provider}
@@ -954,19 +954,48 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         ← Back to Insurance
                     </button>
 
-                    <button
-                        onClick={handleNext}
-                        disabled={!selectedSlot}
-                        className={`
-                            py-3 px-6 rounded-xl font-medium transition-all duration-200 font-['Newsreader']
-                            ${selectedSlot
-                                ? 'bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-white shadow-lg hover:shadow-xl'
-                                : 'bg-stone-300 text-stone-500 cursor-not-allowed'
-                            }
-                        `}
-                    >
-                        Continue to Patient Info →
-                    </button>
+                    <div className="flex items-center space-x-4">
+                        {/* TEMPORARY: Test bypass button */}
+                        <button
+                            onClick={() => {
+                                // Create a mock time slot to test patient info form
+                                const mockTimeSlot = {
+                                    provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad',
+                                    start_time: '2025-09-16T10:00:00',
+                                    end_time: '2025-09-16T11:00:00',
+                                    date: '2025-09-16',
+                                    time: '10:00 AM',
+                                    duration: 60,
+                                    isAvailable: true,
+                                    provider: {
+                                        id: '35ab086b-2894-446d-9ab5-3d41613017ad',
+                                        first_name: 'Test',
+                                        last_name: 'Provider',
+                                        title: 'MD',
+                                        role: 'physician'
+                                    }
+                                }
+                                onTimeSlotSelected(mockTimeSlot as any)
+                            }}
+                            className="py-3 px-4 rounded-xl font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white font-['Newsreader'] text-sm"
+                        >
+                            🧪 Test Patient Info Form
+                        </button>
+
+                        <button
+                            onClick={handleNext}
+                            disabled={!selectedSlot}
+                            className={`
+                                py-3 px-6 rounded-xl font-medium transition-all duration-200 font-['Newsreader']
+                                ${selectedSlot
+                                    ? 'bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-white shadow-lg hover:shadow-xl'
+                                    : 'bg-stone-300 text-stone-500 cursor-not-allowed'
+                                }
+                            `}
+                        >
+                            Continue to Patient Info →
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

@@ -10,7 +10,7 @@ interface InsuranceInfoViewProps {
     selectedPayer: Payer
     selectedTimeSlot: TimeSlot
     bookingScenario: BookingScenario
-    onSubmit: (patientInfo: PatientInfo) => void
+    onSubmit: (patientInfo: PatientInfo, bookingForSomeoneElse?: boolean, thirdPartyType?: 'case-manager' | 'referral') => void
     onBack: () => void
 }
 
@@ -33,6 +33,10 @@ export default function InsuranceInfoView({
 
     const [errors, setErrors] = useState<Record<string, string>>({})
     const [isSubmitting, setIsSubmitting] = useState(false)
+    
+    // NEW: Third-party booking state
+    const [bookingForSomeoneElse, setBookingForSomeoneElse] = useState(false)
+    const [thirdPartyType, setThirdPartyType] = useState<'case-manager' | 'referral'>('referral')
 
     // FIXED: Safe time formatting function
     const formatDateTime = (timeSlot: TimeSlot): { date: string, time: string } => {
@@ -126,7 +130,7 @@ export default function InsuranceInfoView({
         try {
             // Add a small delay for better UX
             await new Promise(resolve => setTimeout(resolve, 500))
-            onSubmit(patientInfo)
+            onSubmit(patientInfo, bookingForSomeoneElse, thirdPartyType)
         } catch (error) {
             console.error('Error submitting patient info:', error)
         } finally {
@@ -144,25 +148,28 @@ export default function InsuranceInfoView({
     }
 
     const getScenarioTitle = (): string => {
-        switch (bookingScenario) {
-            case 'case-manager':
-                return 'Patient Information for Case Manager Booking'
-            case 'third-party-referral':
-                return 'Patient Information for Referral'
-            default:
-                return 'Your Information'
+        if (bookingForSomeoneElse) {
+            return thirdPartyType === 'case-manager' 
+                ? 'Patient Information for Case Manager Booking'
+                : 'Patient Information for Referral'
         }
+        return 'Your Information'
     }
 
     const getScenarioDescription = (): string => {
-        switch (bookingScenario) {
-            case 'case-manager':
-                return 'Please provide the patient\'s information below. As the case manager, you will receive all appointment communications.'
-            case 'third-party-referral':
-                return 'Please provide the patient\'s information for this referral.'
-            default:
-                return 'Please provide your information below to complete the booking.'
+        if (bookingForSomeoneElse) {
+            return thirdPartyType === 'case-manager'
+                ? 'Please provide the patient\'s information below. As the case manager, you will receive all appointment communications.'
+                : 'Please provide the patient\'s information for this referral.'
         }
+        return 'Please provide your information below to complete the booking.'
+    }
+
+    const getFieldLabel = (baseLabel: string): string => {
+        if (bookingForSomeoneElse) {
+            return baseLabel.replace('Your ', 'Patient\'s ').replace('Enter ', 'Enter patient\'s ')
+        }
+        return baseLabel
     }
 
     return (
@@ -212,12 +219,66 @@ export default function InsuranceInfoView({
                 </div>
             </div>
 
+            {/* Third-Party Booking Detection */}
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-6 mb-8">
+                <div className="flex items-center space-x-3 mb-4">
+                    <input
+                        type="checkbox"
+                        id="bookingForSomeoneElse"
+                        checked={bookingForSomeoneElse}
+                        onChange={(e) => setBookingForSomeoneElse(e.target.checked)}
+                        className="w-5 h-5 text-[#BF9C73] border-gray-300 rounded focus:ring-[#BF9C73]"
+                    />
+                    <label htmlFor="bookingForSomeoneElse" className="font-medium text-slate-800 font-['Newsreader']">
+                        I'm booking this appointment for someone else
+                    </label>
+                </div>
+
+                {bookingForSomeoneElse && (
+                    <div className="ml-8 space-y-3">
+                        <p className="text-sm text-slate-600 font-['Newsreader'] mb-3">
+                            Please select your role in this appointment:
+                        </p>
+                        <div className="space-y-2">
+                            <div className="flex items-center space-x-3">
+                                <input
+                                    type="radio"
+                                    id="referral"
+                                    name="thirdPartyType"
+                                    value="referral"
+                                    checked={thirdPartyType === 'referral'}
+                                    onChange={() => setThirdPartyType('referral')}
+                                    className="w-4 h-4 text-[#BF9C73] border-gray-300 focus:ring-[#BF9C73]"
+                                />
+                                <label htmlFor="referral" className="text-slate-700 font-['Newsreader']">
+                                    <span className="font-medium">Referring partner</span> - I'm helping them book but won't be involved in ongoing care
+                                </label>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                                <input
+                                    type="radio"
+                                    id="case-manager"
+                                    name="thirdPartyType"
+                                    value="case-manager"
+                                    checked={thirdPartyType === 'case-manager'}
+                                    onChange={() => setThirdPartyType('case-manager')}
+                                    className="w-4 h-4 text-[#BF9C73] border-gray-300 focus:ring-[#BF9C73]"
+                                />
+                                <label htmlFor="case-manager" className="text-slate-700 font-['Newsreader']">
+                                    <span className="font-medium">Case manager</span> - I coordinate their ongoing care and need to receive communications
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
             {/* Patient Information Form */}
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid md:grid-cols-2 gap-6">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
-                            First Name *
+                            {bookingForSomeoneElse ? 'Patient\'s First Name *' : 'First Name *'}
                         </label>
                         <input
                             type="text"
@@ -226,7 +287,7 @@ export default function InsuranceInfoView({
                             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
                                 errors.firstName ? 'border-red-300' : 'border-gray-300'
                             }`}
-                            placeholder="Enter first name"
+                            placeholder={bookingForSomeoneElse ? "Enter patient's first name" : "Enter first name"}
                         />
                         {errors.firstName && (
                             <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.firstName}</p>
@@ -235,7 +296,7 @@ export default function InsuranceInfoView({
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
-                            Last Name *
+                            {bookingForSomeoneElse ? 'Patient\'s Last Name *' : 'Last Name *'}
                         </label>
                         <input
                             type="text"
@@ -244,7 +305,7 @@ export default function InsuranceInfoView({
                             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
                                 errors.lastName ? 'border-red-300' : 'border-gray-300'
                             }`}
-                            placeholder="Enter last name"
+                            placeholder={bookingForSomeoneElse ? "Enter patient's last name" : "Enter last name"}
                         />
                         {errors.lastName && (
                             <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.lastName}</p>
@@ -272,7 +333,7 @@ export default function InsuranceInfoView({
                 <div className="grid md:grid-cols-2 gap-6">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
-                            Email Address *
+                            {bookingForSomeoneElse ? 'Patient\'s Email Address *' : 'Email Address *'}
                         </label>
                         <input
                             type="email"
@@ -281,7 +342,7 @@ export default function InsuranceInfoView({
                             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
                                 errors.email ? 'border-red-300' : 'border-gray-300'
                             }`}
-                            placeholder="Enter email address"
+                            placeholder={bookingForSomeoneElse ? "Enter patient's email address" : "Enter email address"}
                         />
                         {errors.email && (
                             <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.email}</p>
@@ -290,7 +351,7 @@ export default function InsuranceInfoView({
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
-                            Phone Number *
+                            {bookingForSomeoneElse ? 'Patient\'s Phone Number *' : 'Phone Number *'}
                         </label>
                         <input
                             type="tel"
@@ -299,7 +360,7 @@ export default function InsuranceInfoView({
                             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
                                 errors.phone ? 'border-red-300' : 'border-gray-300'
                             }`}
-                            placeholder="Enter phone number"
+                            placeholder={bookingForSomeoneElse ? "Enter patient's phone number" : "Enter phone number"}
                         />
                         {errors.phone && (
                             <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.phone}</p>
@@ -309,7 +370,7 @@ export default function InsuranceInfoView({
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
-                        Insurance ID *
+                        {bookingForSomeoneElse ? 'Patient\'s Insurance ID *' : 'Insurance ID *'}
                     </label>
                     <input
                         type="text"
@@ -318,7 +379,7 @@ export default function InsuranceInfoView({
                         className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
                             errors.insuranceId ? 'border-red-300' : 'border-gray-300'
                         }`}
-                        placeholder="Enter insurance ID/member number"
+                        placeholder={bookingForSomeoneElse ? "Enter patient's insurance ID/member number" : "Enter insurance ID/member number"}
                     />
                     {errors.insuranceId && (
                         <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.insuranceId}</p>

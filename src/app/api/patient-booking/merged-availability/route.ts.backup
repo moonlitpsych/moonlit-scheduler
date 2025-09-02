@@ -1,4 +1,4 @@
-// IMPROVED VERSION: Fixed availability logic with proper filtering and exception handling
+// src/app/api/patient-booking/merged-availability/route.ts
 import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { intakeQService } from '@/lib/services/intakeQService'
 import { NextRequest, NextResponse } from 'next/server'
@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     try {
         const { payer_id, date, startDate, endDate, appointmentDuration = 60, provider_id } = await request.json()
 
+        // Support both single date and date range requests
         const requestDate = date || startDate
         const requestEndDate = endDate || date
 
@@ -35,8 +36,8 @@ export async function POST(request: NextRequest) {
 
         console.log(`🔍 Getting ${provider_id ? 'provider-specific' : 'merged'} availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
 
-        // Step 1: Get BOOKABLE providers who accept this payer
-        let query = supabaseAdmin
+        // Step 1: Get providers who accept this payer using CORRECT table name
+        let query = supabase
             .from('provider_payer_networks')
             .select(`
                 provider_id,
@@ -49,7 +50,6 @@ export async function POST(request: NextRequest) {
                     title,
                     role,
                     is_active,
-                    is_bookable,
                     accepts_new_patients,
                     telehealth_enabled
                 )
@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
             .eq('payer_id', payer_id)
             .eq('status', 'in_network')
             .eq('providers.is_active', true)
-            .neq('providers.is_bookable', false) // CRITICAL: Only include bookable providers
 
+        // If provider_id is specified, filter for that specific provider
         if (provider_id) {
             query = query.eq('provider_id', provider_id)
         }
@@ -76,8 +76,8 @@ export async function POST(request: NextRequest) {
         const providers = networks?.map(n => n.providers) || []
         const providerIds = providers.map(p => p.id)
         
-        console.log(`👥 Found ${providers.length} BOOKABLE providers accepting this payer:`, 
-            providers.map(p => `${p.first_name} ${p.last_name} (bookable: ${p.is_bookable !== false})`))
+        console.log(`👥 Found ${providers.length} providers accepting this payer:`, 
+            providers.map(p => `${p.first_name} ${p.last_name}`))
 
         if (providers.length === 0) {
             return NextResponse.json({
@@ -86,20 +86,21 @@ export async function POST(request: NextRequest) {
                     totalSlots: 0,
                     availableSlots: [],
                     dateRange: { startDate: requestDate, endDate: requestEndDate },
-                    message: 'No bookable providers currently accept this insurance'
+                    message: 'No providers currently accept this insurance'
                 }
             })
         }
 
+        // Step 2: Convert date to day of week (0 = Sunday, 1 = Monday, etc.)
         const targetDate = new Date(requestDate)
         const dayOfWeek = targetDate.getDay()
         console.log(`📅 Target date ${requestDate} is day of week ${dayOfWeek} (0=Sun, 1=Mon, etc.)`)
 
-        // Step 2: Get base availability for ONLY these bookable providers
+        // Step 3: Get availability for these providers on this day of week (using admin client for RLS access)
         const { data: availability, error: availabilityError } = await supabaseAdmin
             .from('provider_availability')
             .select('*')
-            .in('provider_id', providerIds) // Only query providers in payer network
+            .in('provider_id', providerIds)
             .eq('day_of_week', dayOfWeek)
             .eq('is_recurring', true)
 
@@ -111,51 +112,18 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        console.log(`📊 Found ${availability?.length || 0} base availability records for bookable providers`)
+        console.log(`📊 Found ${availability?.length || 0} availability records`)
+        console.log(`🔍 DEBUG: Querying availability for provider IDs:`, providerIds)
+        console.log(`🔍 DEBUG: Looking for day_of_week = ${dayOfWeek}, is_recurring = true`)
         
-        // Step 3: Get exceptions for this specific date
-        const { data: exceptions, error: exceptionsError } = await supabaseAdmin
-            .from('provider_availability_exceptions')
-            .select('*')
-            .in('provider_id', providerIds)
-            .eq('exception_date', requestDate)
-
-        if (exceptionsError) {
-            console.log(`⚠️ Error fetching exceptions (non-critical):`, exceptionsError)
+        if (availability && availability.length > 0) {
+            console.log(`📋 DEBUG: Sample availability record:`, availability[0])
         }
 
-        console.log(`🚫 Found ${exceptions?.length || 0} exceptions for ${requestDate}`)
-
-        // Step 4: Apply exceptions to filter out unavailable slots
-        const filteredAvailability = availability?.filter(avail => {
-            // Check if this availability is cancelled by an exception
-            const hasException = exceptions?.some(exception => 
-                exception.provider_id === avail.provider_id &&
-                exception.exception_type === 'unavailable' &&
-                (
-                    // Full day exception
-                    (!exception.start_time && !exception.end_time) ||
-                    // Time range exception that overlaps with availability
-                    (exception.start_time && exception.end_time && 
-                     exception.start_time <= avail.end_time && 
-                     exception.end_time >= avail.start_time)
-                )
-            )
-            
-            if (hasException) {
-                const provider = providers.find(p => p.id === avail.provider_id)
-                console.log(`🚫 Filtered out availability for ${provider?.first_name} ${provider?.last_name} due to exception`)
-            }
-            
-            return !hasException
-        }) || []
-
-        console.log(`📊 After applying exceptions: ${filteredAvailability.length} availability records`)
-
-        // Step 5: Generate time slots from filtered availability
+        // Step 4: Generate time slots from availability
         const allSlots: AvailableSlot[] = []
         
-        filteredAvailability?.forEach(avail => {
+        availability?.forEach(avail => {
             const provider = providers.find(p => p.id === avail.provider_id)
             if (!provider) return
 
@@ -165,15 +133,18 @@ export async function POST(request: NextRequest) {
             allSlots.push(...slots)
         })
 
+        // Sort by time
         allSlots.sort((a, b) => a.time.localeCompare(b.time))
-        console.log(`✅ Generated ${allSlots.length} total time slots from bookable providers`)
 
-        // Step 6: Filter out IntakeQ conflicts
-        const finalSlots = await filterConflictingAppointments(allSlots, requestDate)
+        console.log(`✅ Generated ${allSlots.length} total time slots`)
+
+        // Step 5: Filter out slots that conflict with existing IntakeQ appointments
+        const filteredSlots = await filterConflictingAppointments(allSlots, requestDate)
         
-        console.log(`🔍 Final result: ${finalSlots.length} available slots (removed ${allSlots.length - finalSlots.length} conflicts)`)
+        console.log(`🔍 After filtering conflicts: ${filteredSlots.length} available slots (removed ${allSlots.length - filteredSlots.length} conflicts)`)
 
-        const slotsByDate = finalSlots.reduce((acc, slot) => {
+        // Group filtered slots by date for easier frontend consumption
+        const slotsByDate = filteredSlots.reduce((acc, slot) => {
             if (!acc[slot.date]) {
                 acc[slot.date] = []
             }
@@ -184,29 +155,25 @@ export async function POST(request: NextRequest) {
         const response = {
             success: true,
             data: {
-                totalSlots: finalSlots.length,
+                totalSlots: filteredSlots.length,
                 dateRange: { startDate: requestDate, endDate: requestEndDate },
                 slotsByDate,
-                availableSlots: finalSlots.slice(0, 50),
+                availableSlots: filteredSlots.slice(0, 50), // Limit for performance
                 providers: providers.map(p => ({
                     id: p.id,
                     name: `${p.first_name} ${p.last_name}`,
                     title: p.title,
-                    role: p.role,
-                    is_bookable: p.is_bookable
+                    role: p.role
                 })),
                 debug: {
                     payer_id,
                     date: requestDate,
                     dayOfWeek,
-                    bookable_providers_found: providers.length,
-                    base_availability_records: availability?.length || 0,
-                    exceptions_found: exceptions?.length || 0,
-                    filtered_availability_records: filteredAvailability.length,
-                    slots_generated: allSlots.length,
-                    final_slots: finalSlots.length
+                    providers_found: providers.length,
+                    availability_records: availability?.length || 0,
+                    slots_generated: allSlots.length
                 },
-                message: `Found ${finalSlots.length} available appointment slots from ${providers.length} bookable providers`
+                message: `Found ${allSlots.length} available appointment slots from ${providers.length} providers`
             }
         }
 
@@ -225,7 +192,6 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// Utility functions (same as original)
 function generateTimeSlotsFromAvailability(
     availability: any, 
     date: string, 
@@ -235,12 +201,14 @@ function generateTimeSlotsFromAvailability(
     const slots: AvailableSlot[] = []
     
     try {
-        const startTime = availability.start_time
-        const endTime = availability.end_time
+        const startTime = availability.start_time // e.g., "09:00:00"
+        const endTime = availability.end_time     // e.g., "17:00:00"
         
+        // Parse start and end times
         const [startHour, startMin] = startTime.split(':').map(Number)
         const [endHour, endMin] = endTime.split(':').map(Number)
         
+        // Create date objects for this specific date
         const baseDate = new Date(date)
         let currentTime = new Date(baseDate)
         currentTime.setHours(startHour, startMin, 0, 0)
@@ -248,9 +216,11 @@ function generateTimeSlotsFromAvailability(
         const endDateTime = new Date(baseDate)
         endDateTime.setHours(endHour, endMin, 0, 0)
         
+        // Generate slots based on appointment duration
         while (currentTime < endDateTime) {
             const slotEndTime = new Date(currentTime.getTime() + appointmentDuration * 60 * 1000)
             
+            // Don't create slots that extend past the end time
             if (slotEndTime <= endDateTime) {
                 slots.push({
                     date: date,
@@ -269,8 +239,11 @@ function generateTimeSlotsFromAvailability(
                 })
             }
             
+            // Move to next slot (based on appointment duration)
             currentTime = new Date(currentTime.getTime() + appointmentDuration * 60 * 1000)
         }
+        
+        console.log(`✅ Generated ${slots.length} slots for ${provider.first_name}`)
         
     } catch (error) {
         console.error('❌ Error generating time slots:', error)
@@ -280,12 +253,13 @@ function generateTimeSlotsFromAvailability(
 }
 
 function formatTime(date: Date): string {
-    return date.toTimeString().slice(0, 5)
+    return date.toTimeString().slice(0, 5) // Returns "HH:MM"
 }
 
 async function filterConflictingAppointments(slots: AvailableSlot[], date: string): Promise<AvailableSlot[]> {
     console.log(`🔍 Checking for appointment conflicts on ${date}...`)
     
+    // Group slots by provider to minimize API calls
     const slotsByProvider = slots.reduce((acc, slot) => {
         const providerId = slot.providerId
         if (!acc[providerId]) {
@@ -299,6 +273,8 @@ async function filterConflictingAppointments(slots: AvailableSlot[], date: strin
     
     for (const [providerId, providerSlots] of Object.entries(slotsByProvider)) {
         try {
+            // Get provider's IntakeQ practitioner ID from the first slot
+            // We'll need to look this up from the database
             const { data: provider, error } = await supabaseAdmin
                 .from('providers')
                 .select('intakeq_practitioner_id')
@@ -307,10 +283,12 @@ async function filterConflictingAppointments(slots: AvailableSlot[], date: strin
 
             if (error || !provider?.intakeq_practitioner_id) {
                 console.log(`⚠️ No IntakeQ practitioner ID for provider ${providerId}, skipping conflict check`)
+                // Add all slots for this provider if no IntakeQ mapping
                 filteredSlots.push(...providerSlots)
                 continue
             }
 
+            // Get existing appointments for this practitioner on this date
             const existingAppointments = await intakeQService.getAppointmentsForDate(
                 provider.intakeq_practitioner_id, 
                 date
@@ -318,16 +296,19 @@ async function filterConflictingAppointments(slots: AvailableSlot[], date: strin
 
             console.log(`📅 Provider ${providerId} has ${existingAppointments.length} existing appointments`)
 
+            // Filter out slots that conflict with existing appointments
             const availableSlots = providerSlots.filter(slot => {
                 const slotStartTime = new Date(`${slot.date}T${slot.time}:00`).getTime()
                 
+                // Check if this slot conflicts with any existing appointment
                 const hasConflict = existingAppointments.some(appointment => {
                     const appointmentStart = new Date(appointment.StartDate)
-                    const appointmentEnd = new Date(appointment.EndDate || (appointment.StartDate + 60 * 60 * 1000))
+                    const appointmentEnd = new Date(appointment.EndDate || (appointment.StartDate + 60 * 60 * 1000)) // Use EndDate or assume 60min
                     
                     const slotStart = new Date(slotStartTime)
-                    const slotEnd = new Date(slotStartTime + 60 * 60 * 1000)
+                    const slotEnd = new Date(slotStartTime + 60 * 60 * 1000) // Assume 60min slots
                     
+                    // Check for overlap
                     return (slotStart < appointmentEnd && slotEnd > appointmentStart)
                 })
                 
@@ -343,6 +324,7 @@ async function filterConflictingAppointments(slots: AvailableSlot[], date: strin
 
         } catch (error: any) {
             console.error(`❌ Error checking conflicts for provider ${providerId}:`, error.message)
+            // Add all slots if conflict check fails
             filteredSlots.push(...providerSlots)
         }
     }
