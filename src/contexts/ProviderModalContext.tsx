@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react'
+import React, { createContext, useContext, useState, ReactNode, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Provider } from '@/components/shared/ProviderCard'
 import { generateProviderSlug } from '@/lib/utils/providerSlug'
@@ -27,7 +27,7 @@ interface ProviderModalProviderProps {
     children: ReactNode
 }
 
-export function ProviderModalProvider({ children }: ProviderModalProviderProps) {
+function ProviderModalProviderInner({ children }: ProviderModalProviderProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [provider, setProvider] = useState<Provider | null>(null)
     const [showBookButton, setShowBookButton] = useState(true)
@@ -161,5 +161,15 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
         <ProviderModalContext.Provider value={value}>
             {children}
         </ProviderModalContext.Provider>
+    )
+}
+
+export function ProviderModalProvider({ children }: ProviderModalProviderProps) {
+    return (
+        <Suspense fallback={<div />}>
+            <ProviderModalProviderInner>
+                {children}
+            </ProviderModalProviderInner>
+        </Suspense>
     )
 }
