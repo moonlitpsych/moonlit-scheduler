@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Provider } from '@/components/shared/ProviderCard'
+import { generateProviderSlug } from '@/lib/utils/providerSlug'
 
 interface ProviderModalContextType {
     isOpen: boolean
@@ -39,10 +40,9 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
         setMounted(true)
     }, [])
 
-    // Generate URL slug from provider name
+    // Generate URL slug from provider name using shared utility
     const generateSlug = (provider: Provider) => {
-        const name = `${provider.first_name}-${provider.last_name}`.toLowerCase()
-        return name.replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-')
+        return generateProviderSlug(provider)
     }
 
     // Parse provider slug from URL
