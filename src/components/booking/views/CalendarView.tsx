@@ -46,6 +46,13 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const [providers, setProviders] = useState<any[]>([])
     const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
     const [loadingProviders, setLoadingProviders] = useState(false)
+    
+    // Language selection state
+    const [selectedLanguage, setSelectedLanguage] = useState<string>('English')
+    const [showLanguageOptions, setShowLanguageOptions] = useState(false)
+    const [availableLanguages, setAvailableLanguages] = useState<string[]>([])
+    const [customLanguage, setCustomLanguage] = useState<string>('')
+    const [loadingLanguages, setLoadingLanguages] = useState(false)
 
     // Generate calendar days
     const monthStart = startOfMonth(currentMonth)
@@ -66,6 +73,38 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             fetchAvailabilityForDate(selectedDate)
         }
     }, [selectedPayer?.id]) // Re-run when payer changes
+
+    // Load available languages when component mounts
+    useEffect(() => {
+        const loadLanguages = async () => {
+            setLoadingLanguages(true)
+            try {
+                const response = await fetch('/api/patient-booking/available-languages')
+                if (response.ok) {
+                    const data = await response.json()
+                    if (data.success && data.languages) {
+                        setAvailableLanguages(data.languages)
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading languages:', error)
+            } finally {
+                setLoadingLanguages(false)
+            }
+        }
+        loadLanguages()
+    }, [])
+
+    // Refetch providers and availability when language changes
+    useEffect(() => {
+        if (selectedPayer?.id && selectedDate && selectedLanguage !== 'English') {
+            console.log('🌍 Language changed to:', selectedLanguage, '- refetching availability and providers')
+            fetchAvailabilityForDate(selectedDate)
+            if (viewMode === 'by_provider') {
+                fetchProviders()
+            }
+        }
+    }, [selectedLanguage])
 
     // Fetch providers for "Book by Practitioner" mode
     const fetchProviders = async () => {
@@ -121,7 +160,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     body: JSON.stringify({
                         payer_id: selectedPayer?.id,
                         date: dateString,
-                        provider_id: providerId
+                        provider_id: providerId,
+                        language: selectedLanguage
                     })
                 })
                 
@@ -288,7 +328,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     body: JSON.stringify({
                         payer_id: payerId,
                         date: dateString,
-                        provider_id: bookingMode === 'by_provider' ? effectiveProviderId : undefined
+                        provider_id: bookingMode === 'by_provider' ? effectiveProviderId : undefined,
+                        language: selectedLanguage
                     })
                 })
                 
@@ -446,7 +487,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     }
 
     // FIXED: Handle slot click with proper time parsing
-    const handleSlotClick = (consolidatedSlot: ConsolidatedTimeSlot) => {
+    const handleSlotClick = async (consolidatedSlot: ConsolidatedTimeSlot) => {
         try {
             const firstSlot = consolidatedSlot.availableSlots[0]
             
@@ -495,6 +536,45 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     isSelected: slot.time === consolidatedSlot.time
                 }))
             )
+
+            // If user has entered a custom language, send email notification
+            if (selectedLanguage === 'Other' && customLanguage.trim()) {
+                try {
+                    console.log('📧 Sending custom language request for:', customLanguage)
+                    
+                    const response = await fetch('/api/patient-booking/request-custom-language', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            customLanguage: customLanguage.trim(),
+                            patientInfo: {
+                                firstName: 'Patient', // We don't have patient info yet at this stage
+                                lastName: '',
+                                email: '',
+                                phone: ''
+                            },
+                            selectedPayer: selectedPayer,
+                            appointmentDetails: {
+                                preferredDate: format(selectedDate || new Date(), 'yyyy-MM-dd'),
+                                preferredTime: consolidatedSlot.displayTime,
+                                notes: `Language request: ${customLanguage.trim()}`
+                            }
+                        })
+                    })
+
+                    if (response.ok) {
+                        const data = await response.json()
+                        console.log('✅ Custom language request sent successfully:', data.message)
+                    } else {
+                        console.error('⚠️ Failed to send custom language request')
+                    }
+                } catch (emailError) {
+                    console.error('❌ Error sending custom language request:', emailError)
+                }
+            }
+            
         } catch (error) {
             console.error('Error handling slot click:', error)
             setError('Error selecting time slot. Please try again.')
@@ -521,7 +601,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     },
                     body: JSON.stringify({
                         payer_id: selectedPayer.id,
-                        language: 'English'
+                        language: selectedLanguage
                     })
                 })
 
@@ -782,6 +862,87 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                             )}
                         </div>
                     </div>
+                </div>
+
+                {/* Language Selection */}
+                <div className="max-w-6xl mx-auto mb-6">
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={showLanguageOptions}
+                            onChange={(e) => setShowLanguageOptions(e.target.checked)}
+                            className="w-4 h-4 text-[#BF9C73] border-gray-300 rounded focus:ring-2 focus:ring-[#BF9C73]"
+                        />
+                        <span className="text-[#091747] text-sm font-['Newsreader']">
+                            My appointment should be held in a language other than English
+                        </span>
+                    </label>
+
+                    {/* Language Options Dropdown */}
+                    {showLanguageOptions && (
+                        <div className="mt-4 ml-7 space-y-3 max-w-md">
+                            <h4 className="font-medium text-[#091747] text-sm font-['Newsreader']">
+                                What language should this appointment be held in?
+                            </h4>
+                            
+                            {loadingLanguages ? (
+                                <div className="text-sm text-gray-500 font-['Newsreader']">Loading languages...</div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {/* Available Languages */}
+                                    <select
+                                        value={selectedLanguage === 'Other' ? 'Other' : selectedLanguage}
+                                        onChange={(e) => {
+                                            const value = e.target.value
+                                            if (value === 'Other') {
+                                                setSelectedLanguage('Other')
+                                            } else {
+                                                setSelectedLanguage(value)
+                                                setCustomLanguage('')
+                                            }
+                                        }}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] text-sm font-['Newsreader']"
+                                    >
+                                        {availableLanguages.map(language => (
+                                            <option key={language} value={language}>
+                                                {language}
+                                            </option>
+                                        ))}
+                                        <option value="Other">Other (not listed here)</option>
+                                    </select>
+
+                                    {/* Custom Language Input */}
+                                    {selectedLanguage === 'Other' && (
+                                        <div className="space-y-2">
+                                            <input
+                                                type="text"
+                                                value={customLanguage}
+                                                onChange={(e) => setCustomLanguage(e.target.value)}
+                                                placeholder="Please specify the language"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] text-sm font-['Newsreader']"
+                                            />
+                                            {customLanguage && (
+                                                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                                                    <div className="flex items-start space-x-2">
+                                                        <div className="w-4 h-4 bg-yellow-400 rounded-full mt-0.5 flex-shrink-0"></div>
+                                                        <div className="text-sm">
+                                                            <p className="font-medium text-yellow-800 mb-1 font-['Newsreader']">
+                                                                Pending Review
+                                                            </p>
+                                                            <p className="text-yellow-700 font-['Newsreader']">
+                                                                Your request for an appointment in <strong>{customLanguage}</strong> will be reviewed manually. 
+                                                                We'll contact you to arrange this appointment.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Bottom Actions */}
