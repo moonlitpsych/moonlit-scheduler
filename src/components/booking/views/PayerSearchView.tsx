@@ -377,7 +377,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                         Can't find your insurance? We're always adding new providers.
                     </p>
                     <p className="text-sm mt-1">
-                        Contact us at <span className="font-medium">hello@moonlit.com</span> for assistance.
+                        Contact us at <span className="font-medium">hello@trymoonlit.com</span> for assistance.
                     </p>
                 </div>
             </div>

@@ -325,7 +325,7 @@ export default function DashboardPage() {
                                 If you need assistance with your schedule or have questions about the system, feel free to reach out.
                             </p>
                             <a 
-                                href="mailto:admin@moonlitpsychiatry.com"
+                                href="mailto:hello@trymoonlit.com"
                                 className="text-[#BF9C73] hover:text-[#A8865F] text-sm font-medium transition-colors"
                             >
                                 Contact Support

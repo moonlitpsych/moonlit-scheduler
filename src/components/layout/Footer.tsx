@@ -32,16 +32,13 @@ export default function Footer() {
                         />
                         
                         <nav className="flex flex-col space-y-0">
-                            <Link href="/about" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
-                                about
-                            </Link>
-                            <Link href="/providers" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
+                            <Link href="/book" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
                                 see a psychiatrist
                             </Link>
-                            <Link href="/referrals" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
+                            <Link href="/book?scenario=case-manager" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
                                 refer someone
                             </Link>
-                            <Link href="/insurance" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
+                            <Link href="/ways-to-pay" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
                                 how to pay
                             </Link>
                         </nav>

@@ -21,8 +21,7 @@ export default function Header() {
 
     const navigation = [
         { name: 'Our practitioners', href: '/practitioners' },
-        { name: 'Ways to pay', href: '/ways-to-pay' },
-        { name: 'About', href: '/about' }
+        { name: 'Ways to pay', href: '/ways-to-pay' }
     ]
 
     return (

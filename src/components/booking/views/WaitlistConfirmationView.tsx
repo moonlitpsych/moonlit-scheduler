@@ -90,7 +90,7 @@ export default function WaitlistConfirmationView({
                                         to get reimbursed by their insurance later.
                                     </p>
                                     <p className="text-sm text-slate-500">
-                                        Contact us at <a href="mailto:hello@trymoonlit.com" className="text-[#BF9C73] hover:underline">hello@moonlitpsychiatry.com</a> 
+                                        Contact us at <a href="mailto:hello@trymoonlit.com" className="text-[#BF9C73] hover:underline">hello@trymoonlit.com</a> 
                                          for assistance with out-of-pocket appointments.
                                     </p>
                                 </div>

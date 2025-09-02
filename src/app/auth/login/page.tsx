@@ -336,7 +336,7 @@ export default function LoginPage() {
           <p className="text-sm text-[#091747]/70">
             Need help accessing your account?{' '}
             <a 
-              href="mailto:admin@moonlitpsychiatry.com" 
+              href="mailto:hello@trymoonlit.com" 
               className="text-[#BF9C73] hover:text-[#BF9C73]/80 transition-colors"
             >
               Contact Admin

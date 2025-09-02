@@ -50,17 +50,19 @@ interface BookingFlowProps {
     selectedProviderId?: string // For provider-specific booking
     selectedProvider?: any // The provider object with name info
     providerSpecific?: boolean // Whether this is a provider-specific flow
+    preselectedScenario?: BookingScenario // Pre-select booking scenario and skip to insurance
 }
 
 export default function BookingFlow({ 
     intent = 'book', 
     selectedProviderId,
     selectedProvider,
-    providerSpecific = false 
+    providerSpecific = false,
+    preselectedScenario
 }: BookingFlowProps) {
     const [state, setState] = useState<BookingState>({
-        step: intent === 'explore' ? 'payer-search' : 'welcome',
-        bookingScenario: 'self',
+        step: preselectedScenario ? 'payer-search' : (intent === 'explore' ? 'payer-search' : 'welcome'),
+        bookingScenario: preselectedScenario || 'self',
         roiContacts: [],
         intent: intent
     })
