@@ -426,6 +426,99 @@ class AthenaService {
   }
 
   /**
+   * Reschedule an appointment in Athena
+   */
+  async rescheduleAppointment(appointmentId: string, newDateTime: {
+    date: string // YYYY-MM-DD format
+    startTime: string // HH:MM format
+    endTime?: string // HH:MM format (optional)
+    reason?: string
+  }): Promise<{ success: boolean; appointmentId: string }> {
+    try {
+      console.log(`🔄 Rescheduling appointment ${appointmentId} to ${newDateTime.date} ${newDateTime.startTime}...`)
+
+      // Get current appointment details first
+      const currentAppointment = await this.getAppointment(appointmentId)
+      if (!currentAppointment) {
+        throw new Error('Appointment not found')
+      }
+
+      // Update the appointment with new date/time
+      const updateData: any = {
+        appointmentdate: newDateTime.date,
+        appointmenttime: newDateTime.startTime
+      }
+
+      // Add end time if provided
+      if (newDateTime.endTime) {
+        updateData.duration = calculateDurationMinutes(newDateTime.startTime, newDateTime.endTime)
+      }
+
+      // Add reason to notes if provided
+      if (newDateTime.reason) {
+        updateData.note = `Rescheduled: ${newDateTime.reason}`
+      }
+
+      const response = await this.makeRequest(`/appointments/${appointmentId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updateData)
+      })
+
+      console.log(`✅ Appointment ${appointmentId} rescheduled successfully`)
+
+      return {
+        success: true,
+        appointmentId: response?.appointmentid || appointmentId
+      }
+
+    } catch (error) {
+      console.error(`❌ Error rescheduling appointment ${appointmentId}:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Get video link for appointment from Athena
+   */
+  async getVideoLink(appointmentId: string): Promise<{
+    patientUrl?: string
+    providerUrl?: string 
+    waitingRoomUrl?: string
+    sessionId?: string
+    expiresAt?: string
+  }> {
+    try {
+      console.log(`📹 Fetching video link for appointment ${appointmentId}...`)
+
+      // Athena video conferencing endpoint (if available)
+      const response = await this.makeRequest(`/appointments/${appointmentId}/videoconference`)
+      
+      const videoData = response?.videoconference || {}
+      
+      console.log(`✅ Video link retrieved for appointment ${appointmentId}`)
+
+      return {
+        patientUrl: videoData.patienturl,
+        providerUrl: videoData.providerurl,
+        waitingRoomUrl: videoData.waitingroomurl,
+        sessionId: videoData.sessionid,
+        expiresAt: videoData.expiresat
+      }
+
+    } catch (error) {
+      console.error(`❌ Error fetching video link for appointment ${appointmentId}:`, error)
+      
+      // Return fallback/empty response if video conferencing not available
+      if (error instanceof Error && error.message.includes('not found')) {
+        console.log('⚠️ Video conferencing not configured for this appointment')
+        return {}
+      }
+      
+      throw error
+    }
+  }
+
+  /**
    * Cancel an appointment in Athena
    */
   async cancelAppointment(appointmentId: string, reason: string = 'Patient requested cancellation'): Promise<void> {
@@ -460,6 +553,17 @@ class AthenaService {
       return null
     }
   }
+}
+
+// Helper function to calculate duration in minutes
+function calculateDurationMinutes(startTime: string, endTime: string): number {
+  const [startHour, startMin] = startTime.split(':').map(Number)
+  const [endHour, endMin] = endTime.split(':').map(Number)
+  
+  const startMinutes = startHour * 60 + startMin
+  const endMinutes = endHour * 60 + endMin
+  
+  return endMinutes - startMinutes
 }
 
 // Export singleton instance

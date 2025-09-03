@@ -16,6 +16,7 @@ module.exports = {
                     'brown-hover': '#A8865F', // Brown hover state
                     cream: '#FEF8F1',     // Background cream color
                     orange: '#E67A47',    // Secondary accent orange
+                    peach: '#F6B398',     // Additional brand peach color
                 }
             },
             fontFamily: {

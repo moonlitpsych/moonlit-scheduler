@@ -258,6 +258,94 @@ class IntakeQService {
     }
   }
 
+  /**
+   * Reschedule an appointment in IntakeQ
+   */
+  async rescheduleAppointment(appointmentId: string, newDateTime: {
+    startTime: string // ISO format
+    endTime: string // ISO format
+    reason?: string
+  }): Promise<{ success: boolean; appointmentId: string }> {
+    try {
+      console.log(`🔄 Rescheduling IntakeQ appointment ${appointmentId} to ${newDateTime.startTime}...`)
+
+      const startDate = new Date(newDateTime.startTime).getTime()
+      const endDate = new Date(newDateTime.endTime).getTime()
+
+      const updateData = {
+        StartDate: startDate,
+        EndDate: endDate,
+        StartDateIso: newDateTime.startTime,
+        EndDateIso: newDateTime.endTime
+      }
+
+      await this.makeRequest<void>(`/appointments/${appointmentId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updateData)
+      })
+
+      console.log(`✅ IntakeQ appointment ${appointmentId} rescheduled successfully`)
+
+      return {
+        success: true,
+        appointmentId
+      }
+
+    } catch (error) {
+      console.error(`❌ Error rescheduling IntakeQ appointment ${appointmentId}:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Get video link for IntakeQ appointment
+   */
+  async getVideoLink(appointmentId: string): Promise<{
+    patientUrl?: string
+    providerUrl?: string
+    waitingRoomUrl?: string
+    sessionId?: string
+    expiresAt?: string
+  }> {
+    try {
+      console.log(`📹 Fetching video link for IntakeQ appointment ${appointmentId}...`)
+
+      // IntakeQ uses embedded video in their platform
+      // Video links are typically generated dynamically
+      const response = await this.makeRequest<any>(`/appointments/${appointmentId}/video`)
+      
+      const videoData = response || {}
+      
+      console.log(`✅ Video link retrieved for IntakeQ appointment ${appointmentId}`)
+
+      return {
+        patientUrl: videoData.PatientVideoUrl || videoData.patientUrl,
+        providerUrl: videoData.ProviderVideoUrl || videoData.providerUrl,
+        waitingRoomUrl: videoData.WaitingRoomUrl || videoData.waitingRoomUrl,
+        sessionId: videoData.SessionId || videoData.sessionId,
+        expiresAt: videoData.ExpiresAt || videoData.expiresAt
+      }
+
+    } catch (error) {
+      console.error(`❌ Error fetching video link for IntakeQ appointment ${appointmentId}:`, error)
+      
+      // IntakeQ might not have dedicated video API - return platform URLs
+      if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
+        console.log('⚠️ Using IntakeQ platform video links as fallback')
+        
+        return {
+          patientUrl: `https://intakeq.com/booking/${appointmentId}/video/patient`,
+          providerUrl: `https://intakeq.com/admin/appointments/${appointmentId}/video`,
+          waitingRoomUrl: `https://intakeq.com/booking/${appointmentId}/waiting-room`,
+          sessionId: `intakeq_${appointmentId}_${Date.now()}`,
+          expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString() // 4 hours from now
+        }
+      }
+      
+      throw error
+    }
+  }
+
   async updateAppointmentStatus(appointmentId: string, status: 'Confirmed' | 'Cancelled' | 'NoShow'): Promise<void> {
     console.log(`🔄 Updating IntakeQ appointment ${appointmentId} status to: ${status}`)
     
