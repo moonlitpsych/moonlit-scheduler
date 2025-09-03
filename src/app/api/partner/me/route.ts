@@ -26,29 +26,24 @@ export async function GET(request: NextRequest) {
       .from('partner_users')
       .select(`
         id,
+        auth_user_id,
         organization_id,
-        first_name,
-        last_name,
+        full_name,
         email,
+        phone,
         role,
-        status,
-        timezone,
-        notification_preferences,
-        last_login_at,
+        is_active,
+        wants_org_broadcasts,
         created_at,
         updated_at,
         organization:organizations(
           id,
           name,
-          status,
-          type,
-          primary_contact_email,
-          primary_contact_phone,
           created_at
         )
       `)
-      .eq('id', partnerUserId)
-      .eq('status', 'active')
+      .eq('auth_user_id', partnerUserId)
+      .eq('is_active', true)
       .single()
 
     if (error || !partnerUser) {
@@ -63,13 +58,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Update last login timestamp
+    // Update last accessed timestamp
     await supabaseAdmin
       .from('partner_users')
       .update({ 
-        last_login_at: new Date().toISOString() 
+        updated_at: new Date().toISOString() 
       })
-      .eq('id', partnerUserId)
+      .eq('id', partnerUser.id)
 
     // Get user's permissions based on role
     const permissions = getPermissionsForRole(partnerUser.role)
@@ -129,6 +124,11 @@ export async function GET(request: NextRequest) {
         }
       })
 
+    // Parse full_name into first_name and last_name
+    const nameParts = partnerUser.full_name?.split(' ') || ['', '']
+    const first_name = nameParts[0] || ''
+    const last_name = nameParts.slice(1).join(' ') || ''
+
     console.log('✅ Partner user authenticated:', {
       id: partnerUser.id,
       email: partnerUser.email,
@@ -139,18 +139,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        user: {
-          id: partnerUser.id,
-          first_name: partnerUser.first_name,
-          last_name: partnerUser.last_name,
-          email: partnerUser.email,
-          role: partnerUser.role,
-          status: partnerUser.status,
-          timezone: partnerUser.timezone || 'America/Denver',
-          notification_preferences: partnerUser.notification_preferences || {},
-          last_login_at: partnerUser.last_login_at,
-          created_at: partnerUser.created_at
-        },
+        id: partnerUser.id,
+        auth_user_id: partnerUser.auth_user_id,
+        organization_id: partnerUser.organization_id,
+        first_name,
+        last_name,
+        full_name: partnerUser.full_name,
+        email: partnerUser.email,
+        phone: partnerUser.phone,
+        role: partnerUser.role,
+        status: partnerUser.is_active ? 'active' : 'inactive',
+        timezone: 'America/Denver', // Default timezone
+        created_at: partnerUser.created_at,
+        updated_at: partnerUser.updated_at,
         organization: partnerUser.organization,
         permissions,
         organization_stats: orgStats

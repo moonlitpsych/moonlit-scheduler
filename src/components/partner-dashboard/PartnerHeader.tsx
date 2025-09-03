@@ -40,7 +40,7 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
             </Link>
           </div>
 
-          {/* Navigation */}
+          {/* Navigation - Only functional pages */}
           <nav className="hidden md:flex items-center space-x-6">
             <Link 
               href="/partner-dashboard"
@@ -52,60 +52,6 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
             >
               Dashboard
             </Link>
-            <Link 
-              href="/partner-dashboard/patients"
-              className={`px-3 py-2 text-sm font-medium font-['Newsreader'] rounded-md transition-colors ${
-                currentPage === 'patients' 
-                  ? 'bg-moonlit-cream text-moonlit-brown' 
-                  : 'text-gray-600 hover:text-moonlit-navy'
-              }`}
-            >
-              My Patients
-            </Link>
-            <Link 
-              href="/partner-dashboard/appointments"
-              className={`px-3 py-2 text-sm font-medium font-['Newsreader'] rounded-md transition-colors ${
-                currentPage === 'appointments' 
-                  ? 'bg-moonlit-cream text-moonlit-brown' 
-                  : 'text-gray-600 hover:text-moonlit-navy'
-              }`}
-            >
-              Appointments
-            </Link>
-            <Link 
-              href="/partner-dashboard/changes"
-              className={`px-3 py-2 text-sm font-medium font-['Newsreader'] rounded-md transition-colors ${
-                currentPage === 'changes' 
-                  ? 'bg-moonlit-cream text-moonlit-brown' 
-                  : 'text-gray-600 hover:text-moonlit-navy'
-              }`}
-            >
-              Change Requests
-            </Link>
-            {isAdmin && (
-              <Link 
-                href="/partner-dashboard/partners"
-                className={`px-3 py-2 text-sm font-medium font-['Newsreader'] rounded-md transition-colors ${
-                  currentPage === 'partners' 
-                    ? 'bg-moonlit-cream text-moonlit-brown' 
-                    : 'text-gray-600 hover:text-moonlit-navy'
-                }`}
-              >
-                Partner CRM
-              </Link>
-            )}
-            {isAdmin && (
-              <Link 
-                href="/partner-dashboard/team"
-                className={`px-3 py-2 text-sm font-medium font-['Newsreader'] rounded-md transition-colors ${
-                  currentPage === 'team' 
-                    ? 'bg-moonlit-cream text-moonlit-brown' 
-                    : 'text-gray-600 hover:text-moonlit-navy'
-                }`}
-              >
-                Team
-              </Link>
-            )}
           </nav>
 
           {/* User Menu */}
@@ -161,7 +107,7 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
                   <div className="border-t border-gray-100 my-2"></div>
                   <Link 
                     href="/partner-auth/logout"
-                    className="block px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                    className="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-['Newsreader']"
                     onClick={() => setIsUserMenuOpen(false)}
                   >
                     Sign out
@@ -173,7 +119,7 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
         </div>
       </div>
 
-      {/* Mobile Navigation */}
+      {/* Mobile Navigation - Only functional pages */}
       <div className="md:hidden border-t border-gray-200 bg-gray-50 px-4 py-2">
         <div className="flex space-x-4 overflow-x-auto">
           <Link 
@@ -186,60 +132,6 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
           >
             Dashboard
           </Link>
-          <Link 
-            href="/partner-dashboard/patients"
-            className={`px-3 py-1 text-sm font-medium font-['Newsreader'] rounded-md whitespace-nowrap ${
-              currentPage === 'patients' 
-                ? 'bg-moonlit-brown text-white' 
-                : 'text-gray-600'
-            }`}
-          >
-            Patients
-          </Link>
-          <Link 
-            href="/partner-dashboard/appointments"
-            className={`px-3 py-1 text-sm font-medium font-['Newsreader'] rounded-md whitespace-nowrap ${
-              currentPage === 'appointments' 
-                ? 'bg-moonlit-brown text-white' 
-                : 'text-gray-600'
-            }`}
-          >
-            Appointments
-          </Link>
-          <Link 
-            href="/partner-dashboard/changes"
-            className={`px-3 py-1 text-sm font-medium font-['Newsreader'] rounded-md whitespace-nowrap ${
-              currentPage === 'changes' 
-                ? 'bg-moonlit-brown text-white' 
-                : 'text-gray-600'
-            }`}
-          >
-            Changes
-          </Link>
-          {isAdmin && (
-            <Link 
-              href="/partner-dashboard/partners"
-              className={`px-3 py-1 text-sm font-medium font-['Newsreader'] rounded-md whitespace-nowrap ${
-                currentPage === 'partners' 
-                  ? 'bg-moonlit-brown text-white' 
-                  : 'text-gray-600'
-              }`}
-            >
-              CRM
-            </Link>
-          )}
-          {isAdmin && (
-            <Link 
-              href="/partner-dashboard/team"
-              className={`px-3 py-1 text-sm font-medium font-['Newsreader'] rounded-md whitespace-nowrap ${
-                currentPage === 'team' 
-                  ? 'bg-moonlit-brown text-white' 
-                  : 'text-gray-600'
-              }`}
-            >
-              Team
-            </Link>
-          )}
         </div>
       </div>
     </header>

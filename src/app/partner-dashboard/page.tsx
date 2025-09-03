@@ -2,121 +2,81 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { DashboardStats } from '@/components/partner-dashboard/DashboardStats'
 import { UpcomingAppointments } from '@/components/partner-dashboard/UpcomingAppointments'
 import { PartnerDashboardData, PartnerUser } from '@/types/partner-types'
-
-// Mock data for development - replace with actual API calls
-const mockPartnerUser: PartnerUser = {
-  id: 'user-123',
-  organization_id: 'org-456',
-  first_name: 'Sarah',
-  last_name: 'Johnson',
-  email: 'sarah@firststephouse.org',
-  role: 'partner_case_manager',
-  status: 'active',
-  timezone: 'America/Denver',
-  created_at: '2024-01-01T00:00:00Z',
-  updated_at: '2024-01-01T00:00:00Z',
-  organization: {
-    id: 'org-456',
-    name: 'First Step House',
-    slug: 'first-step-house',
-    type: 'treatment_center',
-    status: 'active',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  }
-}
+import { Database } from '@/types/database'
 
 export default function PartnerDashboardPage() {
+  const [partnerUser, setPartnerUser] = useState<PartnerUser | null>(null)
   const [dashboardData, setDashboardData] = useState<PartnerDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch dashboard data
+  // Fetch partner user data and dashboard data
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true)
         
-        // In production, this would make an actual API call
-        // const response = await fetch('/api/partner-dashboard', {
-        //   headers: {
-        //     'x-partner-user-id': mockPartnerUser.id
-        //   }
-        // })
+        // Get authenticated user from Supabase
+        const supabase = createClientComponentClient<Database>()
+        const { data: { user } } = await supabase.auth.getUser()
         
-        // Mock response for development
-        await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate loading
+        if (!user) {
+          setError('Partner authentication required. Please sign in to access your dashboard.')
+          return
+        }
         
-        const mockData: PartnerDashboardData = {
-          upcoming_appointments: [
-            {
-              id: 'apt-1',
-              start_time: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours from now
-              end_time: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
-              status: 'confirmed',
-              providers: {
-                id: 'prov-1',
-                first_name: 'Travis',
-                last_name: 'Norseth',
-                title: 'MD'
-              },
-              patients: {
-                id: 'pat-1',
-                first_name: 'John',
-                last_name: 'Smith',
-                phone: '(555) 123-4567'
-              },
-              payers: {
-                id: 'pay-1',
-                name: 'Utah Medicaid'
-              }
-            },
-            {
-              id: 'apt-2',
-              start_time: new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString(), // Tomorrow
-              end_time: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString(),
-              status: 'scheduled',
-              providers: {
-                id: 'prov-2',
-                first_name: 'Tatiana',
-                last_name: 'Kaehler',
-                title: 'MD'
-              },
-              patients: {
-                id: 'pat-2',
-                first_name: 'Mary',
-                last_name: 'Johnson',
-                phone: '(555) 987-6543'
-              },
-              payers: {
-                id: 'pay-2',
-                name: 'Molina Healthcare'
-              }
-            }
-          ],
+        // Fetch partner user data using the authenticated user's ID
+        const userResponse = await fetch('/api/partner/me', {
+          headers: {
+            'x-partner-user-id': user.id
+          }
+        })
+        
+        if (!userResponse.ok) {
+          if (userResponse.status === 404) {
+            setError('This account does not have partner access. Please check your credentials or contact hello@trymoonlit.com for access.')
+          } else {
+            setError('Failed to load partner user data. Please try again.')
+          }
+          return
+        }
+        
+        const userData = await userResponse.json()
+        if (!userData.success) {
+          setError(userData.error || 'Failed to load user data')
+          return
+        }
+        
+        setPartnerUser(userData.data)
+        
+        // Fetch dashboard data (if needed)
+        // For now, we'll use empty dashboard data since the API needs more work
+        setDashboardData({
+          upcoming_appointments: [],
           my_assigned_patients: [],
           recent_changes: [],
           organization_stats: {
-            total_patients: 24,
-            active_patients: 18,
-            appointments_this_week: 12,
-            pending_changes: 3
+            total_patients: 0,
+            active_patients: 0,
+            appointments_this_week: 0,
+            pending_changes: 0
           }
-        }
+        })
         
-        setDashboardData(mockData)
       } catch (err: any) {
-        setError(err.message)
+        console.error('Error loading dashboard:', err)
+        setError('Partner dashboard is currently unavailable. Please try again or contact hello@trymoonlit.com for support.')
       } finally {
         setLoading(false)
       }
     }
 
-    fetchDashboardData()
+    fetchData()
   }, [])
 
   const handleRequestChange = (appointmentId: string) => {
@@ -128,17 +88,86 @@ export default function PartnerDashboardPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-moonlit-cream">
-        <PartnerHeader partnerUser={mockPartnerUser} currentPage="dashboard" />
-        <div className="container mx-auto px-4 py-8">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-red-800 mb-2 font-['Newsreader']">Error Loading Dashboard</h2>
-            <p className="text-red-600 font-['Newsreader'] font-light">{error}</p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg font-medium font-['Newsreader'] transition-colors"
-            >
-              Retry
-            </button>
+        <header className="bg-white shadow-sm border-b border-gray-200">
+          <div className="mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-moonlit-brown rounded-lg flex items-center justify-center">
+                  <span className="text-white font-semibold text-sm font-['Newsreader']">M</span>
+                </div>
+                <div className="text-lg font-semibold text-moonlit-navy font-['Newsreader']">
+                  Partner Dashboard
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+        
+        <div className="container mx-auto px-4 py-12">
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+              <div className="w-16 h-16 bg-moonlit-cream rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg className="w-8 h-8 text-moonlit-brown" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.314 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              
+              <h1 className="text-2xl font-bold text-moonlit-navy mb-4 font-['Newsreader']">
+                Partner Dashboard
+              </h1>
+              
+              <p className="text-gray-600 mb-6 font-['Newsreader'] font-light leading-relaxed">
+                {error}
+              </p>
+              
+              {error.includes('infrastructure is being set up') && (
+                <div className="bg-moonlit-cream/30 border border-moonlit-brown/20 rounded-lg p-4 mb-6">
+                  <h3 className="font-semibold text-moonlit-brown mb-2 font-['Newsreader']">
+                    What does this mean?
+                  </h3>
+                  <p className="text-sm text-gray-700 font-['Newsreader'] font-light">
+                    The partner dashboard feature is currently being developed and the database infrastructure is not yet deployed. 
+                    Once your organization's data has been imported and the partner system is activated, you'll be able to access 
+                    appointment management, patient information, and reporting features here.
+                  </p>
+                </div>
+              )}
+              
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-moonlit-brown hover:bg-moonlit-brown/90 text-white rounded-lg font-medium font-['Newsreader'] transition-colors"
+                >
+                  Check Again
+                </button>
+                <a 
+                  href="mailto:hello@trymoonlit.com"
+                  className="px-6 py-3 border border-gray-300 hover:border-moonlit-brown text-gray-700 hover:text-moonlit-brown rounded-lg font-medium font-['Newsreader'] transition-colors"
+                >
+                  Contact Support
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading || !partnerUser) {
+    return (
+      <div className="min-h-screen bg-moonlit-cream">
+        <div className="animate-pulse">
+          <div className="h-16 bg-gray-200"></div>
+          <div className="container mx-auto px-4 py-8">
+            <div className="h-8 bg-gray-200 rounded mb-4 w-1/3"></div>
+            <div className="h-4 bg-gray-200 rounded mb-8 w-2/3"></div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-24 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+            <div className="h-64 bg-gray-200 rounded"></div>
           </div>
         </div>
       </div>
@@ -147,13 +176,13 @@ export default function PartnerDashboardPage() {
 
   return (
     <div className="min-h-screen bg-moonlit-cream">
-      <PartnerHeader partnerUser={mockPartnerUser} currentPage="dashboard" />
+      <PartnerHeader partnerUser={partnerUser} currentPage="dashboard" />
       
       <div className="container mx-auto px-4 py-8">
         {/* Page header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
-            Welcome back, {mockPartnerUser.first_name}!
+            Welcome back, {partnerUser.first_name}!
           </h1>
           <p className="text-gray-600 font-['Newsreader'] font-light">
             Here's what's happening with your patients and appointments today.
@@ -200,55 +229,22 @@ export default function PartnerDashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-3 text-sm text-gray-600">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-moonlit-peach rounded-full"></div>
-                    <span>Appointment confirmed for John Smith</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-moonlit-brown rounded-full"></div>
-                    <span>New patient affiliation approved</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-moonlit-orange rounded-full"></div>
-                    <span>Change request submitted</span>
-                  </div>
+                  {dashboardData?.recent_changes && dashboardData.recent_changes.length > 0 ? (
+                    dashboardData.recent_changes.map((change, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-moonlit-peach rounded-full"></div>
+                        <span>{change.description}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-gray-500 font-['Newsreader'] font-light">
+                      No recent activity to display.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Quick Actions */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-moonlit-navy mb-4 font-['Newsreader']">Quick Actions</h3>
-              <div className="space-y-3">
-                <button className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <span className="text-xl">📅</span>
-                    <div>
-                      <div className="font-medium font-['Newsreader']">Request Appointment Change</div>
-                      <div className="text-sm text-gray-500 font-['Newsreader'] font-light">Reschedule or cancel appointments</div>
-                    </div>
-                  </div>
-                </button>
-                <button className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <span className="text-xl">👥</span>
-                    <div>
-                      <div className="font-medium font-['Newsreader']">View My Patients</div>
-                      <div className="text-sm text-gray-500 font-['Newsreader'] font-light">See all assigned patients</div>
-                    </div>
-                  </div>
-                </button>
-                <button className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <span className="text-xl">📊</span>
-                    <div>
-                      <div className="font-medium font-['Newsreader']">View Reports</div>
-                      <div className="text-sm text-gray-500 font-['Newsreader'] font-light">Export appointment data</div>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       </div>
