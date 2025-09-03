@@ -43,8 +43,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const type = searchParams.get('type') || ''
     const status = searchParams.get('status') || ''
+    const sort = searchParams.get('sort') || 'updated_at_desc'
 
-    console.log('🏢 Admin fetching organizations:', { page, perPage, search, type, status })
+    console.log('🏢 Admin fetching organizations:', { page, perPage, search, type, status, sort })
 
     // Build query with partner and user counts
     let query = supabaseAdmin
@@ -88,10 +89,23 @@ export async function GET(request: NextRequest) {
     // Get total count
     const { count } = await query.select('*', { count: 'exact', head: true })
 
+    // Apply sorting
+    const [sortField, sortDirection] = sort.split('_')
+    const ascending = sortDirection === 'asc'
+    
+    let sortColumn = 'created_at' // default
+    if (sortField === 'updated' || sortField === 'updated_at') {
+      sortColumn = 'updated_at'
+    } else if (sortField === 'created' || sortField === 'created_at') {
+      sortColumn = 'created_at'  
+    } else if (sortField === 'name') {
+      sortColumn = 'name'
+    }
+    
     // Get paginated results
     const offset = (page - 1) * perPage
     const { data: organizations, error } = await query
-      .order('created_at', { ascending: false })
+      .order(sortColumn, { ascending })
       .range(offset, offset + perPage - 1)
 
     if (error) {
@@ -137,11 +151,32 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    console.log(`✅ Found ${organizations.length} organizations (${count} total)`)
+    // Handle post-processing sorting for computed fields
+    let finalOrganizations = organizationsWithCounts
+    if (sortField === 'last' && sortDirection === 'activity') {
+      // Handle last_activity_desc
+      finalOrganizations = organizationsWithCounts.sort((a, b) => {
+        const dateA = new Date(a.last_activity).getTime()
+        const dateB = new Date(b.last_activity).getTime()
+        return dateB - dateA // desc
+      })
+    } else if (sortField === 'user' && sortDirection === 'count') {
+      // Handle user_count_desc
+      finalOrganizations = organizationsWithCounts.sort((a, b) => {
+        return (b.user_count || 0) - (a.user_count || 0) // desc
+      })
+    } else if (sortField === 'partner' && sortDirection === 'count') {
+      // Handle partner_count_desc  
+      finalOrganizations = organizationsWithCounts.sort((a, b) => {
+        return (b.partner_count || 0) - (a.partner_count || 0) // desc
+      })
+    }
+
+    console.log(`✅ Found ${organizations.length} organizations (${count} total), sorted by ${sort}`)
 
     return NextResponse.json({
       success: true,
-      data: organizationsWithCounts,
+      data: finalOrganizations,
       pagination: {
         page,
         per_page: perPage,

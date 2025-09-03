@@ -6,6 +6,7 @@ import { Eye, EyeOff, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { isAdminEmail } from '@/lib/admin-auth'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -30,7 +31,15 @@ export default function LoginPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         console.log('User already logged in, redirecting...', user.email)
-        router.replace('/dashboard')
+        
+        // Check if user is admin
+        if (isAdminEmail(user.email || '')) {
+          console.log('Admin user detected, redirecting to admin dashboard')
+          router.replace('/admin')
+        } else {
+          console.log('Provider user detected, redirecting to provider dashboard')
+          router.replace('/dashboard')
+        }
       }
     }
     
@@ -56,10 +65,15 @@ export default function LoginPage() {
         setError(error.message)
       } else if (data.user) {
         console.log('Login successful! User:', data.user.email)
-        console.log('Redirecting to dashboard...')
         
-        // Smooth navigation to dashboard
-        router.replace('/dashboard')
+        // Check if user is admin and redirect accordingly
+        if (isAdminEmail(data.user.email || '')) {
+          console.log('Admin login successful, redirecting to admin dashboard')
+          router.replace('/admin')
+        } else {
+          console.log('Provider login successful, redirecting to provider dashboard')
+          router.replace('/dashboard')
+        }
       }
     } catch (err) {
       console.error('Unexpected error:', err)

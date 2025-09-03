@@ -70,6 +70,12 @@ export default function AdminOrganizationsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [sortBy, setSortBy] = useState('updated_at_desc')
+  // Dynamic dropdown options
+  const [dropdownOptions, setDropdownOptions] = useState<{
+    types: string[]
+    statuses: string[]
+  }>({ types: [], statuses: [] })
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
     per_page: 25,
@@ -77,6 +83,28 @@ export default function AdminOrganizationsPage() {
     total_pages: 0
   })
   const [showCreateModal, setShowCreateModal] = useState(false)
+
+  // Fetch dropdown options
+  const fetchDropdownOptions = async () => {
+    try {
+      const response = await fetch('/api/admin/dropdown-options')
+      const result = await response.json()
+      
+      if (result.success) {
+        setDropdownOptions({
+          types: result.data.actual_options.types,
+          statuses: result.data.actual_options.statuses
+        })
+        
+        // Log schema mismatch warnings
+        if (result.data.analysis.schema_mismatch.types || result.data.analysis.schema_mismatch.statuses) {
+          console.warn('⚠️ Schema mismatch detected:', result.data.analysis.recommendations)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dropdown options:', error)
+    }
+  }
 
   // Fetch organizations data
   const fetchOrganizations = async () => {
@@ -86,7 +114,8 @@ export default function AdminOrganizationsPage() {
         per_page: pagination.per_page.toString(),
         ...(searchTerm && { search: searchTerm }),
         ...(typeFilter && { type: typeFilter }),
-        ...(statusFilter && { status: statusFilter })
+        ...(statusFilter && { status: statusFilter }),
+        ...(sortBy && { sort: sortBy })
       })
 
       const response = await fetch(`/api/admin/organizations?${params}`)
@@ -106,8 +135,14 @@ export default function AdminOrganizationsPage() {
   }
 
   useEffect(() => {
+    fetchDropdownOptions()
     fetchOrganizations()
-  }, [pagination.page, searchTerm, typeFilter, statusFilter])
+  }, [pagination.page, searchTerm, typeFilter, statusFilter, sortBy])
+
+  // Fetch dropdown options on mount
+  useEffect(() => {
+    fetchDropdownOptions()
+  }, [])
 
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A'
@@ -226,31 +261,48 @@ export default function AdminOrganizationsPage() {
 
           {/* Filters and Actions */}
           <div className="flex items-center space-x-4">
-            {/* Type Filter */}
+            {/* Type Filter - Dynamic */}
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
               className="border border-stone-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
             >
               <option value="">All Types</option>
-              <option value="healthcare_partner">Healthcare Partner</option>
-              <option value="treatment_center">Treatment Center</option>
-              <option value="rehabilitation">Rehabilitation</option>
-              <option value="mental_health">Mental Health</option>
-              <option value="substance_abuse">Substance Abuse</option>
-              <option value="other">Other</option>
+              {dropdownOptions.types.map(type => (
+                <option key={type} value={type}>
+                  {type === 'None' ? 'Unspecified' : type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </option>
+              ))}
             </select>
 
-            {/* Status Filter */}
+            {/* Status Filter - Dynamic */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="border border-stone-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
             >
               <option value="">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="suspended">Suspended</option>
+              {dropdownOptions.statuses.map(status => (
+                <option key={status} value={status}>
+                  {status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </option>
+              ))}
+            </select>
+
+            {/* Sort By */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="border border-stone-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#BF9C73] focus:border-transparent"
+            >
+              <option value="updated_at_desc">Most Recently Updated</option>
+              <option value="last_activity_desc">Most Recent Activity</option>
+              <option value="created_at_desc">Newest First</option>
+              <option value="created_at_asc">Oldest First</option>
+              <option value="name_asc">Name A-Z</option>
+              <option value="name_desc">Name Z-A</option>
+              <option value="user_count_desc">Most Users</option>
+              <option value="partner_count_desc">Most Partners</option>
             </select>
 
             {/* Add Organization Button */}
