@@ -1404,8 +1404,77 @@ Organization Names (Real Healthcare Centers):
 
 ---
 
-*Last updated: September 3, 2025*  
-*Status: Complete Professional Website + Partner Dashboard + Admin Dashboard with Database Schema Investigation* ✅  
-*Latest Enhancement: Admin authentication fixed, fake data eliminated, comprehensive database schema investigation completed*  
-*Current Branch: admin-dashboard-crm*  
-*Critical Next Step: Database schema cleanup - 100 organizations need proper type/status values to match intended schema*
+## 🔍 **LATEST SESSION: Payer Status Logic Investigation & Field Migration (September 4, 2025)**
+
+### **🎯 Critical Investigation Results**
+**Branch**: `investigate-payer-status-logic`
+
+#### ✅ **Major Issues Resolved**
+- **500 Error Fixed**: Updated all `credentialing_status` → `status_code` field references throughout application
+- **Insurance Search UX Fixed**: Corrected inappropriate out-of-network banner and implemented priority sorting
+- **Misleading Messaging Updated**: Changed denied insurance language from "working on credentialing" to honest messaging
+- **Provider Availability Logic Analyzed**: Comprehensive investigation of insurance-based provider filtering
+
+#### ✅ **Database Schema Migration Completed**
+**Files Updated (12 core files)**:
+- `src/types/database.ts` - Updated Payer interface
+- `src/app/api/ways-to-pay/payers/route.ts` - Fixed 500 error
+- `src/lib/services/PayerService.ts` & `payerStatus.ts` - Updated all payer logic
+- `src/components/booking/views/*` - Fixed insurance search, messaging, contact info
+- `src/app/ways-to-pay/page.tsx` - Removed double header/footer, updated status logic
+
+#### ✅ **Comprehensive Provider Network Analysis**
+**New Debug Tools Created (10 endpoints)**:
+- `/api/debug/provider-network-analysis` - Complete network relationship analysis
+- `/api/debug/molina-provider-analysis` - Investigates Molina Utah provider issues
+- `/api/debug/check-providers-schema` - Confirms no separate bookable table exists
+- 7 additional debug endpoints for comprehensive system analysis
+
+### **🔍 Key Investigation Findings**
+
+**Provider Availability Status**:
+- **13 total providers** (10 active, 4 bookable)
+- **Bookable providers**: Travis Norseth, Tatiana Kaehler, Merrick Reynolds, Rufus Sweeney
+- **Molina Utah**: Only Dr. Privratsky in network (non-bookable by design)
+- **UUHP Utah Medicaid**: No provider networks (data gap)
+
+**Supervision Model Discovery**:
+- **Code exists** for clinical supervision model in `/api/patient-booking/providers-for-payer`
+- **`supervision_relationships` table MISSING** from database - explains why supervision not working
+- **Should allow all 4 bookable providers** to see Molina Utah patients through Dr. Privratsky's supervision
+
+**Data Architecture Confirmed**:
+- **No separate bookable table** - uses `is_bookable` boolean on providers table
+- **`allows_supervised` field unused** - can be safely ignored in supervision implementation
+- **Field migration complete** - all credentialing_status references updated
+
+### **🛠️ Admin Tools Ready**
+- **`/api/admin/create-supervision-table`** - Creates missing supervision_relationships table
+- **`/api/admin/setup-molina-supervision`** - Populates Molina Utah supervision relationships
+- **Complete supervision model implementation ready** once database table created
+
+### **✅ Testing Results (September 4, 2025)**
+```
+✅ 500 error on ways-to-pay page resolved
+✅ Insurance search banner logic fixed (only shows when ALL results not-accepted)
+✅ Insurance priority sorting implemented (active > future > waitlist > not-accepted)
+✅ Honest messaging for denied insurances ("We cannot accept X as payment")
+✅ Provider network analysis complete: 22 networks across 8 payers
+✅ Supervision model gap identified: missing database table
+✅ All credentialing_status → status_code migration completed
+✅ Branch ready for supervision model implementation
+```
+
+### **🎯 Next Steps**
+1. **Create `supervision_relationships` table** in Supabase dashboard
+2. **Run supervision setup API** to populate Molina Utah relationships  
+3. **Test booking flow** with all 4 providers showing for Molina Utah
+4. **Implement supervision for other payers** as needed
+
+---
+
+*Last updated: September 4, 2025*  
+*Status: Complete Professional Website + Insurance Logic Fixed + Supervision Model Ready* ✅  
+*Latest Enhancement: Payer status field migration completed, provider availability investigation concluded*  
+*Current Branch: investigate-payer-status-logic*  
+*Critical Next Step: Create supervision_relationships table to enable clinical supervision model*
