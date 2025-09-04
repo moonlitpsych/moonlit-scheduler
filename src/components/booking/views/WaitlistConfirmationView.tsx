@@ -5,11 +5,13 @@ import { Check, Home, Mail } from 'lucide-react'
 
 interface WaitlistConfirmationViewProps {
     selectedPayer: Payer
+    acceptanceStatus?: 'waitlist' | 'not-accepted'
     onReturnHome: () => void
 }
 
 export default function WaitlistConfirmationView({ 
     selectedPayer,
+    acceptanceStatus,
     onReturnHome 
 }: WaitlistConfirmationViewProps) {
     const payerName = selectedPayer?.name || 'this insurance'
@@ -27,8 +29,11 @@ export default function WaitlistConfirmationView({
                     </h1>
                     
                     <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed mb-12">
-                        We've added you to our notification list for {payerName}. We'll reach out 
-                        as soon as we're credentialed with your insurance.
+                        {acceptanceStatus === 'not-accepted' ? (
+                            <>We've noted your interest in {payerName}. Your feedback helps us understand which insurances to prioritize for future credentialing efforts.</>
+                        ) : (
+                            <>We've added you to our notification list for {payerName}. We'll reach out as soon as we're credentialed with your insurance.</>
+                        )}
                     </p>
                 </div>
 
@@ -39,44 +44,89 @@ export default function WaitlistConfirmationView({
                         </h2>
 
                         <div className="space-y-6">
-                            <div className="flex items-start space-x-4">
-                                <div className="w-8 h-8 bg-[#BF9C73] text-white rounded-full flex items-center justify-center font-medium text-sm">
-                                    1
-                                </div>
-                                <div>
-                                    <h3 className="font-medium text-[#091747] mb-2">We're working on credentialing</h3>
-                                    <p className="text-slate-600">
-                                        Our team is actively working to get credentialed with {payerName}. 
-                                        This process typically takes 60-90 days.
-                                    </p>
-                                </div>
-                            </div>
+                            {acceptanceStatus === 'not-accepted' ? (
+                                // Content for denied/blocked insurances
+                                <>
+                                    <div className="flex items-start space-x-4">
+                                        <div className="w-8 h-8 bg-[#BF9C73] text-white rounded-full flex items-center justify-center font-medium text-sm">
+                                            1
+                                        </div>
+                                        <div>
+                                            <h3 className="font-medium text-[#091747] mb-2">We're not currently credentialed</h3>
+                                            <p className="text-slate-600">
+                                                We are not credentialed with {payerName}, but it's important for us to know 
+                                                that you'd like us to accept it. Your interest helps guide our future credentialing priorities.
+                                            </p>
+                                        </div>
+                                    </div>
 
-                            <div className="flex items-start space-x-4">
-                                <div className="w-8 h-8 bg-[#BF9C73] text-white rounded-full flex items-center justify-center font-medium text-sm">
-                                    2
-                                </div>
-                                <div>
-                                    <h3 className="font-medium text-[#091747] mb-2">You'll get notified first</h3>
-                                    <p className="text-slate-600">
-                                        As soon as we're approved and can accept {payerName}, we'll send you an 
-                                        email with instructions to book your appointment.
-                                    </p>
-                                </div>
-                            </div>
+                                    <div className="flex items-start space-x-4">
+                                        <div className="w-8 h-8 bg-[#BF9C73] text-white rounded-full flex items-center justify-center font-medium text-sm">
+                                            2
+                                        </div>
+                                        <div>
+                                            <h3 className="font-medium text-[#091747] mb-2">Your feedback matters</h3>
+                                            <p className="text-slate-600">
+                                                We review interest in different insurance providers regularly to determine which ones to pursue for credentialing.
+                                            </p>
+                                        </div>
+                                    </div>
 
-                            <div className="flex items-start space-x-4">
-                                <div className="w-8 h-8 bg-[#BF9C73] text-white rounded-full flex items-center justify-center font-medium text-sm">
-                                    3
-                                </div>
-                                <div>
-                                    <h3 className="font-medium text-[#091747] mb-2">Book your appointment</h3>
-                                    <p className="text-slate-600">
-                                        Once notified, you'll be able to book your appointment online using 
-                                        your {payerName} insurance.
-                                    </p>
-                                </div>
-                            </div>
+                                    <div className="flex items-start space-x-4">
+                                        <div className="w-8 h-8 bg-[#BF9C73] text-white rounded-full flex items-center justify-center font-medium text-sm">
+                                            3
+                                        </div>
+                                        <div>
+                                            <h3 className="font-medium text-[#091747] mb-2">We'll notify you if plans change</h3>
+                                            <p className="text-slate-600">
+                                                If we decide to pursue credentialing with {payerName} in the future, we'll reach out to let you know.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                // Content for waitlist/in-progress insurances
+                                <>
+                                    <div className="flex items-start space-x-4">
+                                        <div className="w-8 h-8 bg-[#BF9C73] text-white rounded-full flex items-center justify-center font-medium text-sm">
+                                            1
+                                        </div>
+                                        <div>
+                                            <h3 className="font-medium text-[#091747] mb-2">We're working on credentialing</h3>
+                                            <p className="text-slate-600">
+                                                Our team is actively working to get credentialed with {payerName}. 
+                                                This process typically takes 60-90 days.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-start space-x-4">
+                                        <div className="w-8 h-8 bg-[#BF9C73] text-white rounded-full flex items-center justify-center font-medium text-sm">
+                                            2
+                                        </div>
+                                        <div>
+                                            <h3 className="font-medium text-[#091747] mb-2">You'll get notified first</h3>
+                                            <p className="text-slate-600">
+                                                As soon as we're approved and can accept {payerName}, we'll send you an 
+                                                email with instructions to book your appointment.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-start space-x-4">
+                                        <div className="w-8 h-8 bg-[#BF9C73] text-white rounded-full flex items-center justify-center font-medium text-sm">
+                                            3
+                                        </div>
+                                        <div>
+                                            <h3 className="font-medium text-[#091747] mb-2">Book your appointment</h3>
+                                            <p className="text-slate-600">
+                                                Once notified, you'll be able to book your appointment online using 
+                                                your {payerName} insurance.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <div className="mt-12 p-6 bg-[#FEF8F1] rounded-2xl">

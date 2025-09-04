@@ -7,7 +7,7 @@ interface Payer {
   name: string
   payer_type: string
   state: string
-  credentialing_status: string
+  status_code: string
   effective_date: string | null
   projected_effective_date: string | null
 }
@@ -29,7 +29,7 @@ const StatusIcon = ({ status, effectiveDate }: { status: string; effectiveDate: 
 
 const StatusText = ({ payer }: { payer: Payer }) => {
   // For approved payers with effective date
-  if (payer.credentialing_status === 'approved' && payer.effective_date) {
+  if (payer.status_code === 'approved' && payer.effective_date) {
     const effectiveDate = new Date(payer.effective_date)
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -55,7 +55,7 @@ const StatusText = ({ payer }: { payer: Payer }) => {
   }
   
   // For approved payers with projected effective date only
-  if (payer.credentialing_status === 'approved' && payer.projected_effective_date) {
+  if (payer.status_code === 'approved' && payer.projected_effective_date) {
     const projectedDate = new Date(payer.projected_effective_date)
     const formattedDate = projectedDate.toLocaleDateString('en-US', { 
       year: 'numeric',
@@ -91,7 +91,7 @@ const SearchResultCard = ({ payer }: { payer: Payer }) => {
       return { type: 'active', text: 'Available now', icon: 'check' }
     }
     
-    if (payer.credentialing_status === 'approved' && payer.effective_date) {
+    if (payer.status_code === 'approved' && payer.effective_date) {
       const effectiveDate = new Date(payer.effective_date)
       if (effectiveDate <= today) {
         return { type: 'active', text: 'We accept this insurance', icon: 'check' }
@@ -163,7 +163,7 @@ const PayerCard = ({ payer, showStatus = true, isEven = false }: { payer: Payer;
   // Check if payer is currently active
   const isActive = (() => {
     if (payer.payer_type === 'self_pay') return true
-    if (payer.credentialing_status === 'approved' && payer.effective_date) {
+    if (payer.status_code === 'approved' && payer.effective_date) {
       const effectiveDate = new Date(payer.effective_date)
       const today = new Date()
       today.setHours(0, 0, 0, 0)
@@ -174,7 +174,7 @@ const PayerCard = ({ payer, showStatus = true, isEven = false }: { payer: Payer;
 
   // Check if payer has future effective date
   const hasFutureDate = (() => {
-    if (payer.credentialing_status === 'approved' && payer.effective_date) {
+    if (payer.status_code === 'approved' && payer.effective_date) {
       const effectiveDate = new Date(payer.effective_date)
       const today = new Date()
       today.setHours(0, 0, 0, 0)

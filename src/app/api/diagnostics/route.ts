@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
         // Test 4: Check all payers
         const { data: payers, error: payersError } = await supabase
             .from('payers')
-            .select('id, name, effective_date, payer_type, requires_attending, credentialing_status')
+            .select('id, name, effective_date, payer_type, requires_attending, status_code')
         
         console.log('🏥 All Payers:', payers?.length || 0, payersError)
 

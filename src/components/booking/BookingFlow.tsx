@@ -36,7 +36,7 @@ export interface BookingState {
     step: BookingStep
     bookingScenario: BookingScenario
     selectedPayer?: Payer
-    payerAcceptanceStatus?: 'not-accepted' | 'future' | 'active'
+    payerAcceptanceStatus?: 'not-accepted' | 'future' | 'active' | 'waitlist'
     bookingMode?: 'normal' | 'from-effective-date' // NEW: for "book anyway" functionality
     selectedTimeSlot?: TimeSlot
     insuranceInfo?: InsuranceInfo
@@ -125,6 +125,9 @@ export default function BookingFlow({
                 break
             case 'active':
                 goToStep('calendar')
+                break
+            case 'waitlist':
+                goToStep('waitlist-confirmation')
                 break
         }
     }

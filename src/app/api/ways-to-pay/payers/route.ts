@@ -6,7 +6,7 @@ interface Payer {
   name: string
   payer_type: string
   state: string
-  credentialing_status: string
+  status_code: string
   effective_date: string | null
   projected_effective_date: string | null
 }
@@ -25,8 +25,8 @@ export async function GET() {
     // Fetch only relevant payers - exclude not_started, denied, on_pause, blocked, withdrawn
     const { data: payers, error } = await supabase
       .from('payers')
-      .select('id, name, payer_type, state, credentialing_status, effective_date, projected_effective_date')
-      .not('credentialing_status', 'in', '(not_started,denied,on_pause,blocked,withdrawn)')
+      .select('id, name, payer_type, state, status_code, effective_date, projected_effective_date')
+      .not('status_code', 'in', '(not_started,denied,on_pause,blocked,withdrawn)')
       .order('state')
       .order('effective_date', { nullsLast: true })
 
@@ -71,7 +71,7 @@ export async function GET() {
       // Categorize payers
       if (payer.payer_type === 'self_pay') {
         groupedPayers[state].selfPay.push(payer as Payer)
-      } else if (payer.credentialing_status === 'approved') {
+      } else if (payer.status_code === 'approved') {
         // All approved payers should show somewhere
         if (payer.effective_date) {
           // Approved with effective date - goes to active (regardless of past/future)
@@ -84,7 +84,7 @@ export async function GET() {
           groupedPayers[state].projected.push(payer as Payer)
         }
       } else {
-        // Any other credentialing status (in_progress, waiting_on_them, etc.) - goes to projected
+        // Any other status_code (in_progress, waiting_on_them, etc.) - goes to projected
         groupedPayers[state].projected.push(payer as Payer)
       }
     })

@@ -15,7 +15,7 @@ interface PayerSearchState {
 }
 
 interface PayerSearchViewProps {
-    onPayerSelected: (payer: Payer, acceptanceStatus: 'not-accepted' | 'future' | 'active') => void
+    onPayerSelected: (payer: Payer, acceptanceStatus: 'not-accepted' | 'future' | 'active' | 'waitlist') => void
     bookingScenario: BookingScenario
     intent: BookingIntent
     onBack?: () => void
@@ -56,9 +56,39 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
 
             console.log('✅ Found payers:', payers?.length || 0)
             
+            // Sort results by acceptance priority: active > future > waitlist > not-accepted
+            const sortedPayers = (payers || []).sort((a, b) => {
+                const getAcceptancePriority = (payer: any) => {
+                    const statusCode = payer.status_code
+                    const effectiveDate = payer.effective_date ? new Date(payer.effective_date) : null
+                    const now = new Date()
+
+                    // Not accepted (lowest priority)
+                    if (['denied', 'blocked', 'withdrawn', 'on_pause'].includes(statusCode || '') || 
+                        (!statusCode || !['approved', 'waiting_on_them', 'in_progress', 'not_started'].includes(statusCode))) {
+                        return 4
+                    }
+                    // Active (highest priority)
+                    else if (statusCode === 'approved' && effectiveDate && effectiveDate <= now) {
+                        return 1
+                    }
+                    // Future (second priority)  
+                    else if (statusCode === 'approved' && effectiveDate && effectiveDate > now && 
+                             Math.ceil((effectiveDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 21) {
+                        return 2
+                    }
+                    // Waitlist (third priority)
+                    else {
+                        return 3
+                    }
+                }
+
+                return getAcceptancePriority(a) - getAcceptancePriority(b)
+            })
+            
             setState(prev => ({
                 ...prev,
-                results: payers || [],
+                results: sortedPayers,
                 loading: false,
                 showResults: true
             }))
@@ -91,21 +121,41 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
     const handlePayerSelect = (payer: Payer) => {
         console.log('🎯 Payer selected:', payer.name)
         
-        // Determine acceptance status based on payer data
+        // Determine acceptance status based on status_code + effective_date
         const now = new Date()
-        let acceptanceStatus: 'not-accepted' | 'future' | 'active' = 'not-accepted'
+        let acceptanceStatus: 'not-accepted' | 'future' | 'active' | 'waitlist' = 'not-accepted'
 
-        if (payer.effective_date) {
-            const effectiveDate = new Date(payer.effective_date)
-            if (effectiveDate <= now) {
-                acceptanceStatus = 'active'
+        const statusCode = payer.status_code
+
+        // Handle denied/blocked/rejected statuses
+        if (['denied', 'blocked', 'withdrawn', 'on_pause'].includes(statusCode || '')) {
+            acceptanceStatus = 'not-accepted'
+        }
+        // Handle approved status
+        else if (statusCode === 'approved') {
+            if (payer.effective_date) {
+                const effectiveDate = new Date(payer.effective_date)
+                if (effectiveDate <= now) {
+                    acceptanceStatus = 'active'
+                } else {
+                    const daysUntilActive = Math.ceil((effectiveDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                    acceptanceStatus = daysUntilActive > 21 ? 'waitlist' : 'future'
+                }
             } else {
-                const daysUntilActive = Math.ceil((effectiveDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-                acceptanceStatus = daysUntilActive > 30 ? 'not-accepted' : 'future'
+                // Approved but no effective date - waitlist case
+                acceptanceStatus = 'waitlist'
             }
         }
+        // Handle in-progress statuses (waiting_on_them, in_progress, not_started)
+        else if (['waiting_on_them', 'in_progress', 'not_started'].includes(statusCode || '')) {
+            acceptanceStatus = 'waitlist'
+        }
+        // Unknown/null status - not accepted
+        else {
+            acceptanceStatus = 'not-accepted'
+        }
 
-        console.log('📊 Acceptance status:', acceptanceStatus)
+        console.log('📊 Status code:', statusCode, '→ Acceptance status:', acceptanceStatus)
         onPayerSelected(payer, acceptanceStatus)
     }
 
@@ -120,7 +170,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
             state: 'UT',
             effective_date: new Date().toISOString(),
             requires_attending: false,
-            credentialing_status: 'active',
+            status_code: 'active',
             notes: 'Self-pay patient',
             created_at: new Date().toISOString(),
             projected_effective_date: null,
@@ -263,9 +313,17 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                     {state.results.map((payer) => {
                                         const now = new Date()
                                         const effectiveDate = payer.effective_date ? new Date(payer.effective_date) : null
-                                        const isActive = effectiveDate && effectiveDate <= now
-                                        const isFuture = effectiveDate && effectiveDate > now
-                                        const daysUntilActive = isFuture ? Math.ceil((effectiveDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 0
+                                        const statusCode = payer.status_code
+
+                                        // Determine display status
+                                        const isActive = statusCode === 'approved' && effectiveDate && effectiveDate <= now
+                                        const isFuture = statusCode === 'approved' && effectiveDate && effectiveDate > now && 
+                                                        Math.ceil((effectiveDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 21
+                                        const isWaitlist = statusCode === 'approved' && (!effectiveDate || 
+                                                          (effectiveDate > now && Math.ceil((effectiveDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) > 21)) ||
+                                                          ['waiting_on_them', 'in_progress', 'not_started'].includes(statusCode || '')
+                                        const isNotAccepted = ['denied', 'blocked', 'withdrawn', 'on_pause'].includes(statusCode || '') || 
+                                                             (!statusCode || !['approved', 'waiting_on_them', 'in_progress', 'not_started'].includes(statusCode))
 
                                         return (
                                             <button
@@ -288,9 +346,13 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                             <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                                                                 <Calendar className="w-5 h-5 text-blue-600" />
                                                             </div>
+                                                        ) : isWaitlist ? (
+                                                            <div className="flex-shrink-0 w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                                                                <Clock className="w-5 h-5 text-orange-600" />
+                                                            </div>
                                                         ) : (
-                                                            <div className="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                                                                <Clock className="w-5 h-5 text-gray-600" />
+                                                            <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                                                                <X className="w-5 h-5 text-red-600" />
                                                             </div>
                                                         )}
                                                         
@@ -301,7 +363,12 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                             <p className="text-sm text-slate-500">
                                                                 {isActive && 'We accept this insurance'}
                                                                 {isFuture && `Available starting ${effectiveDate?.toLocaleDateString()}`}
-                                                                {!effectiveDate && 'Status unknown - contact us'}
+                                                                {isWaitlist && statusCode === 'approved' && !effectiveDate && 'We will be in network soon - timing uncertain'}
+                                                                {isWaitlist && statusCode === 'approved' && effectiveDate && effectiveDate > now && 
+                                                                    `Available starting ${effectiveDate.toLocaleDateString()}`}
+                                                                {isWaitlist && ['waiting_on_them', 'in_progress', 'not_started'].includes(statusCode || '') && 
+                                                                    'Credentialing in progress - join waitlist'}
+                                                                {isNotAccepted && 'We cannot accept this insurance'}
                                                             </p>
                                                             {payer.payer_type && (
                                                                 <p className="text-xs text-slate-400 mt-1">
@@ -332,6 +399,20 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                     </p>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* Out-of-Network Message - Only show when ALL results are not-accepted */}
+                    {state.showResults && state.results.length > 0 && state.results.every(payer => 
+                        ['denied', 'blocked', 'withdrawn', 'on_pause'].includes(payer.status_code || '') || 
+                        (!payer.status_code || !['approved', 'waiting_on_them', 'in_progress', 'not_started'].includes(payer.status_code))
+                    ) && (
+                        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                            <h3 className="font-semibold text-blue-800 mb-2">Out-of-Network Options</h3>
+                            <p className="text-blue-700 text-sm">
+                                We cannot accept this insurance, but you can still receive care by paying out-of-network rates. 
+                                Many patients are able to get partial reimbursement from their insurance later.
+                            </p>
                         </div>
                     )}
 

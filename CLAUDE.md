@@ -1283,8 +1283,129 @@ organizations (id, name, type, address)
 
 ---
 
+## 🔧 **ADMIN DASHBOARD ENHANCEMENTS & DATABASE INVESTIGATION (September 3, 2025)**
+
+### **🎯 Critical Authentication & Data Integrity Fixes**
+**Files**: `src/app/admin/layout.tsx`, `src/app/auth/login/page.tsx`, `src/app/admin/organizations/page.tsx`, `src/app/api/admin/dropdown-options/route.ts`
+
+#### ✅ **RESOLVED: Admin Authentication Bug**
+- **🚨 Critical Issue**: Admin emails (`hello@trymoonlit.com`) were being redirected to provider dashboard instead of admin dashboard
+- **Root Cause**: Email existed as both admin email AND provider record, causing routing conflicts
+- **Solution**: Updated login authentication logic to prioritize admin access over provider records
+- **Result**: Admins now correctly routed to `/admin` dashboard with full functionality
+
+#### ✅ **ELIMINATED: Fake Data in Admin Interface**
+- **🚨 Major Issue**: Organization type/status filters used hardcoded fake data completely disconnected from database
+- **Database Reality**: All 100 organizations have `type: "None"` and `status: "prospect"`
+- **Frontend Fake Data**: Hardcoded dropdowns with `"healthcare_partner"`, `"treatment_center"`, `"active"`, `"inactive"`
+- **Impact**: Filters returned zero results because fake options didn't match database reality
+- **Solution**: Created dynamic dropdown system pulling actual values from database
+
+#### ✅ **DATABASE SCHEMA INVESTIGATION REVEALED MAJOR MISMATCHES**
+
+**Organizations Table Analysis:**
+```
+DATABASE REALITY vs INTENDED SCHEMA:
+
+Schema Definition (TypeScript):
+- type: 'healthcare_partner' | 'treatment_center' | 'rehabilitation' | 'mental_health' | 'substance_abuse' | 'other'
+- status: 'active' | 'inactive' | 'suspended'
+
+Actual Database (ALL 100 organizations):
+- type: "None" (not in schema!)
+- status: "prospect" (not in schema!)
+
+Organization Names (Real Healthcare Centers):
+- Center for Change
+- Cirque Lodge  
+- Corner Canyon Health Centers
+- Copper Hills Youth Center
+- Beauty Lab Laser
+- Bahr Dermatology
+```
+
+### **🔍 Database Investigation Tools Created**
+- **`/api/debug/check-dropdown-data`** - Compares frontend dropdowns to database reality
+- **`/api/debug/org-status-investigation`** - Deep analysis of organization status distribution
+- **`/api/debug/check-org-data`** - Comprehensive organization data analysis
+- **`/api/admin/dropdown-options`** - Dynamic dropdown data API for real-time database values
+
+### **🎯 Dynamic Sorting & Filtering System**
+- **Added**: 8 sorting options (Most Recently Updated, Name A-Z/Z-A, User Count, Partner Count, etc.)
+- **Working**: Name-based sorting confirmed functional (tested A-Z, Z-A)
+- **Issue**: Date-based sorting ineffective due to identical timestamps (all organizations created same time: `2025-09-03T17:32:01.586275+00:00`)
+- **Enhancement**: API supports computed field sorting with post-processing
+
+### **🚨 CRITICAL PENDING TASKS - DATABASE SCHEMA CLEANUP**
+
+#### **High Priority - Data Integrity Issues**
+1. **Organization Type Mapping**: Convert "None" to proper schema values based on organization names
+   - Example: "Center for Change" → `"treatment_center"`
+   - Example: "Beauty Lab Laser" → `"healthcare_partner"` 
+   - Requires manual review of 100 organization names for accurate categorization
+
+2. **Organization Status Updates**: Convert "prospect" to appropriate schema statuses
+   - Established centers like "Cirque Lodge" should be `"active"`
+   - New prospects can remain as... wait, `"prospect"` isn't even in the schema!
+   - Need to determine: Are these `"active"`, `"inactive"`, or `"suspended"`?
+
+3. **Schema Compliance Audit**: Ensure all database values match TypeScript definitions
+   - Risk: Frontend expects schema values but database has non-schema values
+   - Impact: Filters, validation, and business logic may fail
+
+#### **Medium Priority - Admin Dashboard Features**
+1. **Organization Add/Edit Modals**: Allow admins to properly set types and statuses
+2. **Partner Management**: Currently shows 0 partners for all organizations
+3. **Bulk Data Operations**: Tools for batch updating 100 organizations
+4. **Data Validation**: Prevent future schema mismatches
+
+#### **Low Priority - UX Polish**  
+1. **Better Loading States**: Dynamic dropdown loading indicators
+2. **Error Handling**: Schema mismatch warnings for users
+3. **Analytics Dashboard**: Currently placeholder page
+
+### **🔧 Files Modified This Session**
+- `src/app/admin/layout.tsx` - Fixed admin authentication, added access denied screens
+- `src/app/auth/login/page.tsx` - Added admin vs provider routing logic  
+- `src/app/admin/organizations/page.tsx` - Dynamic dropdowns, 8 sorting options
+- `src/app/api/admin/organizations/route.ts` - Enhanced sorting with computed fields
+- `src/app/api/admin/dropdown-options/route.ts` - NEW: Dynamic dropdown API
+- `src/app/logout/page.tsx` - NEW: Logout utility for testing
+- 6 debug endpoints for comprehensive database investigation
+
+### **✅ Testing Results (September 3, 2025)**
+```
+✅ Admin authentication fixed: hello@trymoonlit.com → /admin (not /dashboard)
+✅ Dynamic dropdowns show real data: "Unspecified" (None), "Prospect"
+✅ Sorting by name works: A-Z shows "(personal practice)" first, Z-A shows organizations ending in numbers
+✅ No more fake data in UI: All 100 organizations loading with actual database values
+✅ Schema mismatch detection: Console warnings show database vs schema differences
+✅ Debug tools operational: 6 endpoints providing comprehensive database insights
+✅ Authentication separation: Admin/provider/partner access properly isolated
+✅ Logout functionality: Clean session clearing for testing
+```
+
+### **🎯 Production Impact & Recommendations**
+
+**✅ IMMEDIATE WINS:**
+- **Admins can now access admin dashboard** - Critical functionality restored
+- **UI reflects database reality** - No more confusing fake options
+- **Comprehensive diagnostic tools** - Deep database visibility for ongoing management
+
+**🚨 URGENT NEEDS:**
+- **Database schema alignment** - 100 organizations need proper type/status values  
+- **Data governance** - Prevent future schema mismatches
+- **Professional data standards** - Healthcare organizations should have accurate categorization
+
+**📊 BUSINESS IMPACT:**
+- **100 Real Healthcare Organizations** identified and visible in admin dashboard
+- **Major Treatment Centers** like Center for Change, Cirque Lodge ready for proper categorization
+- **Admin CRM Functionality** ready for business development and partnership management
+
+---
+
 *Last updated: September 3, 2025*  
-*Status: Complete Professional Website + Partner Dashboard EHR Integration + Partner Authentication System* ✅  
-*Latest Enhancement: Full partner authentication system with real database integration, separate from provider/admin access*  
-*Current Branch: main*  
-*Next Developer: Partner authentication system complete and ready for use. Treatment center staff can now securely access their organization dashboard!*
+*Status: Complete Professional Website + Partner Dashboard + Admin Dashboard with Database Schema Investigation* ✅  
+*Latest Enhancement: Admin authentication fixed, fake data eliminated, comprehensive database schema investigation completed*  
+*Current Branch: admin-dashboard-crm*  
+*Critical Next Step: Database schema cleanup - 100 organizations need proper type/status values to match intended schema*

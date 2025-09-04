@@ -366,7 +366,7 @@ export type Database = {
       payers: {
         Row: {
           created_at: string | null
-          credentialing_status: string | null
+          status_code: string | null
           effective_date: string | null
           id: string
           name: string | null
@@ -379,7 +379,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
-          credentialing_status?: string | null
+          status_code?: string | null
           effective_date?: string | null
           id?: string
           name?: string | null
@@ -392,7 +392,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
-          credentialing_status?: string | null
+          status_code?: string | null
           effective_date?: string | null
           id?: string
           name?: string | null
@@ -1627,5 +1627,12 @@ export interface Payer {
     name: string
     payer_type?: string
     state?: string
+    status_code?: string
+    effective_date?: string | null
+    notes?: string | null
+    projected_effective_date?: string | null
+    requires_attending?: boolean | null
+    requires_individual_contract?: boolean
+    created_at?: string | null
 }
 

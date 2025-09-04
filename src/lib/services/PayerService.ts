@@ -66,7 +66,7 @@ export class PayerService {
       const { data: payers, error } = await this.supabase
         .from('payers')
         .select('*')
-        .eq('credentialing_status', 'Approved')
+        .eq('status_code', 'Approved')
         .not('effective_date', 'is', null)
         .lte('effective_date', today)
         .order('name')
@@ -167,7 +167,7 @@ export class PayerService {
     const effectiveDate = payer.effective_date ? new Date(payer.effective_date) : null
     
     return (
-      payer.credentialing_status === 'Approved' &&
+      payer.status_code === 'Approved' &&
       effectiveDate !== null &&
       effectiveDate <= today
     )

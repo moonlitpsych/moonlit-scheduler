@@ -18,7 +18,7 @@ export function enrichPayerWithStatus(payer: Payer): PayerWithStatus {
   let statusMessage: string
 
   if (
-    payer.credentialing_status === 'Approved' &&
+    payer.status_code === 'Approved' &&
     effectiveDate &&
     effectiveDate <= today
   ) {
@@ -29,7 +29,7 @@ export function enrichPayerWithStatus(payer: Payer): PayerWithStatus {
       statusMessage += " All appointments will be supervised by our attending physician."
     }
   } else if (
-    payer.credentialing_status === 'Approved' &&
+    payer.status_code === 'Approved' &&
     effectiveDate &&
     effectiveDate > today
   ) {
@@ -38,18 +38,18 @@ export function enrichPayerWithStatus(payer: Payer): PayerWithStatus {
   } else if (
     projectedDate &&
     projectedDate > today &&
-    ['Waiting on them', 'In progress'].includes(payer.credentialing_status || '')
+    ['Waiting on them', 'In progress'].includes(payer.status_code || '')
   ) {
     acceptanceStatus = 'future'
     statusMessage = `We're working to accept this insurance by ${projectedDate.toLocaleDateString()}.`
   } else if (
-    ['Waiting on them', 'In progress'].includes(payer.credentialing_status || '')
+    ['Waiting on them', 'In progress'].includes(payer.status_code || '')
   ) {
     acceptanceStatus = 'future'
     statusMessage = "We're working to get in network with this payer. Join our waitlist!"
   } else {
     acceptanceStatus = 'not-accepted'
-    switch (payer.credentialing_status) {
+    switch (payer.status_code) {
       case 'X Denied or perm. blocked':
         statusMessage = "This payer doesn't accept new providers currently, but you can join our waitlist."
         break

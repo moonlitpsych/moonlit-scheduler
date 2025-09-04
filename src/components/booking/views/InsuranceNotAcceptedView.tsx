@@ -83,12 +83,13 @@ export default function InsuranceNotAcceptedView({
                     </div>
                     
                     <h1 className="text-4xl md:text-5xl font-light text-[#091747] mb-6 font-['Newsreader']">
-                        We do not yet accept {payerName}
+                        We cannot accept {payerName} as payment
                     </h1>
                     
                     <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed mb-12">
-                        We're working on getting credentialed with this insurance. Leave your contact 
-                        information and we'll notify you when we're in-network.
+                        We are not credentialed with this insurance, but it's important for us to know 
+                        that you'd like us to accept it. Leave your contact information and we'll let 
+                        you know if we pursue credentialing with this provider in the future.
                     </p>
                 </div>
 
@@ -153,7 +154,7 @@ export default function InsuranceNotAcceptedView({
                                 disabled={isSubmitting}
                                 className="w-full py-4 px-6 bg-[#BF9C73] hover:bg-[#A8875F] disabled:bg-stone-400 text-white rounded-xl font-medium transition-colors"
                             >
-                                {isSubmitting ? 'Adding to waitlist...' : 'Notify me when available'}
+                                {isSubmitting ? 'Submitting interest...' : 'Let us know you\'re interested'}
                             </button>
                         </form>
                     </div>

@@ -10,42 +10,42 @@ export async function POST() {
         name: 'Cash pay',
         payer_type: 'self_pay',
         state: 'Utah',
-        credentialing_status: 'approved',
+        status_code: 'approved',
         effective_date: new Date().toISOString().split('T')[0], // Today
       },
       {
         name: 'Credit card pay',
         payer_type: 'self_pay', 
         state: 'Utah',
-        credentialing_status: 'approved',
+        status_code: 'approved',
         effective_date: new Date().toISOString().split('T')[0], // Today
       },
       {
         name: 'ACH pay',
         payer_type: 'self_pay',
         state: 'Utah',
-        credentialing_status: 'approved',
+        status_code: 'approved',
         effective_date: new Date().toISOString().split('T')[0], // Today
       },
       {
         name: 'Cash pay',
         payer_type: 'self_pay',
         state: 'Idaho',
-        credentialing_status: 'approved',
+        status_code: 'approved',
         effective_date: new Date().toISOString().split('T')[0], // Today
       },
       {
         name: 'Credit card pay',
         payer_type: 'self_pay',
         state: 'Idaho',
-        credentialing_status: 'approved',
+        status_code: 'approved',
         effective_date: new Date().toISOString().split('T')[0], // Today
       },
       {
         name: 'ACH pay',
         payer_type: 'self_pay',
         state: 'Idaho',
-        credentialing_status: 'approved',
+        status_code: 'approved',
         effective_date: new Date().toISOString().split('T')[0], // Today
       },
     ]
