@@ -6,6 +6,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { DashboardStats } from '@/components/partner-dashboard/DashboardStats'
 import { UpcomingAppointments } from '@/components/partner-dashboard/UpcomingAppointments'
+import CalendarExport from '@/components/partner-dashboard/CalendarExport'
 import { PartnerDashboardData, PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
 
@@ -215,6 +216,9 @@ export default function PartnerDashboardPage() {
 
           {/* Sidebar content */}
           <div className="space-y-6">
+            {/* Calendar Export */}
+            <CalendarExport partnerUser={partnerUser} />
+
             {/* Recent Activity */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-moonlit-navy mb-4 font-['Newsreader']">Recent Activity</h3>

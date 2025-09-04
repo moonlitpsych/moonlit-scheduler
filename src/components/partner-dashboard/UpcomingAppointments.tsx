@@ -2,6 +2,8 @@
 'use client'
 
 import { useState } from 'react'
+import { Download, Calendar } from 'lucide-react'
+import { useAppointmentExport } from '@/hooks/useAppointmentExport'
 
 interface Appointment {
   id: string
@@ -38,6 +40,7 @@ export function UpcomingAppointments({
   onRequestChange 
 }: UpcomingAppointmentsProps) {
   const [selectedAppointment, setSelectedAppointment] = useState<string | null>(null)
+  const { exportSingleAppointment, exportStatus, exportMessage } = useAppointmentExport()
 
   const formatDateTime = (dateTime: string) => {
     const date = new Date(dateTime)
@@ -211,7 +214,7 @@ export function UpcomingAppointments({
                   )}
                 </div>
 
-                <div className="flex space-x-3 mt-4">
+                <div className="flex flex-wrap gap-3 mt-4">
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -230,7 +233,59 @@ export function UpcomingAppointments({
                   >
                     Request Cancel
                   </button>
+                  
+                  {/* Individual Export Buttons */}
+                  <div className="flex items-center space-x-2 ml-auto">
+                    <span className="text-xs text-gray-500 font-['Newsreader']">Export to:</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        exportSingleAppointment(appointment, 'ics')
+                      }}
+                      disabled={exportStatus === 'loading'}
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-moonlit-brown hover:bg-moonlit-cream rounded transition-colors disabled:opacity-50"
+                      title="Export to iCalendar (.ics)"
+                    >
+                      <Calendar className="w-3 h-3 mr-1" />
+                      iCal
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        exportSingleAppointment(appointment, 'outlook')
+                      }}
+                      disabled={exportStatus === 'loading'}
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-moonlit-brown hover:bg-moonlit-cream rounded transition-colors disabled:opacity-50"
+                      title="Export to Outlook CSV"
+                    >
+                      <Download className="w-3 h-3 mr-1" />
+                      Outlook
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        exportSingleAppointment(appointment, 'google')
+                      }}
+                      disabled={exportStatus === 'loading'}
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-moonlit-brown hover:bg-moonlit-cream rounded transition-colors disabled:opacity-50"
+                      title="Export to Google CSV"
+                    >
+                      <Download className="w-3 h-3 mr-1" />
+                      Google
+                    </button>
+                  </div>
                 </div>
+                
+                {/* Export Status Message */}
+                {exportStatus !== 'idle' && exportMessage && (
+                  <div className={`mt-2 p-2 rounded text-sm ${
+                    exportStatus === 'loading' ? 'bg-blue-50 text-blue-800' :
+                    exportStatus === 'success' ? 'bg-green-50 text-green-800' :
+                    'bg-red-50 text-red-800'
+                  }`}>
+                    {exportMessage}
+                  </div>
+                )}
               </div>
             )}
           </div>

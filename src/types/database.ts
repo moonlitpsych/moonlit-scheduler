@@ -1633,6 +1633,31 @@ export interface Payer {
     projected_effective_date?: string | null
     requires_attending?: boolean | null
     requires_individual_contract?: boolean
+    allows_supervised?: boolean
+    supervision_level?: 'sign_off_only' | 'first_visit_in_person' | 'co_visit_required' | null
     created_at?: string | null
+}
+
+// New view for optimized provider-payer bookability
+export interface BookableProviderPayer {
+    provider_id: string
+    payer_id: string
+    via: 'direct' | 'supervised'
+    attending_provider_id: string | null
+    supervision_level: 'sign_off_only' | 'first_visit_in_person' | 'co_visit_required' | null
+    requires_co_visit: boolean
+    effective: string // daterange
+    bookable_from_date: string
+    // Provider details (joined)
+    first_name?: string
+    last_name?: string
+    title?: string
+    role?: string
+    provider_type?: string
+    is_active?: boolean
+    is_bookable?: boolean
+    languages_spoken?: string[] | string
+    profile_image_url?: string
+    about?: string
 }
 
