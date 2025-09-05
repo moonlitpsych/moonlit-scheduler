@@ -30,6 +30,11 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const supabase = createClientComponentClient<Database>()
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+  }
+
   // Get user info on mount
   useEffect(() => {
     const getUser = async () => {
@@ -52,11 +57,6 @@ export default function DashboardLayout({
   }, [supabase])
 
   // No auto-redirect - dashboard home page now exists
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/auth/login')
-  }
 
   const isAdmin = provider?.role === 'admin'
   const isPractitioner = provider && ['practitioner', 'psychiatrist', 'psychiatry_resident'].includes(provider.role)

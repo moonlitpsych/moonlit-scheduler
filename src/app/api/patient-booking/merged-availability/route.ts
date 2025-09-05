@@ -40,42 +40,65 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        console.log(`🔍 NEW: Getting ${provider_id ? 'provider-specific' : 'merged'} availability using v2 view for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
+        console.log(`🔍 Getting ${provider_id ? 'provider-specific' : 'merged'} availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
 
-        // Step 1: Get BOOKABLE providers using optimized view
-        let query = supabaseAdmin
-            .from('bookable_provider_payers_v2')
+        // Step 1: Get BOOKABLE providers using fallback approach since v2 view has issues
+        // First get providers who accept this payer
+        const { data: providerPayers, error: networkError } = await supabaseAdmin
+            .from('provider_payer_networks')
             .select(`
                 provider_id,
                 payer_id,
-                via,
-                attending_provider_id,
-                supervision_level,
-                requires_co_visit,
-                effective,
-                bookable_from_date,
-                first_name,
-                last_name,
-                title,
-                role,
-                provider_type,
-                is_active,
-                is_bookable
+                status,
+                effective_date,
+                providers!inner(
+                    id,
+                    first_name,
+                    last_name,
+                    title,
+                    role,
+                    provider_type,
+                    is_active,
+                    is_bookable,
+                    accepts_new_patients
+                )
             `)
             .eq('payer_id', payer_id)
+            .eq('providers.is_active', true)
+            .eq('providers.is_bookable', true)
+            .eq('status', 'in_network')
 
-        if (provider_id) {
-            query = query.eq('provider_id', provider_id)
-        }
-
-        const { data: bookableProviders, error: viewError } = await query
-
-        if (viewError) {
-            console.error('❌ Error fetching from bookable_provider_payers_v2:', viewError)
+        if (networkError) {
+            console.error('❌ Error fetching provider networks:', networkError)
             return NextResponse.json(
-                { error: 'Failed to fetch bookable providers', details: viewError, success: false },
+                { error: 'Failed to fetch provider networks', details: networkError, success: false },
                 { status: 500 }
             )
+        }
+
+        // Transform to match expected format
+        const bookableProviders = providerPayers?.map(pp => ({
+            provider_id: pp.provider_id,
+            payer_id: pp.payer_id,
+            via: 'direct',
+            attending_provider_id: null,
+            supervision_level: null,
+            requires_co_visit: false,
+            effective: true,
+            bookable_from_date: pp.effective_date,
+            first_name: pp.providers.first_name,
+            last_name: pp.providers.last_name,
+            title: pp.providers.title,
+            role: pp.providers.role,
+            provider_type: pp.providers.provider_type,
+            is_active: pp.providers.is_active,
+            is_bookable: pp.providers.is_bookable
+        })) || []
+
+        if (provider_id) {
+            const filtered = bookableProviders.filter(bp => bp.provider_id === provider_id)
+            bookableProviders.length = 0
+            bookableProviders.push(...filtered)
         }
 
         if (!bookableProviders || bookableProviders.length === 0) {
