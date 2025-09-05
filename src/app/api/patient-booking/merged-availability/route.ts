@@ -1,6 +1,8 @@
-// IMPROVED VERSION: Fixed availability logic with proper filtering and exception handling
-import { supabase, supabaseAdmin } from '@/lib/supabase'
+// IMPROVED VERSION: Uses bookable_provider_payers_v2 view and co-visit logic
+import { supabaseAdmin } from '@/lib/supabase'
 import { intakeQService } from '@/lib/services/intakeQService'
+import { coVisitService } from '@/lib/services/coVisitService'
+import { BookableProviderPayer } from '@/types/database'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface AvailableSlot {
@@ -17,6 +19,11 @@ interface AvailableSlot {
         title: string
         role: string
     }
+    // NEW: Co-visit support
+    isCoVisit?: boolean
+    attendingProviderId?: string
+    attendingName?: string
+    supervisionLevel?: 'sign_off_only' | 'first_visit_in_person' | 'co_visit_required'
 }
 
 export async function POST(request: NextRequest) {
@@ -33,53 +40,45 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        console.log(`🔍 Getting ${provider_id ? 'provider-specific' : 'merged'} availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
+        console.log(`🔍 NEW: Getting ${provider_id ? 'provider-specific' : 'merged'} availability using v2 view for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
 
-        // Step 1: Get BOOKABLE providers who accept this payer
+        // Step 1: Get BOOKABLE providers using optimized view
         let query = supabaseAdmin
-            .from('provider_payer_networks')
+            .from('bookable_provider_payers_v2')
             .select(`
                 provider_id,
-                effective_date,
-                status,
-                providers!inner (
-                    id,
-                    first_name,
-                    last_name,
-                    title,
-                    role,
-                    is_active,
-                    is_bookable,
-                    accepts_new_patients,
-                    telehealth_enabled
-                )
+                payer_id,
+                via,
+                attending_provider_id,
+                supervision_level,
+                requires_co_visit,
+                effective,
+                bookable_from_date,
+                first_name,
+                last_name,
+                title,
+                role,
+                provider_type,
+                is_active,
+                is_bookable
             `)
             .eq('payer_id', payer_id)
-            .eq('status', 'in_network')
-            .eq('providers.is_active', true)
-            .neq('providers.is_bookable', false) // CRITICAL: Only include bookable providers
 
         if (provider_id) {
             query = query.eq('provider_id', provider_id)
         }
 
-        const { data: networks, error: networksError } = await query
+        const { data: bookableProviders, error: viewError } = await query
 
-        if (networksError) {
-            console.error('❌ Error fetching provider networks:', networksError)
+        if (viewError) {
+            console.error('❌ Error fetching from bookable_provider_payers_v2:', viewError)
             return NextResponse.json(
-                { error: 'Failed to fetch provider networks', details: networksError, success: false },
+                { error: 'Failed to fetch bookable providers', details: viewError, success: false },
                 { status: 500 }
             )
         }
 
-        const providers = networks?.map(n => n.providers) || []
-        const providerIds = providers.map(p => p.id)
-        
-        console.log(`👥 Found ${providers.length} BOOKABLE providers accepting this payer:`, 
-            providers.map(p => `${p.first_name} ${p.last_name} (bookable: ${p.is_bookable !== false})`))
-
-        if (providers.length === 0) {
+        if (!bookableProviders || bookableProviders.length === 0) {
             return NextResponse.json({
                 success: true,
                 data: {
@@ -90,6 +89,16 @@ export async function POST(request: NextRequest) {
                 }
             })
         }
+
+        const providerIds = bookableProviders.map(bp => bp.provider_id)
+        console.log(`👥 NEW: Found ${bookableProviders.length} BOOKABLE providers from v2 view:`, 
+            bookableProviders.map(bp => `${bp.first_name} ${bp.last_name} (via: ${bp.via}, co-visit: ${bp.requires_co_visit})`))
+
+        // Separate providers that need co-visit from regular providers
+        const coVisitProviders = bookableProviders.filter(bp => bp.requires_co_visit)
+        const regularProviders = bookableProviders.filter(bp => !bp.requires_co_visit)
+        
+        console.log(`🔄 Provider breakdown: ${regularProviders.length} regular, ${coVisitProviders.length} co-visit required`)
 
         const targetDate = new Date(requestDate)
         const dayOfWeek = targetDate.getDay()
@@ -152,18 +161,71 @@ export async function POST(request: NextRequest) {
 
         console.log(`📊 After applying exceptions: ${filteredAvailability.length} availability records`)
 
-        // Step 5: Generate time slots from filtered availability
+        // Step 5: Generate time slots (regular + co-visit)
         const allSlots: AvailableSlot[] = []
         
-        filteredAvailability?.forEach(avail => {
-            const provider = providers.find(p => p.id === avail.provider_id)
-            if (!provider) return
+        // Process regular providers
+        for (const avail of filteredAvailability || []) {
+            const provider = regularProviders.find(bp => bp.provider_id === avail.provider_id)
+            if (!provider) continue
 
-            console.log(`⏰ Processing availability for ${provider.first_name} ${provider.last_name}: ${avail.start_time} - ${avail.end_time}`)
-
-            const slots = generateTimeSlotsFromAvailability(avail, requestDate, provider, appointmentDuration)
+            console.log(`⏰ Regular provider ${provider.first_name} ${provider.last_name}: ${avail.start_time} - ${avail.end_time}`)
+            
+            const slots = generateTimeSlotsFromAvailability(avail, requestDate, {
+                id: provider.provider_id,
+                first_name: provider.first_name || '',
+                last_name: provider.last_name || '',
+                title: provider.title || 'MD',
+                role: provider.role || 'physician'
+            }, appointmentDuration)
             allSlots.push(...slots)
-        })
+        }
+
+        // Process co-visit providers
+        for (const coVisitProvider of coVisitProviders) {
+            if (!coVisitProvider.attending_provider_id) {
+                console.warn(`⚠️ Co-visit provider ${coVisitProvider.first_name} ${coVisitProvider.last_name} missing attending_provider_id`)
+                continue
+            }
+
+            console.log(`🤝 Processing co-visit for resident ${coVisitProvider.first_name} ${coVisitProvider.last_name} with attending ${coVisitProvider.attending_provider_id}`)
+            
+            try {
+                const coVisitSlots = await coVisitService.getCoVisitAvailability(
+                    coVisitProvider.provider_id,
+                    coVisitProvider.attending_provider_id,
+                    requestDate,
+                    appointmentDuration
+                )
+
+                // Convert co-visit slots to AvailableSlot format
+                const convertedSlots = coVisitSlots.map(cvSlot => ({
+                    date: requestDate,
+                    time: new Date(cvSlot.start_time).toTimeString().slice(0, 5),
+                    providerId: cvSlot.resident_provider_id,
+                    providerName: `${coVisitProvider.first_name} ${coVisitProvider.last_name} (with ${cvSlot.attending_name})`,
+                    duration: appointmentDuration,
+                    isAvailable: true,
+                    provider: {
+                        id: coVisitProvider.provider_id,
+                        first_name: coVisitProvider.first_name || '',
+                        last_name: coVisitProvider.last_name || '',
+                        title: coVisitProvider.title || 'MD',
+                        role: coVisitProvider.role || 'physician'
+                    },
+                    // NEW: Co-visit specific metadata
+                    isCoVisit: true,
+                    attendingProviderId: cvSlot.attending_provider_id,
+                    attendingName: cvSlot.attending_name,
+                    supervisionLevel: coVisitProvider.supervision_level
+                }))
+
+                allSlots.push(...convertedSlots)
+                console.log(`✅ Added ${convertedSlots.length} co-visit slots for ${coVisitProvider.first_name} ${coVisitProvider.last_name}`)
+            } catch (error) {
+                console.error(`❌ Error processing co-visit for ${coVisitProvider.first_name} ${coVisitProvider.last_name}:`, error)
+            }
+        }
 
         allSlots.sort((a, b) => a.time.localeCompare(b.time))
         console.log(`✅ Generated ${allSlots.length} total time slots from bookable providers`)
@@ -188,25 +250,31 @@ export async function POST(request: NextRequest) {
                 dateRange: { startDate: requestDate, endDate: requestEndDate },
                 slotsByDate,
                 availableSlots: finalSlots.slice(0, 50),
-                providers: providers.map(p => ({
-                    id: p.id,
-                    name: `${p.first_name} ${p.last_name}`,
-                    title: p.title,
-                    role: p.role,
-                    is_bookable: p.is_bookable
+                providers: bookableProviders.map(bp => ({
+                    id: bp.provider_id,
+                    name: `${bp.first_name} ${bp.last_name}`,
+                    title: bp.title,
+                    role: bp.role,
+                    is_bookable: bp.is_bookable,
+                    via: bp.via,
+                    requires_co_visit: bp.requires_co_visit,
+                    supervision_level: bp.supervision_level,
+                    attending_provider_id: bp.attending_provider_id
                 })),
                 debug: {
                     payer_id,
                     date: requestDate,
                     dayOfWeek,
-                    bookable_providers_found: providers.length,
+                    bookable_providers_found: bookableProviders.length,
+                    regular_providers: regularProviders.length,
+                    co_visit_providers: coVisitProviders.length,
                     base_availability_records: availability?.length || 0,
                     exceptions_found: exceptions?.length || 0,
                     filtered_availability_records: filteredAvailability.length,
                     slots_generated: allSlots.length,
                     final_slots: finalSlots.length
                 },
-                message: `Found ${finalSlots.length} available appointment slots from ${providers.length} bookable providers`
+                message: `Found ${finalSlots.length} available appointment slots from ${bookableProviders.length} bookable providers (${regularProviders.length} regular + ${coVisitProviders.length} co-visit)`
             }
         }
 

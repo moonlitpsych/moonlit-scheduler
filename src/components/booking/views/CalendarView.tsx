@@ -812,31 +812,46 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                     
                                     {consolidatedSlots.length > 0 ? (
                                         <div className="grid grid-cols-2 gap-3">
-                                            {consolidatedSlots.map((slot) => (
-                                                <button
-                                                    key={slot.time}
-                                                    onClick={() => handleSlotClick(slot)}
-                                                    className={`
-                                                        py-4 px-4 rounded-xl text-sm font-medium transition-all duration-200 font-['Newsreader']
-                                                        hover:scale-105 hover:shadow-md
-                                                        ${slot.isSelected
-                                                            ? 'bg-[#BF9C73] text-white shadow-lg scale-105'
-                                                            : 'bg-stone-100 hover:bg-stone-200 text-slate-700'
-                                                        }
-                                                    `}
-                                                >
-                                                    <div>{slot.displayTime}</div>
-                                                    <div className="text-xs opacity-80 mt-1">
-                                                        {bookingMode === 'by_provider' && selectedProvider
-                                                            ? (() => {
-                                                                const provider = providers.find(p => p.id === selectedProvider);
-                                                                return provider ? `${provider.first_name} ${provider.last_name}` : 'Selected Provider';
-                                                            })()
-                                                            : `${slot.availableSlots.length} provider${slot.availableSlots.length !== 1 ? 's' : ''} available`
-                                                        }
-                                                    </div>
-                                                </button>
-                                            ))}
+                                            {consolidatedSlots.map((slot) => {
+                                                // Check if any slots in this time are co-visit slots
+                                                const hasCoVisit = slot.availableSlots.some((s: any) => s.isCoVisit)
+                                                const coVisitSlot = slot.availableSlots.find((s: any) => s.isCoVisit)
+                                                
+                                                return (
+                                                    <button
+                                                        key={slot.time}
+                                                        onClick={() => handleSlotClick(slot)}
+                                                        className={`
+                                                            py-4 px-4 rounded-xl text-sm font-medium transition-all duration-200 font-['Newsreader'] relative
+                                                            hover:scale-105 hover:shadow-md
+                                                            ${slot.isSelected
+                                                                ? 'bg-[#BF9C73] text-white shadow-lg scale-105'
+                                                                : 'bg-stone-100 hover:bg-stone-200 text-slate-700'
+                                                            }
+                                                            ${hasCoVisit ? 'border-2 border-orange-300' : ''}
+                                                        `}
+                                                    >
+                                                        {/* Co-visit indicator */}
+                                                        {hasCoVisit && (
+                                                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-400 rounded-full" 
+                                                                 title="Co-visit required (resident + attending)"></div>
+                                                        )}
+                                                        
+                                                        <div>{slot.displayTime}</div>
+                                                        <div className="text-xs opacity-80 mt-1">
+                                                            {bookingMode === 'by_provider' && selectedProvider
+                                                                ? (() => {
+                                                                    const provider = providers.find(p => p.id === selectedProvider);
+                                                                    return provider ? `${provider.first_name} ${provider.last_name}` : 'Selected Provider';
+                                                                })()
+                                                                : hasCoVisit && coVisitSlot
+                                                                    ? `Co-visit: ${(coVisitSlot as any).provider_name}`
+                                                                    : `${slot.availableSlots.length} provider${slot.availableSlots.length !== 1 ? 's' : ''} available`
+                                                            }
+                                                        </div>
+                                                    </button>
+                                                )
+                                            })}
                                         </div>
                                     ) : !loading && !error ? (
                                         <div className="text-center py-8">
