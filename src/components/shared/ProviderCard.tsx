@@ -72,6 +72,7 @@ export default function ProviderCard({
     onClick
 }: ProviderCardProps) {
     const { openModal } = useProviderModal()
+    
     const displayName = provider.full_name || `Dr. ${provider.first_name} ${provider.last_name}`
     const initials = `${provider.first_name.charAt(0)}${provider.last_name.charAt(0)}`
 
@@ -188,36 +189,17 @@ export default function ProviderCard({
     }
 
     const renderAvailabilityStatus = () => {
-        if (!showAvailability || variant === 'directory') return null // Directory handles this differently
-
-        // Prioritize the availability field from database, then fallback to legacy fields
-        let status = 'Limited Availability'
-        let isAccepting = false
-
-        if (provider.availability && typeof provider.availability === 'string') {
-            // Use the availability field from database
-            status = provider.availability
-            isAccepting = provider.availability.toLowerCase().includes('accepting') || 
-                         provider.availability.toLowerCase().includes('available')
-        } else if (provider.new_patient_status) {
-            // Fallback to custom status
-            status = provider.new_patient_status
-            isAccepting = provider.accepts_new_patients !== false
-        } else if (provider.accepts_new_patients !== undefined) {
-            // Fallback to boolean field
-            status = provider.accepts_new_patients ? 'Accepting New Patients' : 'Limited Availability'
-            isAccepting = provider.accepts_new_patients
-        }
+        // Only show on directory variant
+        if (variant !== 'directory') return null
+        
+        // Simple status - only show "Accepting New Patients" for bookable providers
+        if (provider.is_bookable === false) return null
         
         return (
             <div className="mb-3">
-                <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium font-['Newsreader'] ${
-                    isAccepting 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-orange-100 text-orange-800'
-                }`}>
-                    <span className={`w-2 h-2 rounded-full mr-2 ${isAccepting ? 'bg-green-500' : 'bg-orange-500'}`}></span>
-                    {status}
+                <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium font-['Newsreader'] bg-green-100 text-green-800">
+                    <span className="w-2 h-2 rounded-full mr-2 bg-green-500"></span>
+                    Accepting New Patients
                 </span>
             </div>
         )

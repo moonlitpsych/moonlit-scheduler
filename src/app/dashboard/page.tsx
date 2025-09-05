@@ -78,7 +78,13 @@ export default function DashboardPage() {
                 .single()
 
             if (providerError || !providerData) {
-                console.error('Provider not found:', providerError)
+                console.error('Provider lookup failed:', {
+                    error: providerError,
+                    userId: user.id,
+                    userEmail: user.email
+                })
+                toast.error('Provider Not Found', `Provider account not found for ${user.email}. Please contact support.`)
+                setLoading(false)
                 return
             }
 

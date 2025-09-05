@@ -15,6 +15,7 @@ interface CalendarViewProps {
     onBackToInsurance: () => void
     bookingMode?: 'normal' | 'from-effective-date'
     intent: BookingIntent
+    selectedProvider?: { id: string, name: string } // NEW: for provider filtering
 }
 
 interface ConsolidatedTimeSlot {
@@ -33,7 +34,7 @@ interface AvailableSlot {
     provider_name?: string
 }
 
-export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance, bookingMode, intent }: CalendarViewProps) {
+export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBackToInsurance, bookingMode, intent, selectedProvider: propsSelectedProvider }: CalendarViewProps) {
     const [currentMonth, setCurrentMonth] = useState(new Date())
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date()) // Initialize with today
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
@@ -42,9 +43,9 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string>('')
     // Removed showInsuranceBanner state - redundant with subheader
-    const [viewMode, setViewMode] = useState<'by_availability' | 'by_provider'>('by_availability')
+    const [viewMode, setViewMode] = useState<'by_availability' | 'by_provider'>(propsSelectedProvider ? 'by_provider' : 'by_availability')
     const [providers, setProviders] = useState<any[]>([])
-    const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
+    const [selectedProvider, setSelectedProvider] = useState<string | null>(propsSelectedProvider?.id || null)
     const [loadingProviders, setLoadingProviders] = useState(false)
     
     // Language selection state
@@ -295,9 +296,10 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             console.warn('No payer selected, using cash-payment id to fetch all providers')
         }
 
-        // For provider-specific mode, require a selected provider
-        if (bookingMode === 'by_provider' && !effectiveProviderId) {
-            setError('Please select a provider first')
+        // For provider-specific mode, don't fetch availability until a provider is selected
+        if (viewMode === 'by_provider' && !selectedProvider) {
+            // In by_provider mode without a selected provider, don't fetch availability
+            // The UI will show the provider selection interface instead
             return
         }
 
@@ -308,10 +310,10 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             const dateString = format(date, 'yyyy-MM-dd')
             console.log('🔍 Fetching availability for:', {
                 payer_id: payerId,
-                provider_id: effectiveProviderId,
+                provider_id: selectedProvider,
                 date: dateString,
-                mode: bookingMode,
-                willSendProviderIdToAPI: bookingMode === 'by_provider' ? effectiveProviderId : undefined
+                mode: viewMode,
+                willSendProviderIdToAPI: viewMode === 'by_provider' || selectedProvider ? selectedProvider : undefined
             })
 
             let apiSlots: AvailableSlot[] = []
@@ -328,7 +330,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     body: JSON.stringify({
                         payer_id: payerId,
                         date: dateString,
-                        provider_id: bookingMode === 'by_provider' ? effectiveProviderId : undefined,
+                        provider_id: viewMode === 'by_provider' || selectedProvider ? selectedProvider : undefined,
                         language: selectedLanguage
                     })
                 })
@@ -400,12 +402,12 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         // Generate mock availability for the selected provider (weekdays only for demo)
                         if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday-Friday
                             apiSlots = [
-                                { date: dateString, time: '09:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '10:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '11:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '14:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '15:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
-                                { date: dateString, time: '16:00', duration: 60, provider_id: effectiveProviderId, available: true, provider_name: providerName },
+                                { date: dateString, time: '09:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '10:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '11:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '14:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '15:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
+                                { date: dateString, time: '16:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
                             ]
                             success = true
                             console.log(`✅ Strategy 3 SUCCESS: Generated availability for ${providerName}`)
@@ -839,14 +841,18 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                                         
                                                         <div>{slot.displayTime}</div>
                                                         <div className="text-xs opacity-80 mt-1">
-                                                            {bookingMode === 'by_provider' && selectedProvider
+                                                            {viewMode === 'by_provider' && selectedProvider
                                                                 ? (() => {
                                                                     const provider = providers.find(p => p.id === selectedProvider);
                                                                     return provider ? `${provider.first_name} ${provider.last_name}` : 'Selected Provider';
                                                                 })()
                                                                 : hasCoVisit && coVisitSlot
                                                                     ? `Co-visit: ${(coVisitSlot as any).provider_name}`
-                                                                    : `${slot.availableSlots.length} provider${slot.availableSlots.length !== 1 ? 's' : ''} available`
+                                                                    : (() => {
+                                                                        const uniqueProviders = new Set(slot.availableSlots.map((s: any) => s.provider_id));
+                                                                        const count = uniqueProviders.size;
+                                                                        return `${count} provider${count !== 1 ? 's' : ''} available`;
+                                                                    })()
                                                             }
                                                         </div>
                                                     </button>
@@ -969,48 +975,19 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         ← Back to Insurance
                     </button>
 
-                    <div className="flex items-center space-x-4">
-                        {/* TEMPORARY: Test bypass button */}
-                        <button
-                            onClick={() => {
-                                // Create a mock time slot to test patient info form
-                                const mockTimeSlot = {
-                                    provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad',
-                                    start_time: '2025-09-16T10:00:00',
-                                    end_time: '2025-09-16T11:00:00',
-                                    date: '2025-09-16',
-                                    time: '10:00 AM',
-                                    duration: 60,
-                                    isAvailable: true,
-                                    provider: {
-                                        id: '35ab086b-2894-446d-9ab5-3d41613017ad',
-                                        first_name: 'Test',
-                                        last_name: 'Provider',
-                                        title: 'MD',
-                                        role: 'physician'
-                                    }
-                                }
-                                onTimeSlotSelected(mockTimeSlot as any)
-                            }}
-                            className="py-3 px-4 rounded-xl font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white font-['Newsreader'] text-sm"
-                        >
-                            🧪 Test Patient Info Form
-                        </button>
-
-                        <button
-                            onClick={handleNext}
-                            disabled={!selectedSlot}
-                            className={`
-                                py-3 px-6 rounded-xl font-medium transition-all duration-200 font-['Newsreader']
-                                ${selectedSlot
-                                    ? 'bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-white shadow-lg hover:shadow-xl'
-                                    : 'bg-stone-300 text-stone-500 cursor-not-allowed'
-                                }
-                            `}
-                        >
-                            Continue to Patient Info →
-                        </button>
-                    </div>
+                    <button
+                        onClick={handleNext}
+                        disabled={!selectedSlot}
+                        className={`
+                            py-3 px-6 rounded-xl font-medium transition-all duration-200 font-['Newsreader']
+                            ${selectedSlot
+                                ? 'bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-white shadow-lg hover:shadow-xl'
+                                : 'bg-stone-300 text-stone-500 cursor-not-allowed'
+                            }
+                        `}
+                    >
+                        Continue to Patient Info →
+                    </button>
                 </div>
             </div>
         </div>

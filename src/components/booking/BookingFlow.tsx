@@ -38,6 +38,7 @@ export interface BookingState {
     selectedPayer?: Payer
     payerAcceptanceStatus?: 'not-accepted' | 'future' | 'active' | 'waitlist'
     bookingMode?: 'normal' | 'from-effective-date' // NEW: for "book anyway" functionality
+    selectedProvider?: { id: string, name: string } // NEW: for provider-specific booking
     selectedTimeSlot?: TimeSlot
     insuranceInfo?: InsuranceInfo
     roiContacts: ROIContact[]
@@ -441,6 +442,7 @@ export default function BookingFlow({
                         onBackToInsurance={handleBackToInsurance}
                         bookingMode={state.bookingMode}
                         intent={state.intent}
+                        selectedProvider={state.selectedProvider}
                     />
                 )
 
