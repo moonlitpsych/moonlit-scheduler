@@ -1593,15 +1593,22 @@ toast.error('Provider Not Found', `Provider account not found for ${user.email}.
 
 ---
 
-## 🏢 **PARTNER CRM DATABASE FIX (September 5, 2025)**
+## 🏢 **PARTNER CRM DATABASE FIX & COUNT RESOLUTION (September 5, 2025)**
 
-### **🎯 Partner CRM Data Source Resolution**
+### **🎯 Partner CRM Data Source Resolution + Dashboard Metrics Fix**
 **Files**: `src/app/api/admin/partners/route.ts`, `src/app/api/debug/check-partner-tables/route.ts`, `src/app/api/debug/test-partners-api/route.ts`
 
-#### ✅ **Critical Issue Identified & Resolved**
+#### ✅ **Critical Issues Identified & Resolved**
+
+**Issue #1: Wrong Data Source**
 - **🚨 Problem**: Partner CRM showing no data despite "very full partner_contacts table" with 172 records
 - **Root Cause**: Partners API was querying wrong table (`organizations` with 100 records instead of `partner_contacts` with 172 records)
 - **Data Mismatch**: API expected partner contacts but was returning therapy practice organizations instead
+
+**Issue #2: Dashboard Metrics Showing Zero**
+- **🚨 Problem**: Dashboard cards showing "Total Partners: 0" despite loading partner data correctly
+- **Root Cause**: Count query returning null due to variable reference bug in count logic  
+- **Impact**: Business development metrics completely inaccurate
 
 #### ✅ **Database Investigation Results**
 **Partner Contacts Table (172 records)**:
@@ -1614,18 +1621,21 @@ toast.error('Provider Not Found', `Provider account not found for ${user.email}.
 - Treatment centers and therapy practices (Center for Change, Cirque Lodge, etc.)
 - Wrong data source for individual partner contacts
 
-#### ✅ **API Fixes Implemented**
+#### ✅ **Comprehensive API Fixes Implemented**
 1. **Database Query Update**: Changed from `organizations` to `partner_contacts` table
 2. **Field Mapping**: Updated API to use partner contact fields (first_name, last_name, title, email, phone, notes)
 3. **Search Filters**: Updated to search partner contact fields instead of organization fields
 4. **Data Transformation**: Mapped partner contact data to frontend-expected format
+5. **Count Logic Fix**: Replaced failed Supabase count API with reliable array length approach
+6. **Enhanced Stage Logic**: Dynamic stage assignment based on contact notes and interaction history
+7. **Variable Reference Fix**: Corrected undefined variable causing null totals in debug endpoint
 
 #### ✅ **API Response Structure**
 ```javascript
 // Before: Empty results from organizations table
-{ success: true, data: [], total: 100 }
+{ success: true, data: [], total: 0 }
 
-// After: Rich partner contacts data
+// After: Rich partner contacts data with accurate counts
 { 
   success: true, 
   data: [
@@ -1635,24 +1645,52 @@ toast.error('Provider Not Found', `Provider account not found for ${user.email}.
       contact_email: "lisajonesphd@icloud.com",
       contact_phone: "3853993696",
       notes: "Left her a voicemail and sent an email — she responded...",
-      status: "contact"
+      stage: "qualified",
+      status: "prospect"
     }
   ],
-  total: 172 
+  total: 172,
+  pagination: {
+    page: 1,
+    per_page: 25, 
+    total: 172,
+    total_pages: 7
+  }
+}
+```
+
+#### ✅ **Enhanced Stage Determination Logic**
+```javascript
+// Intelligent stage assignment based on contact data
+if (contact.notes) {
+  const notes = contact.notes.toLowerCase()
+  if (notes.includes('responded') || notes.includes('thank you') || contact.email) {
+    stage = 'qualified'
+  }
+  if (notes.includes('full patient panel')) {
+    stage = 'live' 
+  }
+} else if (contact.email && contact.phone) {
+  stage = 'qualified' // Has both email and phone
+} else if (contact.email || contact.phone) {
+  stage = 'lead' // Has some contact info
 }
 ```
 
 #### ✅ **Debug Tools Created**
 - **`/api/debug/check-partner-tables`** - Investigates table structures and data counts
-- **`/api/debug/test-partners-api`** - Tests partner API logic without admin authentication
+- **`/api/debug/test-partners-api`** - Tests partner API logic without admin authentication  
 - **Database Analysis**: Confirmed 172 partner contacts vs 100 organizations
+- **Count Debugging**: Enhanced logging shows exact count values and error states
 
 ### **🔧 Technical Achievements This Session**
 - **Database Structure Investigation**: Identified correct data source for Partner CRM
 - **API Routing Fix**: Partners API now returns actual partner contact data
-- **Data Transformation**: Proper mapping of partner contact fields to frontend format
+- **Data Transformation**: Proper mapping of partner contact fields to frontend format  
 - **Search Functionality**: Updated filters to work with partner contact fields
-- **Error Resolution**: "Failed to fetch partners" error eliminated
+- **Count Logic Resolution**: Fixed dashboard metrics to show accurate totals
+- **Stage Classification**: Intelligent partner stage determination based on interaction history
+- **Error Resolution**: "Failed to fetch partners" error eliminated + count display fixed
 
 ### **✅ Testing Results (September 5, 2025)**
 ```
@@ -1660,21 +1698,27 @@ toast.error('Provider Not Found', `Provider account not found for ${user.email}.
 ✅ Partners API updated to query partner_contacts instead of organizations  
 ✅ API returns transformed partner data (Lisa Jones, Lee Beckstead, etc.)
 ✅ Contact information, titles, and collaboration notes displaying correctly
+✅ Dashboard metrics now show "Total Partners: 172" instead of 0
+✅ Count query working: "Found 25 partner contacts (172 total)" 
+✅ Pagination accurate: 7 total pages with 25 per page
+✅ Stage logic working: Partners categorized as lead/qualified/live
 ✅ Search filters updated for partner contact fields (name, email, title)
 ✅ Debug endpoints created for ongoing partner data investigation
 ✅ Frontend compatibility maintained with proper data transformation
 ```
 
 ### **🎯 Production Impact**
-- **Partner CRM Functionality Restored**: Admin users can now see 172 partner contacts
+- **Partner CRM Functionality Fully Restored**: Admin users can now see 172 partner contacts with accurate metrics
+- **Business Development Dashboard**: Accurate partner counts enable proper pipeline tracking and reporting
 - **Rich Contact Data**: Names, titles, phone numbers, email addresses, and detailed collaboration notes
-- **Business Development**: Access to therapist and psychologist contact database for partnership development
+- **Intelligent Categorization**: Partners automatically sorted into lead/qualified/live stages based on interaction history
 - **Data Integrity**: Using correct data source ensures accurate partner relationship management
+- **Performance**: Reliable count queries prevent dashboard loading issues
 
 ---
 
 *Last updated: September 5, 2025*  
-*Status: Complete Professional Website + Partner CRM Database Fix* ✅  
-*Latest Enhancement: Partner CRM now displays 172 partner contacts from correct database table*  
+*Status: Complete Professional Website + Partner CRM Database & Count Fix* ✅  
+*Latest Enhancement: Partner CRM fully restored with 172 partner contacts and accurate dashboard metrics*  
 *Current Branch: main*  
-*Critical Fix: Partners API updated to use partner_contacts table instead of organizations*
+*Critical Fixes: Partners API corrected + count query resolved + dashboard metrics working*
