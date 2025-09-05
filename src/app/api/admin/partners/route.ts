@@ -10,7 +10,8 @@ import { cookies } from 'next/headers'
 
 async function verifyAdminAccess() {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const cookieStore = await cookies()
+    const supabase = createServerComponentClient({ cookies: () => cookieStore })
     const { data: { user }, error } = await supabase.auth.getUser()
     
     if (error || !user || !isAdminEmail(user.email || '')) {
@@ -46,58 +47,36 @@ export async function GET(request: NextRequest) {
 
     console.log('🔍 Admin fetching partners:', { page, perPage, search, status, stage })
 
-    // Build query
+    // Query partner_contacts table for individual partner contacts (172 records)
     let query = supabaseAdmin
-      .from('partners')
+      .from('partner_contacts')
       .select(`
         id,
-        organization_id,
-        name,
-        contact_email,
-        contact_phone,
-        contact_person,
+        first_name,
+        last_name,
         title,
-        stage,
-        status,
-        source,
-        specialties,
-        insurance_types,
-        monthly_referral_capacity,
+        email,
+        phone,
+        is_primary,
         notes,
-        website,
-        linkedin_url,
-        first_contact_date,
-        last_contact_date,
-        contract_signed_date,
-        go_live_date,
-        created_by,
-        assigned_to,
+        partner_id,
+        organization_id,
         created_at,
-        updated_at,
-        organization:organizations(
-          id,
-          name,
-          slug,
-          type,
-          status,
-          primary_contact_email,
-          primary_contact_phone,
-          city,
-          state
-        )
+        updated_at
       `)
 
-    // Apply filters
+    // Apply filters (adapted for partner_contacts table)
     if (search) {
-      query = query.or(`name.ilike.%${search}%,contact_email.ilike.%${search}%,contact_person.ilike.%${search}%`)
+      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,title.ilike.%${search}%`)
     }
     
     if (status) {
-      query = query.eq('status', status)
+      query = query.eq('is_primary', status === 'primary')
     }
     
     if (stage) {
-      query = query.eq('stage', stage)
+      // Could filter by title or notes containing stage info
+      query = query.ilike('title', `%${stage}%`)
     }
 
     // Get total count for pagination
@@ -105,7 +84,7 @@ export async function GET(request: NextRequest) {
 
     // Get paginated results
     const offset = (page - 1) * perPage
-    const { data: partners, error } = await query
+    const { data: partnerContacts, error } = await query
       .order('created_at', { ascending: false })
       .range(offset, offset + perPage - 1)
 
@@ -117,18 +96,42 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Transform data for frontend
-    const transformedPartners = partners.map(partner => ({
-      ...partner,
-      organization_name: partner.organization?.name || 'No Organization',
-      organization_type: partner.organization?.type || null,
-      organization_status: partner.organization?.status || null,
-      location: partner.organization ? 
-        [partner.organization.city, partner.organization.state].filter(Boolean).join(', ') : 
-        null
+    // Transform partner_contacts data to look like partners for frontend compatibility
+    const transformedPartners = (partnerContacts || []).map(contact => ({
+      id: contact.id,
+      name: `${contact.first_name} ${contact.last_name}`.trim(),
+      contact_email: contact.email,
+      contact_phone: contact.phone,
+      contact_person: `${contact.first_name} ${contact.last_name}`.trim(),
+      title: contact.title,
+      stage: 'active', // Default stage
+      status: contact.is_primary ? 'primary' : 'contact',
+      source: null,
+      specialties: [contact.title].filter(Boolean), // Use title as specialty
+      insurance_types: [],
+      monthly_referral_capacity: null,
+      notes: contact.notes,
+      website: null,
+      linkedin_url: null,
+      first_contact_date: contact.created_at?.split('T')[0],
+      last_contact_date: contact.updated_at?.split('T')[0],
+      contract_signed_date: null,
+      go_live_date: null,
+      created_by: 'system',
+      assigned_to: 'admin',
+      created_at: contact.created_at,
+      updated_at: contact.updated_at,
+      organization_name: null, // Could join with organizations table if needed
+      organization_type: null,
+      organization_status: null,
+      location: null,
+      // Add partner_contacts specific fields
+      partner_id: contact.partner_id,
+      organization_id: contact.organization_id,
+      is_primary: contact.is_primary
     }))
 
-    console.log(`✅ Found ${partners.length} partners (${count} total)`)
+    console.log(`✅ Found ${partnerContacts?.length || 0} partner contacts (${count} total)`)
 
     return NextResponse.json({
       success: true,
@@ -179,71 +182,16 @@ export async function POST(request: NextRequest) {
 
     console.log('➕ Admin creating new partner:', body.name)
 
-    // Create partner record
-    const { data: partner, error } = await supabaseAdmin
-      .from('partners')
-      .insert({
-        name: body.name,
-        organization_id: body.organization_id || null,
-        contact_email: body.contact_email || null,
-        contact_phone: body.contact_phone || null,
-        contact_person: body.contact_person || null,
-        title: body.title || null,
-        stage: body.stage || 'lead',
-        status: body.status || 'prospect',
-        source: body.source || null,
-        specialties: body.specialties || [],
-        insurance_types: body.insurance_types || [],
-        monthly_referral_capacity: body.monthly_referral_capacity || null,
-        notes: body.notes || null,
-        website: body.website || null,
-        linkedin_url: body.linkedin_url || null,
-        first_contact_date: body.first_contact_date || new Date().toISOString().split('T')[0],
-        created_by: user?.id || 'admin',
-        assigned_to: body.assigned_to || user?.id || 'admin'
-      })
-      .select(`
-        *,
-        organization:organizations(
-          id,
-          name,
-          slug,
-          type,
-          status
-        )
-      `)
-      .single()
-
-    if (error) {
-      console.error('❌ Error creating partner:', error)
-      return NextResponse.json(
-        { success: false, error: 'Failed to create partner' },
-        { status: 500 }
-      )
-    }
-
-    // Log admin action
-    await supabaseAdmin
-      .from('scheduler_audit_logs')
-      .insert({
-        action: 'partner_created',
-        resource_type: 'partner',
-        resource_id: partner.id,
-        performed_by: user?.id || 'admin',
-        details: {
-          partner_name: partner.name,
-          admin_email: user?.email,
-          ip_address: request.headers.get('x-forwarded-for') || 'unknown'
-        }
-      })
-
-    console.log('✅ Partner created successfully:', partner.id)
-
-    return NextResponse.json({
-      success: true,
-      data: partner,
-      message: 'Partner created successfully'
-    })
+    // For now, return a message that partner creation requires a separate partners table
+    // This is a placeholder until the proper partners table is created
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Partner creation not available - partners table needs to be created in database',
+        message: 'Currently showing organizations as partners. To create actual partners, a partners table is required.'
+      },
+      { status: 501 }
+    )
 
   } catch (error: any) {
     console.error('❌ Admin create partner error:', error)
