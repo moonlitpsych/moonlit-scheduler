@@ -79,8 +79,13 @@ export async function GET(request: NextRequest) {
       query = query.ilike('title', `%${stage}%`)
     }
 
-    // Get total count for pagination
-    const { count } = await query.select('*', { count: 'exact', head: true })
+    // Get total count for pagination (simpler approach)
+    const { data: allContacts, error: countError } = await supabaseAdmin
+      .from('partner_contacts')
+      .select('id')
+    
+    const totalCount = allContacts?.length || 0
+    console.log('🔢 Count query results:', { totalCount, countError, allContactsLength: allContacts?.length })
 
     // Get paginated results
     const offset = (page - 1) * perPage
@@ -97,41 +102,60 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform partner_contacts data to look like partners for frontend compatibility
-    const transformedPartners = (partnerContacts || []).map(contact => ({
-      id: contact.id,
-      name: `${contact.first_name} ${contact.last_name}`.trim(),
-      contact_email: contact.email,
-      contact_phone: contact.phone,
-      contact_person: `${contact.first_name} ${contact.last_name}`.trim(),
-      title: contact.title,
-      stage: 'active', // Default stage
-      status: contact.is_primary ? 'primary' : 'contact',
-      source: null,
-      specialties: [contact.title].filter(Boolean), // Use title as specialty
-      insurance_types: [],
-      monthly_referral_capacity: null,
-      notes: contact.notes,
-      website: null,
-      linkedin_url: null,
-      first_contact_date: contact.created_at?.split('T')[0],
-      last_contact_date: contact.updated_at?.split('T')[0],
-      contract_signed_date: null,
-      go_live_date: null,
-      created_by: 'system',
-      assigned_to: 'admin',
-      created_at: contact.created_at,
-      updated_at: contact.updated_at,
-      organization_name: null, // Could join with organizations table if needed
-      organization_type: null,
-      organization_status: null,
-      location: null,
-      // Add partner_contacts specific fields
-      partner_id: contact.partner_id,
-      organization_id: contact.organization_id,
-      is_primary: contact.is_primary
-    }))
+    const transformedPartners = (partnerContacts || []).map(contact => {
+      // Determine stage based on contact data and notes
+      let stage = 'lead' // Default to lead
+      
+      if (contact.notes) {
+        const notes = contact.notes.toLowerCase()
+        if (notes.includes('responded') || notes.includes('thank you') || contact.email) {
+          stage = 'qualified'
+        }
+        if (notes.includes('full patient panel')) {
+          stage = 'live'
+        }
+      } else if (contact.email && contact.phone) {
+        stage = 'qualified' // Has both email and phone
+      } else if (contact.email || contact.phone) {
+        stage = 'lead' // Has some contact info
+      }
 
-    console.log(`✅ Found ${partnerContacts?.length || 0} partner contacts (${count} total)`)
+      return {
+        id: contact.id,
+        name: `${contact.first_name} ${contact.last_name}`.trim(),
+        contact_email: contact.email,
+        contact_phone: contact.phone,
+        contact_person: `${contact.first_name} ${contact.last_name}`.trim(),
+        title: contact.title,
+        stage,
+        status: contact.is_primary ? 'active' : 'prospect',
+        source: null,
+        specialties: [contact.title].filter(Boolean), // Use title as specialty
+        insurance_types: [],
+        monthly_referral_capacity: null,
+        notes: contact.notes,
+        website: null,
+        linkedin_url: null,
+        first_contact_date: contact.created_at?.split('T')[0],
+        last_contact_date: contact.updated_at?.split('T')[0],
+        contract_signed_date: null,
+        go_live_date: null,
+        created_by: 'system',
+        assigned_to: 'admin',
+        created_at: contact.created_at,
+        updated_at: contact.updated_at,
+        organization_name: null, // Could join with organizations table if needed
+        organization_type: null,
+        organization_status: null,
+        location: null,
+        // Add partner_contacts specific fields
+        partner_id: contact.partner_id,
+        organization_id: contact.organization_id,
+        is_primary: contact.is_primary
+      }
+    })
+
+    console.log(`✅ Found ${partnerContacts?.length || 0} partner contacts (${totalCount} total)`)
 
     return NextResponse.json({
       success: true,
@@ -139,8 +163,8 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         per_page: perPage,
-        total: count || 0,
-        total_pages: Math.ceil((count || 0) / perPage)
+        total: totalCount,
+        total_pages: Math.ceil(totalCount / perPage)
       }
     })
 

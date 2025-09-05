@@ -37,8 +37,13 @@ export async function GET(request: NextRequest) {
       query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,title.ilike.%${search}%`)
     }
 
-    // Get total count for pagination
-    const { count } = await query.select('*', { count: 'exact', head: true })
+    // Get total count for pagination (simpler approach)  
+    const { data: allContacts, error: countError } = await supabaseAdmin
+      .from('partner_contacts')
+      .select('id')
+    
+    const totalCount = allContacts?.length || 0
+    console.log('🔢 Debug Count query results:', { totalCount, countError, allContactsLength: allContacts?.length })
 
     // Get paginated results
     const offset = (page - 1) * perPage
@@ -75,7 +80,7 @@ export async function GET(request: NextRequest) {
       is_primary: contact.is_primary
     }))
 
-    console.log(`✅ Found ${partnerContacts?.length || 0} partner contacts (${count} total)`)
+    console.log(`✅ Found ${partnerContacts?.length || 0} partner contacts (${totalCount} total)`)
 
     return NextResponse.json({
       success: true,
@@ -84,12 +89,12 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         per_page: perPage,
-        total: count || 0,
-        total_pages: Math.ceil((count || 0) / perPage)
+        total: totalCount,
+        total_pages: Math.ceil(totalCount / perPage)
       },
       debug: {
         query_table: 'partner_contacts',
-        total_contacts: count,
+        total_contacts: totalCount,
         sample_names: partnerContacts?.slice(0, 3).map(c => `${c.first_name} ${c.last_name}`)
       }
     })
