@@ -257,7 +257,7 @@ This professional healthcare website + booking system is **production-ready** fo
 
 **Design System**:
 - **Typography**: Newsreader font family with light font weights
-- **Colors**: Navy (#091747), Earth brown (#BF9C73), Cream (#FEF8F1), Orange accent (#E67A47)
+- **Colors**: Navy (#091747), Earth brown (#BF9C73), Cream (#FEF8F1), Orange accent (#E67A47), **Coral (#f28c69)** - *New: Used for payment acceptance tokens with white text*
 - **Components**: Professional Header, Footer, Provider cards with consistent styling
 - **Responsive**: Mobile-first approach with elegant desktop enhancements
 
@@ -803,6 +803,31 @@ new_patient_status TEXT,                    -- DEPRECATED: Custom status message
 - **Type Safety**: Proper null checking prevents `toLowerCase() is not a function` errors
 - **Clean Status Logic**: Standardized messaging instead of freeform text
 - **Professional Presentation**: Attending physicians listed for credibility without booking confusion
+
+#### ✅ **UPDATED: Practitioners Directory Implementation (September 9, 2025)**
+**⚠️ LOGIC UPDATED TO USE DATABASE FIELD - list_on_provider_page controls visibility**
+
+**Files**: `src/app/practitioners/page.tsx`, `src/app/api/providers/all/route.ts`
+- **API Endpoint**: `/api/providers/all` - Returns providers where `list_on_provider_page = true`
+- **Database Control**: `list_on_provider_page` boolean field on providers table controls which providers appear
+- **Frontend Logic**: Conditional Book buttons - only shown for `provider.is_bookable !== false`
+- **Current Results**: Only providers with `list_on_provider_page = true` are displayed
+- **Business Rule**: Providers are listed or suppressed based on the `list_on_provider_page` database field
+
+**Updated Database Logic:**
+```sql
+-- Providers visibility controlled by database field
+SELECT * FROM providers 
+WHERE is_active = true 
+AND list_on_provider_page = true
+ORDER BY last_name;
+```
+
+**Why This Implementation:**
+- **Database-Driven Control**: Admin can control provider visibility through database
+- **Professional Credibility**: Shows only providers marked for public listing
+- **No Booking Confusion**: Non-bookable providers still have no Book buttons when displayed
+- **Flexible Management**: Easy to add/remove providers from public directory
 
 ### **🔧 **Migration & Cleanup Tools**
 **Files**: `database-migrations/`, `src/app/api/admin/migrate-is-bookable/`, `src/app/api/admin/cleanup-obsolete-fields/`
@@ -1717,8 +1742,69 @@ if (contact.notes) {
 
 ---
 
-*Last updated: September 5, 2025*  
-*Status: Complete Professional Website + Partner CRM Database & Count Fix* ✅  
-*Latest Enhancement: Partner CRM fully restored with 172 partner contacts and accurate dashboard metrics*  
+## 📋 **UPDATED: PRACTITIONERS DIRECTORY USES list_on_provider_page FIELD (September 9, 2025)**
+
+### **🎯 NEW IMPLEMENTATION - DATABASE-CONTROLLED PROVIDER VISIBILITY**
+
+**Files**: `src/app/practitioners/page.tsx`, `src/app/api/providers/all/route.ts`
+
+#### ✅ **UPDATED: Practitioners Directory Logic**
+- **API Endpoint**: `/api/providers/all` returns providers where `list_on_provider_page = true`
+- **Database Control**: `list_on_provider_page` boolean field controls which providers appear
+- **Frontend Logic**: Conditional Book buttons only for `provider.is_bookable !== false`
+- **Business Rule**: Provider visibility managed through database field, not hardcoded logic
+- **Admin Control**: Easy to show/hide providers by updating database field
+
+#### ✅ **Database Schema Implementation**
+```sql
+-- Provider visibility system
+is_active BOOLEAN DEFAULT true,             -- Provider is active in system
+list_on_provider_page BOOLEAN,              -- Show on public practitioners page
+is_bookable BOOLEAN DEFAULT true,           -- Can patients book this provider?
+accepts_new_patients BOOLEAN DEFAULT true,  -- Is provider accepting new patients?
+
+-- Query used by /api/providers/all:
+SELECT * FROM providers 
+WHERE is_active = true 
+AND list_on_provider_page = true
+ORDER BY last_name;
+```
+
+#### ✅ **Why This Implementation Is Better**
+- **Database-Driven**: Admin can control provider visibility without code changes
+- **Flexible Management**: Easy to add/remove providers from public directory
+- **Professional Control**: Healthcare practice can manage public presentation
+- **No Booking Confusion**: Non-bookable providers still have no Book buttons when displayed
+- **Business Logic Separation**: Visibility control separated from booking capability
+
+#### ✅ **⚠️ MAINTAIN CONDITIONAL BUTTON LOGIC**
+```typescript
+// CRITICAL: Keep this conditional logic for displayed providers
+actionButton={
+  provider.is_bookable !== false ? {
+    text: `Book ${provider.first_name ? `Dr. ${provider.last_name}` : 'Appointment'}`,
+    // ...booking logic
+  } : undefined // Non-bookable providers get NO Book button
+}
+```
+
+### **✅ Updated Implementation (September 9, 2025)**
+```
+✅ API updated to use list_on_provider_page field
+✅ Database query filters by is_active = true AND list_on_provider_page = true
+✅ Only providers marked for public listing appear
+✅ Book buttons still conditional on is_bookable field
+✅ Admin can control provider visibility through database
+✅ Professional healthcare presentation maintained
+✅ No patient booking confusion
+✅ API endpoint `/api/providers/all` updated correctly
+✅ Conditional UI logic preserved for booking buttons
+```
+
+---
+
+*Last updated: September 9, 2025*  
+*Status: Complete Professional Website + Critical Practitioners Directory Documentation* ✅  
+*Latest Enhancement: Added critical documentation to prevent future modifications of practitioners directory*  
 *Current Branch: main*  
-*Critical Fixes: Partners API corrected + count query resolved + dashboard metrics working*
+*IMPORTANT: Practitioners directory implementation documented to preserve healthcare practice requirements*

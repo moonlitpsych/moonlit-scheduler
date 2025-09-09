@@ -1,5 +1,16 @@
 // Shared Provider types for consistency across the application
 
+export type FocusAreaType = 'specialty' | 'condition' | 'population' | 'treatment' | 'modality' | 'setting'
+
+export interface FocusItem {
+    id: string
+    slug: string
+    name: string
+    type: FocusAreaType
+    priority: number
+    confidence: number
+}
+
 export interface Provider {
     id: string
     first_name: string
@@ -25,6 +36,11 @@ export interface Provider {
     accepted_insurances?: string[]
     intakeq_practitioner_id?: string // For IntakeQ integration
     provider_name?: string // Sometimes used in appointment data
+    focus_json?: FocusItem[] | null // Focus areas from v_providers_with_focus
+}
+
+export interface ProviderWithFocus extends Provider {
+    focus_json: FocusItem[] | null // From v_providers_with_focus
 }
 
 export type ProviderCardVariant = 

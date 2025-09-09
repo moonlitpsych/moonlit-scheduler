@@ -1,11 +1,50 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useProviderModal } from '@/contexts/ProviderModalContext'
-import { Provider } from '@/components/shared/ProviderCard'
+import { Provider, FocusAreaType } from '@/types/provider'
 import { generateProviderSlug } from '@/lib/utils/providerSlug'
+
+interface AcceptedPayment {
+    id: string
+    name: string
+    type: string
+    state: string
+    status: string
+    is_active: boolean
+    is_projected: boolean
+    display_name: string
+}
 
 export default function ProviderModal() {
     const { isOpen, provider, closeModal, showBookButton } = useProviderModal()
+    const [acceptedPayments, setAcceptedPayments] = useState<AcceptedPayment[]>([])
+    const [paymentsLoading, setPaymentsLoading] = useState(false)
+    const [selfPayAvailable, setSelfPayAvailable] = useState(true)
+
+    // Fetch accepted payments when modal opens
+    useEffect(() => {
+        if (isOpen && provider && provider.is_bookable !== false) {
+            setPaymentsLoading(true)
+            fetch(`/api/providers/${provider.id}/accepted-payments`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        setAcceptedPayments(data.data.accepted_payments || [])
+                        setSelfPayAvailable(data.data.self_pay_available || true)
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to fetch accepted payments:', error)
+                })
+                .finally(() => {
+                    setPaymentsLoading(false)
+                })
+        } else {
+            setAcceptedPayments([])
+            setSelfPayAvailable(true)
+        }
+    }, [isOpen, provider])
 
     if (!isOpen || !provider) return null
 
@@ -26,6 +65,20 @@ export default function ProviderModal() {
     const displayName = provider.full_name || `${provider.first_name} ${provider.last_name}`
     const initials = `${provider.first_name?.charAt(0) || ''}${provider.last_name?.charAt(0) || ''}`
 
+    const chipClassForType = (type: FocusAreaType): string => {
+        const baseClass = "inline-block px-3 py-2 text-sm rounded font-['Newsreader'] transition-colors"
+        
+        switch (type) {
+            case 'specialty':
+                return `${baseClass} bg-[#BF9C73]/30 text-[#BF9C73] border border-[#BF9C73]/50 font-medium`
+            case 'population':
+                return `${baseClass} bg-[#E67A47]/20 text-[#E67A47] rounded-full`
+            case 'condition':
+            default:
+                return `${baseClass} bg-[#BF9C73]/20 text-[#BF9C73]`
+        }
+    }
+
     return (
         <>
             {/* Backdrop */}
@@ -38,14 +91,14 @@ export default function ProviderModal() {
             {/* Modal */}
             <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
                 <div 
-                    className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden transition-all duration-300 transform"
+                    className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden transition-all duration-300 transform flex flex-col"
                     onClick={(e) => e.stopPropagation()}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="provider-modal-title"
                 >
                     {/* Header with Close Button */}
-                    <div className="relative p-4 pb-3 sm:p-8 sm:pb-6">
+                    <div className="relative p-4 pb-3 sm:p-8 sm:pb-6 flex-shrink-0">
                         <button
                             onClick={closeModal}
                             className="absolute top-3 right-3 sm:top-6 sm:right-6 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
@@ -58,7 +111,7 @@ export default function ProviderModal() {
                     </div>
 
                     {/* Scrollable Content */}
-                    <div className="px-4 pb-4 sm:px-8 sm:pb-8 overflow-y-auto max-h-[calc(95vh-80px)] sm:max-h-[calc(90vh-100px)]">
+                    <div className="px-4 sm:px-8 overflow-y-auto flex-1 min-h-0">
                         {/* Provider Image and Name */}
                         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 md:gap-8 mb-6 sm:mb-8">
                             {/* Large Provider Image */}
@@ -122,7 +175,88 @@ export default function ProviderModal() {
 
                         {/* Provider Details */}
                         <div className="space-y-8">
-                            {/* Languages */}
+                            {/* Focus Areas */}
+                            {provider.focus_json && provider.focus_json.length > 0 && (
+                                <div>
+                                    <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">Areas of Focus</h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        {provider.focus_json.map((focus) => (
+                                            <span 
+                                                key={focus.id}
+                                                className={chipClassForType(focus.type)}
+                                                title={`${focus.type}: ${focus.name}`}
+                                            >
+                                                {focus.name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* About - no title, just content */}
+                            {provider.about && (
+                                <div>
+                                    <p className="text-[#091747]/80 font-['Newsreader'] leading-relaxed">
+                                        {provider.about}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Accepted Forms of Payment - only show for bookable providers */}
+                            {provider.is_bookable !== false && (
+                                <div>
+                                    <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">Accepted Forms of Payment</h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        {/* Always show self-pay options for bookable providers */}
+                                        {selfPayAvailable && (
+                                            <span className="px-3 py-2 bg-[#f28c69] text-white rounded-lg font-['Newsreader'] text-sm border border-[#f28c69] shadow-sm">
+                                                Cash | Credit Card | ACH
+                                            </span>
+                                        )}
+                                        
+                                        {/* Show loading state */}
+                                        {paymentsLoading && (
+                                            <span className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg font-['Newsreader'] text-sm animate-pulse">
+                                                Loading insurance information...
+                                            </span>
+                                        )}
+                                        
+                                        {/* Show accepted insurance payments */}
+                                        {!paymentsLoading && acceptedPayments.map((payment) => (
+                                            <span 
+                                                key={payment.id}
+                                                className={`px-3 py-2 rounded-lg font-['Newsreader'] text-sm border shadow-sm ${
+                                                    payment.is_active 
+                                                        ? 'bg-[#f28c69] text-white border-[#f28c69]' 
+                                                        : 'bg-[#f28c69]/60 text-white border-[#f28c69]/60'
+                                                }`}
+                                                title={payment.is_active ? 'Currently accepting' : 'Coming soon'}
+                                            >
+                                                {payment.display_name}
+                                                {payment.is_projected && (
+                                                    <span className="ml-1 text-xs opacity-90">(projected)</span>
+                                                )}
+                                            </span>
+                                        ))}
+                                        
+                                        {/* Show message if no insurance found but not loading */}
+                                        {!paymentsLoading && acceptedPayments.length === 0 && selfPayAvailable && (
+                                            <span className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg font-['Newsreader'] text-sm italic">
+                                                Insurance coverage information coming soon
+                                            </span>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Optional note for projected payments */}
+                                    {acceptedPayments.some(p => p.is_projected) && (
+                                        <p className="text-xs text-[#091747]/60 font-['Newsreader'] mt-2 italic">
+                                            Projected payments are pending final approval
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Languages - moved to just above education */}
                             {provider.languages_spoken && provider.languages_spoken.length > 0 && (
                                 <div>
                                     <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">Languages</h3>
@@ -136,32 +270,6 @@ export default function ProviderModal() {
                                             </span>
                                         ))}
                                     </div>
-                                </div>
-                            )}
-
-                            {/* Specialties */}
-                            {provider.specialties && provider.specialties.length > 0 && (
-                                <div>
-                                    <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">Specialties</h3>
-                                    <div className="flex flex-wrap gap-2">
-                                        {provider.specialties.map((specialty, index) => (
-                                            <span 
-                                                key={index}
-                                                className="px-3 py-2 bg-[#BF9C73]/20 text-[#BF9C73] rounded-lg font-['Newsreader'] text-sm"
-                                            >
-                                                {specialty}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* About - no title, just content */}
-                            {provider.about && (
-                                <div>
-                                    <p className="text-[#091747]/80 font-['Newsreader'] leading-relaxed">
-                                        {provider.about}
-                                    </p>
                                 </div>
                             )}
 
@@ -197,9 +305,11 @@ export default function ProviderModal() {
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Action Buttons */}
-                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-6 sm:mt-10 pt-6 sm:pt-8 border-t border-gray-200">
+                    {/* Fixed Action Buttons at Bottom */}
+                    <div className="flex-shrink-0 px-4 pb-4 sm:px-8 sm:pb-8 border-t border-gray-200 bg-white">
+                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4 sm:pt-6">
                             {/* Only show Book button if provider is bookable AND we're in directory context */}
                             {provider.is_bookable !== false && showBookButton && (
                                 <button

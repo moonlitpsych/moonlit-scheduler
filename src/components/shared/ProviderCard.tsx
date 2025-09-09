@@ -1,33 +1,8 @@
 'use client'
 
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import { useProviderModal } from '@/contexts/ProviderModalContext'
-
-export interface Provider {
-    id: string
-    first_name: string
-    last_name: string
-    full_name?: string // Some APIs return this directly
-    title?: string
-    profile_image_url?: string
-    bio?: string
-    about?: string // About text from database
-    what_i_look_for_in_a_patient?: string // What they look for in patients
-    med_school_org?: string // Medical school
-    med_school_grad_year?: number // Graduation year
-    residency_org?: string // Residency organization
-    specialties?: string[]
-    languages_spoken?: string[]
-    accepts_new_patients?: boolean
-    availability?: string  // Provider availability status from database
-    is_bookable?: boolean  // Whether provider can be booked by patients
-    new_patient_status?: string // From booking flow
-    next_available?: string
-    state_licenses?: string[]
-    accepted_insurances?: string[]
-    role?: string
-    provider_type?: string
-}
+import { Provider, FocusItem, FocusAreaType } from '@/types/provider'
 
 export type ProviderCardVariant = 
     | 'selection'      // For provider selection in booking flow
@@ -205,7 +180,74 @@ export default function ProviderCard({
         )
     }
 
+    const chipClassForType = (type: FocusAreaType): string => {
+        const baseClass = "inline-block px-2 py-1 text-xs rounded font-['Newsreader'] transition-colors"
+        
+        switch (type) {
+            case 'specialty':
+                return `${baseClass} bg-[#BF9C73]/30 text-[#BF9C73] border border-[#BF9C73]/50 font-medium`
+            case 'population':
+                return `${baseClass} bg-[#E67A47]/20 text-[#E67A47] rounded-full`
+            case 'condition':
+            default:
+                return `${baseClass} bg-[#BF9C73]/20 text-[#BF9C73]`
+        }
+    }
+
+    const renderFocusChips = () => {
+        if (!provider.focus_json || provider.focus_json.length === 0) return null
+
+        const maxToShow = variant === 'compact' ? 1 : 3
+        const chips = provider.focus_json.slice(0, maxToShow)
+        const overflow = Math.max(0, provider.focus_json.length - chips.length)
+        const [showTooltip, setShowTooltip] = useState(false)
+        
+        return (
+            <div className="mb-3">
+                <div className="flex flex-wrap gap-1">
+                    {chips.map((focus) => (
+                        <span
+                            key={focus.id}
+                            className={chipClassForType(focus.type)}
+                            title={`${focus.type}: ${focus.name}`}
+                        >
+                            {focus.name}
+                        </span>
+                    ))}
+                    {overflow > 0 && (
+                        <div className="relative">
+                            <span
+                                className="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded font-['Newsreader'] cursor-help hover:bg-gray-200 transition-colors"
+                                onMouseEnter={() => setShowTooltip(true)}
+                                onMouseLeave={() => setShowTooltip(false)}
+                                onClick={(e) => e.stopPropagation()}
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`${overflow} more focus areas: ${provider.focus_json!.slice(maxToShow).map(f => f.name).join(', ')}`}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        setShowTooltip(!showTooltip)
+                                    }
+                                }}
+                            >
+                                +{overflow}
+                            </span>
+                            {showTooltip && (
+                                <div className="absolute bottom-full left-0 mb-1 p-2 bg-gray-900 text-white text-xs rounded shadow-lg whitespace-nowrap z-10 font-['Newsreader']">
+                                    {provider.focus_json!.slice(maxToShow).map(f => f.name).join(', ')}
+                                    <div className="absolute top-full left-2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        )
+    }
+
     const renderSpecialties = () => {
+        // Legacy specialty rendering - only show if no focus areas available
+        if (provider.focus_json && provider.focus_json.length > 0) return null
         if (!showSpecialties || !provider.specialties?.length) return null
 
         const maxToShow = variant === 'compact' ? 1 : variant === 'calendar' ? 2 : 3
@@ -407,9 +449,6 @@ export default function ProviderCard({
                         </p>
                     </div>
                 </div>
-                <p className="text-xs sm:text-sm text-[#091747]/70 mb-2 font-['Newsreader'] leading-relaxed">
-                    {provider.specialty}
-                </p>
                 <div className="flex flex-wrap gap-1 sm:gap-2"> {/* Clean layout without button padding */}
                     {/* Only show availability status if provider is bookable */}
                     {provider.is_bookable !== false && (
@@ -468,6 +507,7 @@ export default function ProviderCard({
                 <div>
                     {renderAvailabilityStatus()}
                     {renderNextAvailable()}
+                    {renderFocusChips()}
                     {renderSpecialties()}
                     {renderLanguages()}
                     {renderActionButton()}
