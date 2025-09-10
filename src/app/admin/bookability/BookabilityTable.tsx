@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, Calendar, User, Building } from 'lucide-react'
 import { BookabilityRow } from './page'
 import BookabilityRowDetails from './BookabilityRowDetails'
+import { formatDateSafe } from '@/lib/utils/dateFormatting'
 
 interface BookabilityTableProps {
   data: BookabilityRow[]
@@ -47,18 +48,9 @@ export default function BookabilityTable({ data, loading }: BookabilityTableProp
     )
   }
 
-  // Format date helper
+  // Format date helper - timezone-safe version
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return '-'
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      })
-    } catch {
-      return dateString
-    }
+    return formatDateSafe(dateString, { format: 'short' })
   }
 
   // Sort data

@@ -5,6 +5,7 @@ import { X, User, Building2, Calendar, ExternalLink, Shield, Network } from 'luc
 import { BookabilityRow } from './page'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
+import { formatDateSafe } from '@/lib/utils/dateFormatting'
 
 interface BookabilityRowDetailsProps {
   row: BookabilityRow
@@ -80,19 +81,9 @@ export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDe
     return `${provider.first_name} ${provider.last_name}${provider.title ? `, ${provider.title}` : ''}`
   }
 
-  // Format date
+  // Format date - timezone-safe version
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Not set'
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
-    } catch {
-      return dateString
-    }
+    return formatDateSafe(dateString, { format: 'weekday', fallback: 'Not set' })
   }
 
   // Check if relationship is active today
