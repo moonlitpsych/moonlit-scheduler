@@ -1,4 +1,4 @@
-// IMPROVED VERSION: Uses bookable_provider_payers_v2 view and co-visit logic
+// IMPROVED VERSION: Uses v_bookable_provider_payer view and co-visit logic
 import { supabaseAdmin } from '@/lib/supabase'
 import { intakeQService } from '@/lib/services/intakeQService'
 import { coVisitService } from '@/lib/services/coVisitService'
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
         }
 
         const providerIds = bookableProviders.map(bp => bp.provider_id)
-        console.log(`👥 NEW: Found ${bookableProviders.length} BOOKABLE providers from v2 view:`, 
+        console.log(`👥 NEW: Found ${bookableProviders.length} BOOKABLE providers from fallback logic:`, 
             bookableProviders.map(bp => `${bp.first_name} ${bp.last_name} (via: ${bp.via}, co-visit: ${bp.requires_co_visit})`))
 
         // Separate providers that need co-visit from regular providers

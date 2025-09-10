@@ -50,18 +50,17 @@ export async function GET(
         let payerError = null
 
         try {
-            console.log('📡 Attempting to use bookable_provider_payers_v2 view...')
-            // Try to get bookable relationships from v2 view
+            console.log('📡 Attempting to use v_bookable_provider_payer view...')
+            // Try to get bookable relationships from new view
             const { data: relationships, error: relationshipError } = await supabaseAdmin
-                .from('bookable_provider_payers_v2')
+                .from('v_bookable_provider_payer')
                 .select(`
                     provider_id,
                     payer_id,
-                    via,
-                    attending_provider_id,
-                    supervision_level,
-                    requires_co_visit,
-                    effective,
+                    network_status,
+                    billing_provider_id,
+                    rendering_provider_id,
+                    effective_date,
                     bookable_from_date
                 `)
                 .eq('provider_id', provider_id)
@@ -93,17 +92,17 @@ export async function GET(
                 }
 
                 acceptedPayers = payers || []
-                console.log(`✅ v2 view success: Found ${acceptedPayers.length} accepted payers`)
+                console.log(`✅ new view success: Found ${acceptedPayers.length} accepted payers`)
             } else {
-                console.log('⚠️ No relationships found in v2 view')
+                console.log('⚠️ No relationships found in new view')
                 acceptedPayers = []
             }
         } catch (error: any) {
-            console.warn('⚠️ v2 view not accessible, falling back to legacy logic:', error.message)
+            console.warn('⚠️ new view not accessible, falling back to legacy logic:', error.message)
             payerError = error
         }
 
-        // FALLBACK: Use legacy provider_payer_networks if v2 view not ready
+        // FALLBACK: Use legacy provider_payer_networks if new view not ready
         if (payerError || acceptedPayers.length === 0) {
             console.log('🔄 FALLBACK: Using legacy provider_payer_networks logic')
             
@@ -176,7 +175,7 @@ export async function GET(
                 debug_info: {
                     total_payers_found: acceptedPayers.length,
                     filtered_payments: acceptedPayments.length,
-                    used_v2_view: !payerError,
+                    used_new_view: !payerError,
                     fallback_mode: !!payerError
                 }
             }

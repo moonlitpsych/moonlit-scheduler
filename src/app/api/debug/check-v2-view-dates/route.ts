@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
         // Get all v2 view data for the payer with date fields (no first_name/last_name in v2 view)
         const { data: v2Data, error: v2Error } = await supabaseAdmin
-            .from('bookable_provider_payers_v2')
+            .from('v_bookable_provider_payer')
             .select('provider_id, payer_id, effective, bookable_from_date')
             .eq('payer_id', payerId)
 

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
         // A. Check if MV is healthy & populated
         try {
             const { data: mvCheck, error: mvError } = await supabaseAdmin
-                .rpc('bookable_provider_payers_v2')
+                .rpc('v_bookable_provider_payer')
                 .select('via')
 
             if (mvError) {
@@ -64,17 +64,17 @@ export async function GET(request: NextRequest) {
             results.errors.push(`Slots function test error: ${error.message}`)
         }
 
-        // C. Check bookable_provider_payers_v2 view directly
+        // C. Check v_bookable_provider_payer view directly
         try {
             const { data: bppData, error: bppError } = await supabaseAdmin
-                .from('bookable_provider_payers_v2')
+                .from('v_bookable_provider_payer')
                 .select('provider_id, payer_id, via, supervision_level, requires_co_visit')
                 .limit(5)
 
             if (bppError) {
                 results.errors.push(`BPP v2 view error: ${bppError.message}`)
             } else {
-                results.views.bookable_provider_payers_v2 = {
+                results.views.v_bookable_provider_payer = {
                     accessible: true,
                     sample_rows: bppData?.length || 0,
                     sample_data: bppData || []

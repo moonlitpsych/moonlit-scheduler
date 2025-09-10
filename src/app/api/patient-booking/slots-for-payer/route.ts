@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 
         console.log(`📊 FALLBACK: Cache verification passed - ${cacheCheck.length} records found`)
 
-        // 2b: Get bookable providers from bookable_provider_payers_v2 for date window 
+        // 2b: Get bookable providers from v_bookable_provider_payer for date window 
         // (but use legacy fallback due to daterange parsing issues)
         console.log('👥 FALLBACK: Getting bookable provider relationships...')
         const { data: providerNetworks, error: networksError } = await supabaseAdmin

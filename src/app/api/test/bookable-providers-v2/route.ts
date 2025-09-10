@@ -1,4 +1,4 @@
-// Test endpoint for new bookable_provider_payers_v2 view
+// Test endpoint for new v_bookable_provider_payer view
 import { supabaseAdmin } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -8,11 +8,11 @@ export async function GET(request: NextRequest) {
         const payer_id = searchParams.get('payer_id')
         const limit = parseInt(searchParams.get('limit') || '10')
 
-        console.log('🧪 Testing bookable_provider_payers_v2 view:', { payer_id, limit })
+        console.log('🧪 Testing v_bookable_provider_payer view:', { payer_id, limit })
 
         // Test query without payer filter first
         const { data: allBookable, error: allError } = await supabaseAdmin
-            .from('bookable_provider_payers_v2')
+            .from('v_bookable_provider_payer')
             .select('*')
             .limit(limit)
 
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
             console.error('❌ Error querying view (all):', allError)
             return NextResponse.json({
                 success: false,
-                error: 'Failed to query bookable_provider_payers_v2 view',
+                error: 'Failed to query v_bookable_provider_payer view',
                 details: allError,
                 sql_hint: 'Make sure the view exists and has proper permissions'
             }, { status: 500 })
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
         let payerSpecific = null
         if (payer_id) {
             const { data: payerData, error: payerError } = await supabaseAdmin
-                .from('bookable_provider_payers_v2')
+                .from('v_bookable_provider_payer')
                 .select('*')
                 .eq('payer_id', payer_id)
                 .limit(limit)
@@ -41,10 +41,10 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        // Analyze the results
-        const directCount = allBookable?.filter(bp => bp.via === 'direct').length || 0
-        const supervisedCount = allBookable?.filter(bp => bp.via === 'supervised').length || 0
-        const coVisitCount = allBookable?.filter(bp => bp.requires_co_visit).length || 0
+        // Analyze the results - map new view fields to legacy format
+        const directCount = allBookable?.filter(bp => bp.network_status === 'in_network').length || 0
+        const supervisedCount = allBookable?.filter(bp => bp.network_status === 'supervised').length || 0
+        const coVisitCount = 0 // Co-visit not modeled in new view
 
         const response = {
             success: true,
@@ -57,20 +57,21 @@ export async function GET(request: NextRequest) {
                     provider_name: `${bp.first_name} ${bp.last_name}`,
                     provider_id: bp.provider_id,
                     payer_id: bp.payer_id,
-                    via: bp.via,
-                    requires_co_visit: bp.requires_co_visit,
-                    attending_provider_id: bp.attending_provider_id,
-                    supervision_level: bp.supervision_level,
-                    effective: bp.effective,
+                    // Map new fields to legacy format
+                    via: bp.network_status === 'in_network' ? 'direct' : 'supervised',
+                    requires_co_visit: false, // Not in new view
+                    attending_provider_id: bp.billing_provider_id,
+                    supervision_level: bp.network_status === 'supervised' ? 'standard' : null,
+                    effective: bp.effective_date,
                     bookable_from_date: bp.bookable_from_date
                 })),
                 ...(payerSpecific && {
                     payer_specific_results: {
                         payer_id,
                         total_providers: payerSpecific.length,
-                        direct: payerSpecific.filter(bp => bp.via === 'direct').length,
-                        supervised: payerSpecific.filter(bp => bp.via === 'supervised').length,
-                        providers: payerSpecific.map(bp => `${bp.first_name} ${bp.last_name} (${bp.via})`)
+                        direct: payerSpecific.filter(bp => bp.network_status === 'in_network').length,
+                        supervised: payerSpecific.filter(bp => bp.network_status === 'supervised').length,
+                        providers: payerSpecific.map(bp => `${bp.first_name} ${bp.last_name} (${bp.network_status === 'in_network' ? 'direct' : 'supervised'})`)
                     }
                 })
             },
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
             total: allBookable?.length,
             direct: directCount,
             supervised: supervisedCount,
-            co_visit: coVisitCount
+            co_visit: coVisitCount // Always 0 in new view
         })
 
         return NextResponse.json(response)
