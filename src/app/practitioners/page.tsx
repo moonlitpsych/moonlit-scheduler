@@ -23,35 +23,23 @@ export default function PractitionersPage() {
   // Mobile search state
   const [showMobileFilters, setShowMobileFilters] = useState(false)
 
-  // Load available payers on mount
+  // Load available payers on mount - only contracted payers
   useEffect(() => {
     const loadPayers = async () => {
       setPayersLoading(true)
       try {
-        const { data: payers, error } = await supabase
-          .from('payers')
-          .select('*')
-          .order('name')
-          .limit(20)
+        const response = await fetch('/api/payers/contracted')
+        const result = await response.json()
 
-        if (error) throw error
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to fetch contracted payers')
+        }
 
-        // Remove duplicates and sort by acceptance priority
-        const uniquePayers = Array.from(
-          new Map((payers || []).map(payer => [payer.name, payer])).values()
-        )
-        
-        const commonPayers = ['Cash | Credit Card | ACH', 'Utah Medicaid Fee-for-Service', 'Molina', 'Aetna', 'DMBA']
-        const sortedPayers = uniquePayers.sort((a, b) => {
-          const aCommon = commonPayers.includes(a.name) ? commonPayers.indexOf(a.name) : 999
-          const bCommon = commonPayers.includes(b.name) ? commonPayers.indexOf(b.name) : 999
-          if (aCommon !== bCommon) return aCommon - bCommon
-          return a.name.localeCompare(b.name)
-        })
-        
-        setAvailablePayers(sortedPayers)
+        // Payers are already deduplicated and sorted by the API
+        setAvailablePayers(result.data || [])
+        console.log('✅ Loaded contracted payers:', result.debug_info)
       } catch (error: any) {
-        console.error('Error loading payers:', error)
+        console.error('Error loading contracted payers:', error)
       } finally {
         setPayersLoading(false)
       }

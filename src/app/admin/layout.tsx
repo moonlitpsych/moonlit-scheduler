@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { checkAdminAuth } from '@/lib/admin-auth'
-import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity } from 'lucide-react'
+import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity, GitBranch } from 'lucide-react'
 import Link from 'next/link'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
@@ -161,6 +161,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <Activity className="h-4 w-4" />
             <span>Contracts</span>
+          </Link>
+
+          <Link
+            href="/admin/bookability"
+            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+          >
+            <GitBranch className="h-4 w-4" />
+            <span>Bookability</span>
           </Link>
           
           <Link
