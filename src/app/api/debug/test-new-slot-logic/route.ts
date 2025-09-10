@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
             current_vs_new_comparison: null
         }
 
-        // Step 1: Get bookable relationships from v2 view
+        // Step 1: Get bookable relationships from new view
         const { data: relationships, error: relError } = await supabaseAdmin
-            .from('bookable_provider_payers_v2')
+            .from('v_bookable_provider_payer')
             .select('*')
             .eq('payer_id', payerId)
 
