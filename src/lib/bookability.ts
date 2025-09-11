@@ -58,6 +58,10 @@ export interface ProviderData {
   about: string | null
   accepts_new_patients: boolean
   list_on_provider_page: boolean
+  med_school_org: string | null
+  med_school_grad_year: string | null
+  residency_org: string | null
+  focus_json?: any[] // Focus areas data
 }
 
 // ================================
@@ -365,7 +369,10 @@ export const PROVIDER_DETAILS_SELECT = `
   profile_image_url,
   about,
   accepts_new_patients,
-  list_on_provider_page
+  list_on_provider_page,
+  med_school_org,
+  med_school_grad_year,
+  residency_org
 ` as const
 
 /**

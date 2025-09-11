@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
             const providerIds = [...new Set(relationships.map(r => r.provider_id))]
             
             // Get provider details separately
-            const { data: providers, error: providerError } = await supabaseAdmin
+            const { data: basicProviders, error: providerError } = await supabaseAdmin
                 .from('providers')
                 .select(PROVIDER_DETAILS_SELECT)
                 .in('id', providerIds)
@@ -78,9 +78,46 @@ export async function POST(request: NextRequest) {
                 throw providerError
             }
 
+            // Get focus areas for each provider (same as /api/providers/all)
+            const providersWithFocus = []
+            if (basicProviders) {
+                for (const provider of basicProviders) {
+                    // Get focus areas for this provider
+                    const { data: focusAreas, error: focusError } = await supabaseAdmin
+                        .from('provider_focus_areas')
+                        .select(`
+                            focus_areas!inner (
+                                id,
+                                name,
+                                slug,
+                                focus_type
+                            ),
+                            priority,
+                            confidence
+                        `)
+                        .eq('provider_id', provider.id)
+                        .eq('focus_areas.is_active', true)
+                        .order('priority', { ascending: true })
+
+                    const focus_json = focusAreas ? focusAreas.map(fa => ({
+                        id: fa.focus_areas.id,
+                        name: fa.focus_areas.name,
+                        slug: fa.focus_areas.slug,
+                        type: fa.focus_areas.focus_type,
+                        priority: fa.priority,
+                        confidence: fa.confidence
+                    })) : []
+
+                    providersWithFocus.push({
+                        ...provider,
+                        focus_json
+                    })
+                }
+            }
+
             // Join relationships with provider data using bookability mapper
             const data = relationships.map(rel => {
-                const provider = providers?.find(p => p.id === rel.provider_id)
+                const provider = providersWithFocus?.find(p => p.id === rel.provider_id)
                 if (!provider) return null
                 
                 return mapViewToLegacyFormat(
