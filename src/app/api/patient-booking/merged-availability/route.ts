@@ -42,57 +42,37 @@ export async function POST(request: NextRequest) {
 
         console.log(`🔍 Getting ${provider_id ? 'provider-specific' : 'merged'} availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
 
-        // Step 1: Get BOOKABLE providers using fallback approach since v2 view has issues
-        // First get providers who accept this payer
-        const { data: providerPayers, error: networkError } = await supabaseAdmin
-            .from('provider_payer_networks')
-            .select(`
-                provider_id,
-                payer_id,
-                status,
-                effective_date,
-                providers!inner(
-                    id,
-                    first_name,
-                    last_name,
-                    title,
-                    role,
-                    provider_type,
-                    is_active,
-                    is_bookable,
-                    accepts_new_patients
-                )
-            `)
+        // Step 1: Get BOOKABLE providers using canonical view (consistent with providers-for-payer API)
+        const { data: bookableRelationships, error: networkError } = await supabaseAdmin
+            .from('v_bookable_provider_payer')
+            .select('*')
             .eq('payer_id', payer_id)
-            .eq('providers.is_active', true)
-            .eq('providers.is_bookable', true)
-            .eq('status', 'in_network')
 
         if (networkError) {
-            console.error('❌ Error fetching provider networks:', networkError)
+            console.error('❌ Error fetching bookable provider relationships:', networkError)
             return NextResponse.json(
-                { error: 'Failed to fetch provider networks', details: networkError, success: false },
+                { error: 'Failed to fetch bookable provider relationships', details: networkError, success: false },
                 { status: 500 }
             )
         }
 
-        // Transform to match expected format
-        const bookableProviders = providerPayers?.map(pp => ({
-            provider_id: pp.provider_id,
-            payer_id: pp.payer_id,
-            via: 'direct',
-            attending_provider_id: null,
-            supervision_level: null,
-            requires_co_visit: false,
+        // Transform canonical view data to expected format
+        const bookableProviders = bookableRelationships?.map(rel => ({
+            provider_id: rel.provider_id,
+            payer_id: rel.payer_id,
+            via: rel.network_status === 'in_network' ? 'direct' : 'supervised',
+            attending_provider_id: rel.billing_provider_id,
+            supervision_level: rel.network_status === 'supervised' ? 'standard' : null,
+            requires_co_visit: false, // Not modeled in new view
             effective: true,
-            bookable_from_date: pp.effective_date,
-            first_name: pp.providers.first_name,
-            last_name: pp.providers.last_name,
-            title: pp.providers.title,
-            role: pp.providers.role,
-            provider_type: pp.providers.provider_type,
-            is_active: pp.providers.is_active,
-            is_bookable: pp.providers.is_bookable
+            bookable_from_date: rel.effective_date,
+            first_name: rel.first_name,
+            last_name: rel.last_name,
+            title: rel.title,
+            role: rel.role,
+            provider_type: rel.provider_type,
+            is_active: rel.is_active,
+            is_bookable: rel.is_bookable
         })) || []
 
         if (provider_id) {
@@ -175,7 +155,7 @@ export async function POST(request: NextRequest) {
             )
             
             if (hasException) {
-                const provider = providers.find(p => p.id === avail.provider_id)
+                const provider = bookableProviders.find(p => p.provider_id === avail.provider_id)
                 console.log(`🚫 Filtered out availability for ${provider?.first_name} ${provider?.last_name} due to exception`)
             }
             
