@@ -12,6 +12,7 @@ interface PayerSearchState {
     loading: boolean
     showResults: boolean
     error: string | null
+    isMedicaidSearch?: boolean
 }
 
 interface PayerSearchViewProps {
@@ -30,7 +31,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
         error: null
     })
 
-    // Direct Supabase search function
+    // Direct Supabase search function with medicaid-aware search
     const searchPayers = useCallback(async (query: string) => {
         if (query.length < 2) {
             setState(prev => ({ ...prev, showResults: false, results: [] }))
@@ -42,19 +43,60 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
         try {
             console.log('🔍 Searching payers for:', query)
             
-            const { data: payers, error } = await supabase
-                .from('payers')
-                .select('*')
-                .ilike('name', `%${query}%`)
-                .order('name')
-                .limit(10)
+            // Check if user is searching for medicaid
+            const isMedicaidSearch = query.toLowerCase().includes('medicaid')
+            
+            let payers
+            if (isMedicaidSearch) {
+                // For medicaid searches, get both name matches AND all medicaid-type payers
+                const [nameResults, medicaidResults] = await Promise.all([
+                    supabase
+                        .from('payers')
+                        .select('*')
+                        .ilike('name', `%${query}%`)
+                        .order('name')
+                        .limit(10),
+                    supabase
+                        .from('payers')
+                        .select('*')
+                        .eq('payer_type', 'Medicaid')
+                        .not('status_code', 'in', '(denied,blocked,withdrawn,on_pause)')
+                        .order('name')
+                        .limit(15)
+                ])
 
-            if (error) {
-                console.error('❌ Supabase error:', error)
-                throw error
+                if (nameResults.error || medicaidResults.error) {
+                    throw nameResults.error || medicaidResults.error
+                }
+
+                // Combine and deduplicate results, prioritizing exact name matches
+                const combinedMap = new Map()
+                
+                // Add name matches first (higher priority)
+                nameResults.data?.forEach(payer => combinedMap.set(payer.id, payer))
+                
+                // Add medicaid type matches (lower priority, won't overwrite existing)
+                medicaidResults.data?.forEach(payer => {
+                    if (!combinedMap.has(payer.id)) {
+                        combinedMap.set(payer.id, payer)
+                    }
+                })
+
+                payers = Array.from(combinedMap.values())
+            } else {
+                // Normal name-based search
+                const { data, error } = await supabase
+                    .from('payers')
+                    .select('*')
+                    .ilike('name', `%${query}%`)
+                    .order('name')
+                    .limit(10)
+                
+                if (error) throw error
+                payers = data
             }
 
-            console.log('✅ Found payers:', payers?.length || 0)
+            console.log('✅ Found payers:', payers?.length || 0, isMedicaidSearch ? '(medicaid-aware search)' : '(normal search)')
             
             // Sort results by acceptance priority: active > future > waitlist > not-accepted
             const sortedPayers = (payers || []).sort((a, b) => {
@@ -90,7 +132,8 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                 ...prev,
                 results: sortedPayers,
                 loading: false,
-                showResults: true
+                showResults: true,
+                isMedicaidSearch: isMedicaidSearch
             }))
         } catch (error: any) {
             console.error('💥 Search error:', error)
@@ -307,9 +350,26 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                         <div className="space-y-3 mb-6">
                             {state.results.length > 0 ? (
                                 <>
-                                    <p className="text-sm text-slate-500 px-2 mb-4">
-                                        Found {state.results.length} matching insurance plan{state.results.length > 1 ? 's' : ''}
-                                    </p>
+                                    <div className="px-2 mb-4">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <p className="text-sm text-slate-500">
+                                                Found {state.results.length} matching insurance plan{state.results.length > 1 ? 's' : ''}
+                                            </p>
+                                            {state.isMedicaidSearch && (
+                                                <div className="flex items-center gap-2 px-3 py-1 rounded-full" style={{backgroundColor: '#bc956b20'}}>
+                                                    <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#bc956b'}}></div>
+                                                    <span className="text-xs font-medium" style={{color: '#bc956b'}}>
+                                                        Including all Utah Medicaid plans
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {state.isMedicaidSearch && (
+                                            <p className="text-xs mb-2" style={{color: '#bc956b'}}>
+                                                💡 Tip: All results with "Medicaid" type are included (Molina Utah, Health Choice Utah, etc.)
+                                            </p>
+                                        )}
+                                    </div>
                                     {state.results.map((payer) => {
                                         const now = new Date()
                                         const effectiveDate = payer.effective_date ? new Date(payer.effective_date) : null
@@ -371,9 +431,16 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                                 {isNotAccepted && 'We cannot accept this insurance'}
                                                             </p>
                                                             {payer.payer_type && (
-                                                                <p className="text-xs text-slate-400 mt-1">
-                                                                    Type: {payer.payer_type}
-                                                                </p>
+                                                                <div className="flex items-center gap-2 mt-1">
+                                                                    {payer.payer_type === 'Medicaid' && (
+                                                                        <span className="px-2 py-0.5 text-xs font-medium rounded" style={{backgroundColor: '#bc956b20', color: '#bc956b'}}>
+                                                                            Medicaid
+                                                                        </span>
+                                                                    )}
+                                                                    <p className="text-xs text-slate-400">
+                                                                        {payer.payer_type !== 'Medicaid' && `Type: ${payer.payer_type}`}
+                                                                    </p>
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </div>
