@@ -57,9 +57,9 @@ function ProviderModalProviderInner({ children }: ProviderModalProviderProps) {
         setProvider(provider)
         setIsOpen(true)
         
-        // Only show book button for directory context (practitioners page)
-        // Hide it for booking flows, summary pages, etc. to avoid interrupting user journey
-        setShowBookButton(context === 'directory')
+        // Show book button for all contexts except booking flows where it would interrupt the user journey
+        // Hide only for 'booking' and 'summary' contexts to avoid disrupting active booking process
+        setShowBookButton(context !== 'booking' && context !== 'summary')
         
         // Update URL with provider slug
         const slug = generateSlug(provider)
