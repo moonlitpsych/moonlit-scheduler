@@ -59,15 +59,15 @@ export default function ProviderCard({
                     ? 'border-[#2C5F6F] bg-[#F8F6F1] shadow-xl scale-[1.02]' 
                     : 'border-transparent hover:border-[#BF9C73]/50'
             }`,
-            showSpecialties: true,
-            showLanguages: true,
+            showSpecialties: false,
+            showLanguages: false,
             showAvailability: true
         },
         calendar: {
-            containerClass: `rounded-xl text-left transition-all duration-200 border-2 overflow-hidden ${
+            containerClass: `bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden border-2 p-4 ${
                 selected 
-                    ? 'border-[#2C5F6F] bg-[#F8F6F1] shadow-md ring-2 ring-[#2C5F6F]/20' 
-                    : 'border-stone-200 hover:border-[#BF9C73]/50 hover:bg-stone-50'
+                    ? 'border-[#2C5F6F] bg-[#F8F6F1] shadow-xl scale-[1.02]' 
+                    : 'border-transparent hover:border-[#BF9C73]/50'
             }`,
             showSpecialties: false,
             showLanguages: false,
@@ -75,8 +75,8 @@ export default function ProviderCard({
         },
         summary: {
             containerClass: 'border border-[#E6D7C3] rounded-xl bg-[#F8F6F1] overflow-hidden',
-            showSpecialties: true,
-            showLanguages: true,
+            showSpecialties: false,
+            showLanguages: false,
             showAvailability: false
         },
         directory: {
@@ -101,6 +101,10 @@ export default function ProviderCard({
         } else if (variant === 'directory') {
             // For directory variant, open modal by default with directory context
             openModal(provider, 'directory')
+        } else if (variant === 'calendar' || variant === 'summary') {
+            // For calendar and summary variants, open modal with appropriate context
+            const context = variant === 'calendar' ? 'booking' : 'summary'
+            openModal(provider, context)
         }
     }
 
@@ -195,7 +199,7 @@ export default function ProviderCard({
     }
 
     const renderFocusChips = () => {
-        if (!provider.focus_json || provider.focus_json.length === 0) return null
+        if (!currentConfig.showSpecialties || !provider.focus_json || provider.focus_json.length === 0) return null
 
         const maxToShow = variant === 'compact' ? 1 : 3
         const chips = provider.focus_json.slice(0, maxToShow)
@@ -248,7 +252,7 @@ export default function ProviderCard({
     const renderSpecialties = () => {
         // Legacy specialty rendering - only show if no focus areas available
         if (provider.focus_json && provider.focus_json.length > 0) return null
-        if (!showSpecialties || !provider.specialties?.length) return null
+        if (!currentConfig.showSpecialties || !provider.specialties?.length) return null
 
         const maxToShow = variant === 'compact' ? 1 : variant === 'calendar' ? 2 : 3
         
@@ -277,7 +281,7 @@ export default function ProviderCard({
     }
 
     const renderLanguages = () => {
-        if (!showLanguages || !provider.languages_spoken?.length) return null
+        if (!currentConfig.showLanguages || !provider.languages_spoken?.length) return null
 
         const maxToShow = variant === 'compact' ? 1 : 3
         
@@ -518,19 +522,6 @@ export default function ProviderCard({
             {/* Calendar variant shows minimal info */}
             {variant === 'calendar' && (
                 <div className="pr-12 sm:pr-16"> {/* Add padding to avoid button overlap */}
-                    {provider.specialty && (
-                        <p className="text-xs sm:text-sm text-[#8B7355] mb-2 font-['Newsreader'] leading-relaxed">
-                            {provider.specialty}
-                        </p>
-                    )}
-                    <div className="flex flex-wrap gap-1 sm:gap-2">
-                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg font-['Newsreader'] whitespace-nowrap">
-                            {provider.new_patient_status || 'Accepting New Patients'}
-                        </span>
-                        <span className="px-2 py-1 bg-[#FEF8F1] text-[#BF9C73] border border-[#BF9C73]/30 text-xs rounded-lg font-['Newsreader'] whitespace-nowrap">
-                            {provider.languages_spoken?.[0] || 'English'}
-                        </span>
-                    </div>
                     {customAction}
                 </div>
             )}

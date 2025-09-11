@@ -2253,7 +2253,87 @@ The canonical database view migration is **100% complete** with comprehensive to
 - **Provider Visibility**: Practitioners page shows only relevant contracted insurance options
 - **Data Integrity**: Debug tools enable ongoing system monitoring and troubleshooting
 
-*Last updated: September 10, 2025*  
-*Status: **ADMIN BOOKABILITY DASHBOARD COMPLETE + TIMEZONE FIXES*** ✅  
-*Latest Enhancement: **Complete admin dashboard with accurate date display***  
-*Production Ready: **Full-featured provider-payer relationship management system***
+---
+
+## 🎯 **PROVIDER CARD CHIP REMOVAL FIX (September 11, 2025)**
+
+### **🚀 Complete Calendar View Provider Card Enhancement**
+**Files**: `src/components/shared/ProviderCard.tsx`, `src/lib/bookability.ts`
+
+#### ✅ **Critical UX Issue Resolution**
+- **🚨 Problem**: Unwanted focus area chips (Addiction Medicine, Substance Use Disorders, etc.) and language chips (English, Spanish) appearing in calendar view provider cards
+- **Root Cause**: Render functions were using component props instead of variant-specific configuration flags
+- **Impact**: Calendar view cluttered with unnecessary specialty and language information
+
+#### ✅ **Technical Root Cause Analysis**
+- **CalendarView Usage**: Uses `variant="selection"` for provider cards (line 708)
+- **Configuration Issue**: Selection variant had `showSpecialties: false, showLanguages: false` configured correctly
+- **Render Function Bug**: `renderFocusChips()`, `renderSpecialties()`, and `renderLanguages()` ignored variant config
+- **Logic Error**: Functions checked component props (`showSpecialties`, `showLanguages`) instead of `currentConfig.showSpecialties`
+
+#### ✅ **Complete Fix Implementation**
+```typescript
+// Before (ignoring variant config):
+const renderFocusChips = () => {
+    if (!provider.focus_json || provider.focus_json.length === 0) return null
+    // Chips always shown if focus_json exists
+}
+
+const renderLanguages = () => {
+    if (!showLanguages || !provider.languages_spoken?.length) return null
+    // Used component prop, not variant config
+}
+
+// After (respecting variant configuration):
+const renderFocusChips = () => {
+    if (!currentConfig.showSpecialties || !provider.focus_json || provider.focus_json.length === 0) return null
+    // Now properly checks variant config
+}
+
+const renderLanguages = () => {
+    if (!currentConfig.showLanguages || !provider.languages_spoken?.length) return null
+    // Now uses variant-specific configuration
+}
+```
+
+#### ✅ **Enhanced Variant Configurations**
+- **Selection Variant**: `showSpecialties: false, showLanguages: false` - Clean calendar display
+- **Calendar Variant**: Restored professional styling with `bg-white`, `rounded-2xl`, `shadow-lg`, proper padding
+- **Summary Variant**: `showSpecialties: false, showLanguages: false` - Clean appointment summary
+- **Directory Variant**: `showSpecialties: true, showLanguages: false` - Full provider details for directory
+
+#### ✅ **Bookability Enhancement**
+- **Enhanced BookableProvider Interface**: Added missing fields (`focus_json`, `accepts_new_patients`, `med_school_org`, etc.)
+- **Complete Data Mapping**: Updated `mapViewToLegacyFormat()` to include all provider fields
+- **API Consistency**: Ensures provider data consistency across all booking APIs
+
+### **🔧 **Technical Achievements**
+- **3 Render Functions Fixed**: Focus chips, specialty chips, and language chips now respect variant config
+- **Variant System Enhanced**: Proper separation between display variants (directory vs calendar vs selection)
+- **Calendar Styling Restored**: Professional margins, shadows, and hover effects maintained
+- **Data Integrity**: Complete provider field mapping for consistent API responses
+- **Clean UX**: Calendar view now shows only essential provider information without clutter
+
+### **✅ Testing Results (September 11, 2025)**
+```
+✅ Focus area chips removed from calendar view (Addiction Medicine, etc.)
+✅ Language chips removed from calendar view (English, Spanish)
+✅ Calendar variant styling restored with proper margins and shadows
+✅ Provider cards maintain clickability for modal access
+✅ All render functions now respect variant-specific configuration
+✅ Bookability mapping enhanced with complete provider field coverage
+✅ No breaking changes to other variants (directory shows chips correctly)
+✅ Professional calendar presentation achieved without information clutter
+```
+
+### **🎯 Production Impact**
+- **Enhanced User Experience**: Calendar view now presents clean, professional provider cards
+- **Improved Visual Hierarchy**: Focus on essential information (name, credentials, availability)
+- **Consistent Variant Behavior**: All ProviderCard variants now properly respect configuration flags
+- **Maintained Functionality**: Provider modal access and booking flows preserved
+- **Professional Presentation**: Clean, medical-grade interface appropriate for healthcare booking
+
+*Last updated: September 11, 2025*  
+*Status: **PROVIDER CARD CHIP REMOVAL COMPLETE*** ✅  
+*Latest Enhancement: **Clean calendar view with unwanted chips removed***  
+*Production Ready: **Professional provider card system with variant-specific configurations***

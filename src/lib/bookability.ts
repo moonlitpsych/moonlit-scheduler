@@ -85,6 +85,11 @@ export interface BookableProvider {
   languages_spoken: string[] | string
   profile_image_url: string | null
   about: string | null
+  focus_json?: any[] // Focus areas data
+  accepts_new_patients?: boolean
+  med_school_org?: string | null
+  med_school_grad_year?: string | null
+  residency_org?: string | null
   
   // Network relationship info (legacy format)
   via: 'direct' | 'supervised'
@@ -191,6 +196,11 @@ export function mapViewToLegacyFormat(
     languages_spoken: providerData.languages_spoken,
     profile_image_url: providerData.profile_image_url,
     about: providerData.about,
+    focus_json: providerData.focus_json, // Focus areas data
+    accepts_new_patients: providerData.accepts_new_patients,
+    med_school_org: providerData.med_school_org,
+    med_school_grad_year: providerData.med_school_grad_year,
+    residency_org: providerData.residency_org,
     
     // Network relationship info (legacy format)
     via,
@@ -227,6 +237,7 @@ export function mapNamedViewToLegacyFormat(viewData: BookableProviderPayerNamedV
     languages_spoken: viewData.languages_spoken,
     profile_image_url: viewData.profile_image_url,
     about: viewData.about,
+    focus_json: [], // Named view doesn't include focus areas, would need separate fetch
     
     // Network relationship info
     via,
