@@ -54,7 +54,7 @@ export default function ProviderCard({
     // Variant-specific configurations with brand colors
     const config = {
         selection: {
-            containerClass: `bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden border-2 ${
+            containerClass: `bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden border-2 p-4 ${
                 selected 
                     ? 'border-[#2C5F6F] bg-[#F8F6F1] shadow-xl scale-[1.02]' 
                     : 'border-transparent hover:border-[#BF9C73]/50'
