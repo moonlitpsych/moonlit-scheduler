@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { checkAdminAuth } from '@/lib/admin-auth'
+import { routeGuardManager } from '@/lib/route-guards'
 import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity, GitBranch } from 'lucide-react'
 import Link from 'next/link'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
+import ContextSwitcher from '@/components/auth/ContextSwitcher'
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -21,26 +22,26 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   useEffect(() => {
     const verifyAdmin = async () => {
       try {
-        const { isAuthenticated, isAdmin, user: adminUser } = await checkAdminAuth()
+        const routeAccess = await routeGuardManager.canAccessAdminRoute()
         
-        console.log('Admin auth check:', { isAuthenticated, isAdmin, email: adminUser?.email })
+        console.log('Admin route access check:', routeAccess)
         
-        if (!isAuthenticated) {
-          console.log('Not authenticated, redirecting to login')
-          router.replace('/auth/login')
+        if (!routeAccess.allowed) {
+          if (routeAccess.redirectTo) {
+            console.log(`Redirecting to: ${routeAccess.redirectTo}`)
+            router.replace(routeAccess.redirectTo)
+          } else {
+            console.log('Access denied:', routeAccess.reason)
+            setUser(null)
+            setLoading(false)
+          }
           return
         }
         
-        if (!isAdmin) {
-          console.log('Not admin user, access denied')
-          // Show an access denied message instead of redirecting to dashboard
-          setUser(null)
-          setLoading(false)
-          return
-        }
-        
-        console.log('Admin access granted')
-        setUser(adminUser)
+        // Get user info for display
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        console.log('Admin access granted for:', authUser?.email)
+        setUser(authUser)
         setLoading(false)
       } catch (error) {
         console.error('Admin verification error:', error)
@@ -49,7 +50,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     }
 
     verifyAdmin()
-  }, [router])
+  }, [router, supabase.auth])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -182,26 +183,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
         {/* Admin User Info & Logout */}
         <div className="absolute bottom-0 left-0 w-64 p-4 border-t border-stone-200 bg-white">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="w-8 h-8 bg-[#BF9C73] rounded-full flex items-center justify-center text-white text-sm font-semibold">
-              {user?.email?.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[#091747] truncate">
-                Admin User
-              </p>
-              <p className="text-xs text-[#091747]/60 truncate">
-                {user?.email}
-              </p>
-            </div>
+          <div className="bg-[#BF9C73] rounded-lg">
+            <ContextSwitcher />
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-[#091747]/70 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-            <span>Sign Out</span>
-          </button>
         </div>
       </div>
 
