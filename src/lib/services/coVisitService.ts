@@ -188,7 +188,7 @@ class CoVisitService {
         try {
             // Get exceptions for this provider and date
             const { data: exceptions, error } = await supabaseAdmin
-                .from('provider_availability_exceptions')
+                .from('availability_exceptions')
                 .select('*')
                 .eq('provider_id', providerId)
                 .eq('exception_date', date)
