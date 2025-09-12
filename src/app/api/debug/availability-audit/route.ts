@@ -10,9 +10,9 @@ export async function GET() {
             .from('provider_availability')
             .select('*')
         
-        // 2. Check provider_availability_exceptions
+        // 2. Check availability_exceptions
         const { data: exceptions, error: exceptionsError } = await supabaseAdmin
-            .from('provider_availability_exceptions')
+            .from('availability_exceptions')
             .select('*')
         
         // 3. Check provider_schedules (mentioned as empty)

@@ -127,15 +127,15 @@ export async function POST(request: NextRequest) {
                 ]
             },
             {
-                name: 'idx_provider_availability_exceptions_date',
-                table: 'provider_availability_exceptions',
+                name: 'idx_availability_exceptions_date',
+                table: 'availability_exceptions',
                 columns: ['provider_id', 'exception_date'],
                 type: 'BTREE',
                 unique: false,
                 description: 'Optimize exception queries for availability filtering',
                 estimated_benefit: 'MEDIUM',
                 query_patterns: [
-                    'SELECT * FROM provider_availability_exceptions WHERE provider_id IN (...) AND exception_date = ?',
+                    'SELECT * FROM availability_exceptions WHERE provider_id IN (...) AND exception_date = ?',
                     'Exception filtering in availability generation'
                 ]
             },
