@@ -114,17 +114,23 @@ export default function DashboardAvailabilityPage() {
 
     const loadProviderSchedule = async (providerId: string) => {
         try {
-            const { data: availability, error: availError } = await supabase
-                .from('provider_availability')
-                .select('*')
-                .eq('provider_id', providerId)
-                .order('day_of_week')
-                .order('start_time')
+            console.log('🔧 Dashboard loading schedule for provider:', providerId)
+            
+            // Use API endpoint instead of direct Supabase access to handle RLS policies
+            const response = await fetch(`/api/providers/availability?providerId=${providerId}`, {
+                method: 'GET',
+                credentials: 'include' // Include cookies for authentication
+            })
 
-            if (availError) {
-                console.error('Error loading schedule:', availError)
+            const result = await response.json()
+            console.log('🔧 Dashboard API result:', result)
+
+            if (!response.ok) {
+                console.error('Error loading schedule:', result.error)
             } else {
-                setSchedule(availability || [])
+                const availability = result.availability || []
+                console.log('🔧 Dashboard setting schedule:', availability.length, 'blocks')
+                setSchedule(availability)
             }
         } catch (err) {
             console.error('Error loading schedule:', err)
