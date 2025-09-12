@@ -1,4 +1,5 @@
-🎉 CLAUDE CODE: Moonlit Scheduler
+
+CLAUDE CODE: Moonlit Scheduler
 🚨 Critical Development Policy
 
 No mock data without explicit permission.

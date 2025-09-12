@@ -103,4 +103,5 @@ Provider visibility: list_on_provider_page + is_bookable.
 
 Supervision model: residents bookable via attending billing providers.
 
+
 Schedule API: all reads/writes go through /api/providers/availability (RLS bypass).
