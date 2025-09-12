@@ -12,6 +12,7 @@ interface AvailableSlot {
     providerName: string
     duration: number
     isAvailable: boolean
+    service_instance_id: string // Required for appointment creation
     provider: {
         id: string
         first_name: string
@@ -41,6 +42,24 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`🔍 Getting ${provider_id ? 'provider-specific' : 'merged'} availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
+
+        // Get default service instance for slots
+        const { data: serviceInstance, error: serviceError } = await supabaseAdmin
+            .from('service_instances')
+            .select('id')
+            .limit(1)
+            .single()
+
+        if (serviceError || !serviceInstance?.id) {
+            console.error('❌ No service instances available for slot generation:', serviceError)
+            return NextResponse.json(
+                { error: 'Service configuration error', success: false },
+                { status: 500 }
+            )
+        }
+
+        const defaultServiceInstanceId = serviceInstance.id
+        console.log(`📋 Using service instance ID: ${defaultServiceInstanceId}`)
 
         // Step 1: Get BOOKABLE providers using canonical view (consistent with providers-for-payer API)
         const { data: bookableRelationships, error: networkError } = await supabaseAdmin
@@ -180,7 +199,7 @@ export async function POST(request: NextRequest) {
                 last_name: provider.last_name || '',
                 title: provider.title || 'MD',
                 role: provider.role || 'physician'
-            }, appointmentDuration)
+            }, appointmentDuration, defaultServiceInstanceId)
             allSlots.push(...slots)
         }
 
@@ -209,6 +228,7 @@ export async function POST(request: NextRequest) {
                     providerName: `${coVisitProvider.first_name} ${coVisitProvider.last_name} (with ${cvSlot.attending_name})`,
                     duration: appointmentDuration,
                     isAvailable: true,
+                    service_instance_id: defaultServiceInstanceId,
                     provider: {
                         id: coVisitProvider.provider_id,
                         first_name: coVisitProvider.first_name || '',
@@ -301,7 +321,8 @@ function generateTimeSlotsFromAvailability(
     availability: any, 
     date: string, 
     provider: any, 
-    appointmentDuration: number
+    appointmentDuration: number,
+    serviceInstanceId: string
 ): AvailableSlot[] {
     const slots: AvailableSlot[] = []
     
@@ -330,6 +351,7 @@ function generateTimeSlotsFromAvailability(
                     providerName: `${provider.first_name} ${provider.last_name}`,
                     duration: appointmentDuration,
                     isAvailable: true,
+                    service_instance_id: serviceInstanceId,
                     provider: {
                         id: provider.id,
                         first_name: provider.first_name,

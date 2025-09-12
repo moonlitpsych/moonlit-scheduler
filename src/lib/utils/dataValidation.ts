@@ -18,7 +18,8 @@ export const API_SCHEMAS = {
             available: 'boolean',
             duration_minutes: 'number',
             start_time: 'string',
-            end_time: 'string'
+            end_time: 'string',
+            service_instance_id: 'string'
         },
         // Alternative field names (what API might return)
         alternatives: {
@@ -27,10 +28,11 @@ export const API_SCHEMAS = {
             available: ['isAvailable', 'available', 'is_available'],
             duration_minutes: ['duration', 'duration_minutes', 'durationMinutes'],
             start_time: ['start_time', 'startTime', 'time'], 
-            end_time: ['end_time', 'endTime']
+            end_time: ['end_time', 'endTime'],
+            service_instance_id: ['service_instance_id', 'serviceInstanceId']
         },
         // Required fields that must exist in some form
-        required: ['provider_id', 'provider_name', 'available']
+        required: ['provider_id', 'provider_name', 'available', 'service_instance_id']
     },
     PROVIDER_DATA: {
         primary: {
@@ -178,7 +180,12 @@ export function mapApiSlotToTimeSlot(apiSlot: any): any {
             provider_id: normalizedSlot.provider_id,
             available: normalizedSlot.available,
             duration_minutes: duration,
-            provider_name: normalizedSlot.provider_name
+            provider_name: normalizedSlot.provider_name,
+            service_instance_id: normalizedSlot.service_instance_id,
+            // Preserve original format for compatibility
+            date: apiSlot.date,
+            time: apiSlot.time,
+            providerId: normalizedSlot.provider_id
         }
     } catch (error) {
         console.error('🚨 Error in mapApiSlotToTimeSlot:', error, 'slot:', apiSlot)
@@ -213,7 +220,11 @@ function mapApiSlotFallback(apiSlot: any): any {
                 duration_minutes: duration,
                 provider_name: apiSlot.providerName || apiSlot.provider_name || 
                               `${apiSlot.provider?.first_name || ''} ${apiSlot.provider?.last_name || ''}`.trim() ||
-                              'Unknown Provider'
+                              'Unknown Provider',
+                service_instance_id: apiSlot.service_instance_id || apiSlot.serviceInstanceId || 'unknown',
+                date: apiSlot.date,
+                time: apiSlot.time,
+                providerId: apiSlot.providerId || apiSlot.provider_id || apiSlot.id || 'unknown'
             }
         }
 
@@ -230,7 +241,11 @@ function mapApiSlotFallback(apiSlot: any): any {
                 duration_minutes: 60,
                 provider_name: apiSlot.providerName || apiSlot.provider_name || 
                               `${apiSlot.provider?.first_name || ''} ${apiSlot.provider?.last_name || ''}`.trim() ||
-                              'Unknown Provider'
+                              'Unknown Provider',
+                service_instance_id: apiSlot.service_instance_id || apiSlot.serviceInstanceId || 'unknown',
+                date: apiSlot.date,
+                time: apiSlot.time,
+                providerId: apiSlot.providerId || apiSlot.provider_id || apiSlot.id || 'unknown'
             }
         }
 
@@ -242,7 +257,11 @@ function mapApiSlotFallback(apiSlot: any): any {
             duration_minutes: duration,
             provider_name: apiSlot.providerName || apiSlot.provider_name || 
                           `${apiSlot.provider?.first_name || ''} ${apiSlot.provider?.last_name || ''}`.trim() ||
-                          'Unknown Provider'
+                          'Unknown Provider',
+            service_instance_id: apiSlot.service_instance_id || apiSlot.serviceInstanceId || 'unknown',
+            date: apiSlot.date,
+            time: apiSlot.time,
+            providerId: apiSlot.providerId || apiSlot.provider_id || apiSlot.id || 'unknown'
         }
     } catch (error) {
         console.error('🚨 Complete fallback failure:', error, 'slot:', apiSlot)
@@ -254,7 +273,11 @@ function mapApiSlotFallback(apiSlot: any): any {
             provider_id: 'unknown',
             available: true,
             duration_minutes: 60,
-            provider_name: 'Unknown Provider'
+            provider_name: 'Unknown Provider',
+            service_instance_id: 'unknown',
+            date: now.toISOString().split('T')[0],
+            time: now.toTimeString().slice(0, 5),
+            providerId: 'unknown'
         }
     }
 }
