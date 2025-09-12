@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         
         // Step 3: Get exceptions for this specific date
         const { data: exceptions, error: exceptionsError } = await supabaseAdmin
-            .from('provider_availability_exceptions')
+            .from('availability_exceptions')
             .select('*')
             .in('provider_id', providerIds)
             .eq('exception_date', requestDate)
