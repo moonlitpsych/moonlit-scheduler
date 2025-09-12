@@ -6,7 +6,7 @@ import { Eye, EyeOff, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { isAdminEmail } from '@/lib/admin-auth'
+import { authContextManager } from '@/lib/auth-context'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -31,21 +31,39 @@ export default function LoginPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         console.log('User already logged in, redirecting...', user.email)
-        
-        // Check if user is admin
-        if (isAdminEmail(user.email || '')) {
-          console.log('Admin user detected, redirecting to admin dashboard')
-          router.replace('/admin')
-        } else {
-          console.log('Provider user detected, redirecting to provider dashboard')
-          router.replace('/dashboard')
-        }
+        await handleAuthenticatedUser()
       }
     }
     
     // Only run on initial mount
     checkAuth()
   }, []) // Empty dependency array prevents loops
+
+  const handleAuthenticatedUser = async () => {
+    try {
+      const authContext = await authContextManager.getUserAuthContext()
+      
+      if (!authContext.user) return
+      
+      console.log('Available roles:', authContext.availableRoles.map(r => r.role))
+      
+      if (authContext.canSwitchContext) {
+        console.log('Multi-role user detected, showing context chooser')
+        router.replace('/choose-context')
+      } else if (authContext.availableRoles.length > 0) {
+        const singleRole = authContext.availableRoles[0]
+        const route = authContextManager.getDashboardRoute(singleRole.role)
+        console.log(`Single role (${singleRole.role}) detected, redirecting to ${route}`)
+        router.replace(route)
+      } else {
+        console.log('No valid roles found, staying on login')
+        setError('No access permissions found for your account')
+      }
+    } catch (err) {
+      console.error('Error determining user context:', err)
+      setError('Unable to determine account permissions')
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,15 +83,7 @@ export default function LoginPage() {
         setError(error.message)
       } else if (data.user) {
         console.log('Login successful! User:', data.user.email)
-        
-        // Check if user is admin and redirect accordingly
-        if (isAdminEmail(data.user.email || '')) {
-          console.log('Admin login successful, redirecting to admin dashboard')
-          router.replace('/admin')
-        } else {
-          console.log('Provider login successful, redirecting to provider dashboard')
-          router.replace('/dashboard')
-        }
+        await handleAuthenticatedUser()
       }
     } catch (err) {
       console.error('Unexpected error:', err)

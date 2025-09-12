@@ -1,4 +1,7 @@
 // src/lib/services/intakeQService.ts
+import { intakeQRateLimiter } from './rateLimiter'
+import { intakeQCache } from './intakeQCache'
+
 interface IntakeQAppointment {
   PractitionerId: string
   ClientId: string
@@ -50,33 +53,24 @@ class IntakeQService {
   }
 
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    // Rate limiting: 10 requests/minute, 500/day
+    // Update counters for legacy tracking (used by getRateLimitStatus)
     const now = Date.now()
     const currentDay = new Date().getDate()
     
-    // Reset daily counter if new day
     if (currentDay !== this.lastDayReset) {
       this.dailyRequestCount = 0
       this.lastDayReset = currentDay
     }
 
-    // Check daily limit
+    // Check daily limit (safety check)
     if (this.dailyRequestCount >= 500) {
       throw new Error('Daily API limit reached (500 requests)')
     }
 
-    // Check per-minute limit (simple throttling)
-    if (now - this.lastRequestTime < 6000 && this.requestCount >= 10) {
-      throw new Error('Rate limit: 10 requests per minute exceeded')
-    }
-
-    if (now - this.lastRequestTime >= 60000) {
-      this.requestCount = 0 // Reset minute counter
-    }
-
     const url = `${this.baseUrl}${endpoint}`
     
-    const response = await fetch(url, {
+    // Use production-ready rate limiter with queuing and backoff
+    const response = await intakeQRateLimiter.makeRequest(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -85,14 +79,10 @@ class IntakeQService {
       },
     })
 
+    // Update legacy counters
     this.requestCount++
     this.dailyRequestCount++
     this.lastRequestTime = now
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`IntakeQ API error: ${response.status} ${response.statusText} - ${errorText}`)
-    }
 
     return response.json()
   }
@@ -207,9 +197,15 @@ class IntakeQService {
     console.log(`🔍 Fetching IntakeQ appointments for practitioner ${practitionerId} on ${date}`)
     
     try {
-      // IntakeQ API: Get all appointments and filter by practitioner and date
-      // Note: IntakeQ doesn't have a practitioner-specific endpoint, so we get all and filter
-      const response = await this.makeRequest<IntakeQAppointmentResponse[]>('/appointments')
+      // Use cache-first approach with automatic fetching
+      return await intakeQCache.getOrFetch(
+        practitionerId,
+        date,
+        async () => {
+          console.log(`📡 Cache miss - fetching from IntakeQ API for ${practitionerId} on ${date}`)
+          // IntakeQ API: Get all appointments and filter by practitioner and date
+          // Note: IntakeQ doesn't have a practitioner-specific endpoint, so we get all and filter
+          const response = await this.makeRequest<IntakeQAppointmentResponse[]>('/appointments')
       
       // Convert date to start/end of day timestamps for filtering
       const targetDate = new Date(date + 'T00:00:00.000Z') // Ensure proper UTC parsing
@@ -248,10 +244,21 @@ class IntakeQService {
       console.log(`📅 Found ${appointmentsForDate.length} appointments for practitioner ${practitionerId} on ${date}`)
       console.log(`🔍 Date range: ${startOfDay} to ${endOfDay}`)
       
-      return appointmentsForDate
+          return appointmentsForDate
+        },
+        5 * 60 * 1000 // Cache for 5 minutes (shorter TTL for appointment data)
+      )
       
     } catch (error: any) {
       console.error('❌ Failed to fetch IntakeQ appointments for date:', error.message)
+      
+      // Check if we have stale cache data as fallback
+      const staleData = intakeQCache.get<IntakeQAppointmentResponse[]>(practitionerId, date)
+      if (staleData) {
+        console.log('⚡ Using stale cache data as fallback')
+        return staleData
+      }
+      
       // Return empty array instead of throwing to allow availability check to continue
       console.log('⚠️ Continuing without IntakeQ conflict checking due to API error')
       return []
@@ -378,11 +385,28 @@ class IntakeQService {
     }
   }
 
-  // Utility method to check rate limits
-  getRateLimitStatus(): { requestsThisMinute: number, requestsToday: number } {
+  // Enhanced rate limit status including production limiter
+  getRateLimitStatus(): {
+    requestsThisMinute: number
+    requestsToday: number
+    rateLimiter: {
+      tokens: number
+      maxTokens: number
+      queueLength: number
+      activeRequests: number
+      isProcessing: boolean
+    }
+    cache: {
+      size: number
+      totalEntries: number
+      expiredEntries: number
+    }
+  } {
     return {
       requestsThisMinute: this.requestCount,
       requestsToday: this.dailyRequestCount,
+      rateLimiter: intakeQRateLimiter.getStatus(),
+      cache: intakeQCache.getStats()
     }
   }
 }

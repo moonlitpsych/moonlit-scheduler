@@ -4,8 +4,9 @@
 import { Payer, TimeSlot } from '@/types/database'
 import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isSameDay, isToday, startOfMonth, subMonths } from 'date-fns'
 import { Check, ChevronLeft, ChevronRight, Clock, Calendar, Users } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ProviderCard, { Provider } from '@/components/shared/ProviderCard'
+import { mapApiSlotToTimeSlot, devValidateApiData, validateApiResponse } from '@/lib/utils/dataValidation'
 
 export type BookingIntent = 'book' | 'explore'
 
@@ -54,6 +55,29 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const [availableLanguages, setAvailableLanguages] = useState<string[]>([])
     const [customLanguage, setCustomLanguage] = useState<string>('')
     const [loadingLanguages, setLoadingLanguages] = useState(false)
+
+    // Ref for calendar section to enable smooth scrolling
+    const calendarSectionRef = useRef<HTMLDivElement>(null)
+    const [showCalendarHighlight, setShowCalendarHighlight] = useState(false)
+
+    // Smooth scroll to calendar section with visual highlight
+    const scrollToCalendar = () => {
+        if (calendarSectionRef.current) {
+            // For mobile devices, use 'center' to ensure the calendar is clearly visible
+            const isMobile = window.innerWidth < 768
+            calendarSectionRef.current.scrollIntoView({
+                behavior: 'smooth',
+                block: isMobile ? 'center' : 'start',
+                inline: 'nearest'
+            })
+            
+            // Add a subtle highlight animation to draw attention
+            setShowCalendarHighlight(true)
+            setTimeout(() => {
+                setShowCalendarHighlight(false)
+            }, 2000) // Remove highlight after 2 seconds
+        }
+    }
 
     // Generate calendar days
     const monthStart = startOfMonth(currentMonth)
@@ -113,11 +137,20 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
         setLoadingProviders(true)
         try {
-            const response = await fetch(`/api/demo/enhanced-providers?payer_id=${selectedPayer.id}`)
+            const response = await fetch('/api/patient-booking/providers-for-payer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    payer_id: selectedPayer.id,
+                    language: selectedLanguage
+                })
+            })
             if (response.ok) {
                 const data = await response.json()
                 console.log('🔍 Provider API response:', data)
-                setProviders(data.providers || data.data?.providers || [])
+                setProviders(data.data?.providers || [])
             }
         } catch (error) {
             console.error('Error fetching providers:', error)
@@ -189,6 +222,11 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         setSelectedProvider(providerId)
         setSelectedSlot(null)
         setConsolidatedSlots([])
+        
+        // Smooth scroll to calendar section to guide user to next step
+        setTimeout(() => {
+            scrollToCalendar()
+        }, 100) // Small delay to ensure state updates have rendered
         
         if (selectedDate) {
             // If a date is already selected, refresh availability for this provider
@@ -341,9 +379,20 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     const data1 = await response1.json()
                     console.log('✅ Strategy 1 SUCCESS:', data1)
                     
+                    // Validate API response structure
+                    const responseValidation = validateApiResponse(data1, { success: true, data: {} })
+                    if (!responseValidation.isValid) {
+                        console.error('🚨 API Response validation failed:', responseValidation.errors)
+                    }
+                    
                     if (data1.success) {
-                        apiSlots = data1.data?.availableSlots || []
+                        const rawSlots = data1.data?.availableSlots || []
+                        // Validate and normalize slot data in development
+                        apiSlots = process.env.NODE_ENV === 'development' 
+                            ? rawSlots.map(mapApiSlotToTimeSlot)
+                            : rawSlots
                         success = true
+                        console.log(`📊 Processed ${apiSlots.length} slots with data validation`)
                     }
                 }
             } catch (error1) {
@@ -448,21 +497,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
             console.log('✅ FINAL SUCCESS: Got availability slots:', apiSlots.length)
 
-            // Convert AvailableSlot to TimeSlot format
-            const convertedSlots: TimeSlot[] = apiSlots.map(apiSlot => {
-                const startDateTime = `${apiSlot.date}T${apiSlot.time}:00`
-                const endTime = new Date(new Date(startDateTime).getTime() + (apiSlot.duration * 60 * 1000))
-                const endDateTime = endTime.toISOString()
-
-                return {
-                    start_time: startDateTime,
-                    end_time: endDateTime,
-                    provider_id: apiSlot.providerId, // API returns 'providerId', not 'provider_id'
-                    available: apiSlot.isAvailable,  // API returns 'isAvailable', not 'available'
-                    duration_minutes: apiSlot.duration,
-                    provider_name: apiSlot.providerName
-                }
-            })
+            // Convert AvailableSlot to TimeSlot format using data validation
+            const convertedSlots: TimeSlot[] = apiSlots.map(mapApiSlotToTimeSlot)
 
             console.log('🔄 Final converted slots:', convertedSlots.length)
             
@@ -649,7 +685,9 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         {viewMode === 'by_availability' 
                             ? `Showing merged availability for all providers who accept ${selectedPayer?.name}`
                             : selectedProvider
-                                ? 'Select a date to see this provider\'s availability'
+                                ? showCalendarHighlight 
+                                    ? '👇 Select a date below to see this provider\'s available appointment times'
+                                    : 'Select a date to see this provider\'s availability'
                                 : 'Choose a provider to see their availability'
                         }
                     </p>
@@ -725,7 +763,14 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 )}
 
                 {/* Calendar and Time Slots */}
-                <div className="max-w-6xl mx-auto">
+                <div 
+                    ref={calendarSectionRef} 
+                    className={`max-w-6xl mx-auto transition-all duration-1000 ${
+                        showCalendarHighlight 
+                            ? 'ring-4 ring-[#BF9C73]/30 ring-offset-4 ring-offset-[#FEF8F1] rounded-3xl' 
+                            : ''
+                    }`}
+                >
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         {/* Calendar */}
                         <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-8">

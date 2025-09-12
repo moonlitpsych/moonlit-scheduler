@@ -58,37 +58,22 @@ export default function ScheduleEditor({ providerId, onSave, onCancel }: Schedul
             
             console.log('Loading schedule for provider:', providerId)
             
-            // Debug: Check if we can access the table at all (simplified)
-            const { data: tableCheck, error: tableError } = await supabase
-                .from('provider_availability')
-                .select('id')
-                .limit(1)
-            
-            console.log('Table access check:', { tableCheck, tableError })
-            
-            if (tableError) {
-                console.error('Table access error:', tableError)
-                setError(`Database access error: ${tableError.message}`)
-                setDebugInfo({ tableError })
+            // Use API endpoint instead of direct Supabase access to handle RLS policies
+            const response = await fetch(`/api/providers/availability?providerId=${providerId}`, {
+                method: 'GET',
+                credentials: 'include' // Include cookies for authentication
+            })
+
+            const result = await response.json()
+            console.log('API load result:', result)
+
+            if (!response.ok) {
+                setError(`Failed to load schedule: ${result.error}`)
+                setDebugInfo({ apiError: result, providerId })
                 return
             }
 
-            // Try to get existing availability blocks
-            const { data: availability, error: availError } = await supabase
-                .from('provider_availability')
-                .select('*')
-                .eq('provider_id', providerId)
-                .order('day_of_week')
-                .order('start_time')
-
-            console.log('Availability query result:', { availability, availError })
-
-            if (availError) {
-                console.error('Availability query error:', availError)
-                setError(`Query error: ${availError.message}`)
-                setDebugInfo({ availError, providerId })
-                return
-            }
+            const availability = result.availability || []
 
             // Build schedule object
             const newSchedule: { [key: number]: DaySchedule } = {}
@@ -184,50 +169,27 @@ export default function ScheduleEditor({ providerId, onSave, onCancel }: Schedul
 
             console.log('Saving schedule for provider:', providerId)
 
-            // First, delete all existing availability for this provider
-            const { error: deleteError } = await supabase
-                .from('provider_availability')
-                .delete()
-                .eq('provider_id', providerId)
-
-            if (deleteError) {
-                console.error('Delete error:', deleteError)
-                throw deleteError
-            }
-
-            // Prepare new availability blocks
-            const newBlocks = []
-            Object.values(schedule).forEach(daySchedule => {
-                if (daySchedule.is_available && daySchedule.time_blocks.length > 0) {
-                    daySchedule.time_blocks.forEach(block => {
-                        if (block.start_time && block.end_time) {
-                            newBlocks.push({
-                                provider_id: providerId,
-                                day_of_week: daySchedule.day_of_week,
-                                start_time: block.start_time,
-                                end_time: block.end_time,
-                                is_recurring: true
-                            })
-                        }
-                    })
-                }
+            // Use API endpoint with proper permissions
+            const response = await fetch('/api/providers/availability', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    providerId: providerId,
+                    schedule: schedule
+                })
             })
 
-            console.log('New blocks to insert:', newBlocks)
+            const result = await response.json()
 
-            // Insert new blocks
-            if (newBlocks.length > 0) {
-                const { error: insertError } = await supabase
-                    .from('provider_availability')
-                    .insert(newBlocks)
-
-                if (insertError) {
-                    console.error('Insert error:', insertError)
-                    throw insertError
-                }
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to save schedule')
             }
 
-            console.log('Schedule saved successfully')
+            console.log('Schedule saved successfully:', result)
+            // Reload the schedule to reflect changes
+            await loadSchedule()
             onSave()
         } catch (error: any) {
             console.error('Error saving schedule:', error)

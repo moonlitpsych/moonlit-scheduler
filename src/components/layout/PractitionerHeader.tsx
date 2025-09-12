@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import ContextSwitcher from '@/components/auth/ContextSwitcher'
 
 export default function PractitionerHeader() {
     const [scrolled, setScrolled] = useState(false)
@@ -37,11 +38,11 @@ export default function PractitionerHeader() {
                         />
                     </Link>
 
-                    {/* Simple practitioner indicator - minimal and clean */}
+                    {/* Context Switcher */}
                     <div className="flex items-center">
-                        <span className="text-sm text-[#BF9C73] font-medium">
-                            Provider Dashboard
-                        </span>
+                        <div className="bg-[#BF9C73] rounded-lg">
+                            <ContextSwitcher />
+                        </div>
                     </div>
                 </div>
             </div>

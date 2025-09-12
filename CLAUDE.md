@@ -39,6 +39,8 @@
 - ✅ **Improved insurance mismatch flow** preserving user progress and selected insurance
 - ✅ **Critical availability system fixes** with proper provider filtering and exception handling
 - ✅ **Database optimization and cleanup** with professional data integrity maintained
+- ✅ **DUAL-ROLE AUTHENTICATION SYSTEM** - Complete implementation for Dr. Rufus Sweeney (admin + provider)
+- ✅ **PROVIDER SCHEDULE MANAGEMENT** - Working schedule editor with RLS-compliant API architecture
 
 ## 🏗️ SYSTEM ARCHITECTURE
 
@@ -2127,11 +2129,99 @@ const data = relationships.map(rel => {
 ✅ Production-ready response format with comprehensive debug information
 ```
 
-*Last updated: September 10, 2025*  
-*Status: Complete Professional Website + **CANONICAL DATABASE VIEW MIGRATION FINALIZED*** ✅  
-*Latest Enhancement: **Complete migration finalization with bookability explainability debug endpoint***  
-*Current Branch: feature/canonical-view-finalization*  
-*MILESTONE: Production-ready canonical view system with comprehensive tooling, monitoring, and debug capabilities*
+## 🔐 **DUAL-ROLE AUTHENTICATION SYSTEM (September 12, 2025)**
+
+### **🎯 Complete Dual-Role Implementation for Dr. C. Rufus Sweeney**
+**Files**: `src/lib/auth-context.ts`, `src/app/choose-context/page.tsx`, `src/components/auth/ContextSwitcher.tsx`, `src/lib/route-guards.ts`
+
+#### ✅ **Production-Ready Features**
+- **Dr. Rufus Sweeney Dual Access**: Can switch between Admin Dashboard and Provider Dashboard seamlessly
+- **Authentication Context Manager**: Detects available roles (admin via email, provider via database)
+- **Context Selection Interface**: Beautiful branded role selection page with descriptions
+- **Session Management**: Persistent context switching with localStorage and sessionStorage
+- **Route Guards**: Automatic redirection based on available roles and active context
+- **Context Switcher Header**: Professional dropdown for instant role switching
+
+#### ✅ **Database Integration**
+- **Provider Record**: Dr. Rufus Sweeney (`08fbcd34-cd5f-425c-85bd-1aeeffbe9694`)
+- **Auth User Linking**: `auth_user_id: f832435b-0442-4155-b0e6-22dab8baf52d`
+- **Admin Email Recognition**: `hello@trymoonlit.com` and `rufussweeney@gmail.com`
+- **Role Detection**: Automatic admin role via `isAdminEmail()` + provider role via database lookup
+
+#### ✅ **User Experience Flow**
+```
+1. Login → Authentication check
+2. Multiple roles detected → /choose-context (beautiful selection page)
+3. Context selected → Dashboard redirect (/admin or /dashboard)
+4. Header shows ContextSwitcher for instant role switching
+5. Context changes preserved across sessions
+```
+
+## 📅 **PROVIDER SCHEDULE MANAGEMENT SYSTEM (September 12, 2025)**
+
+### **🚨 CRITICAL: RLS-Compliant Architecture Required**
+**Files**: `src/app/api/providers/availability/route.ts`, `src/components/providers/ScheduleEditor.tsx`, `src/app/dashboard/availability/page.tsx`
+
+#### ✅ **RLS Policy Solution Implemented**
+- **Root Issue**: Row Level Security policies prevent anon client from reading admin client inserts
+- **Solution**: Created `/api/providers/availability` endpoint with admin client permissions
+- **Data Flow**: Frontend → API (admin client) → Database (bypasses RLS)
+- **Consistency**: Both save and load operations use same admin-privileged API
+
+#### ✅ **Critical Architecture Pattern**
+```typescript
+// ❌ BROKEN: Direct Supabase access (RLS blocks data visibility)
+const { data } = await supabase.from('provider_availability').select('*')
+
+// ✅ WORKING: API endpoint with admin client
+const response = await fetch('/api/providers/availability?providerId=X', {
+  method: 'GET',
+  credentials: 'include' // Include auth cookies
+})
+```
+
+#### ✅ **API Endpoint Features**
+- **POST**: Save schedule with authentication verification and admin client
+- **GET**: Load schedule with proper RLS bypass
+- **Authentication**: Verifies user access to specific provider
+- **Enhanced Logging**: Comprehensive debugging with emoji indicators
+- **Error Handling**: Professional error responses and validation
+
+#### ✅ **Schedule Editor Integration**
+- **Save Flow**: API → Delete existing → Insert new blocks → Success response
+- **Load Flow**: API → Fetch with admin permissions → Display in UI
+- **Auto-Refresh**: Automatically reloads data after successful save
+- **Error Handling**: Professional error messages and retry options
+
+#### ✅ **Dashboard Integration Fix**
+- **Before**: Dashboard used direct Supabase → showed 0 records
+- **After**: Dashboard uses API endpoint → shows correct statistics
+- **Summary Cards**: Now display accurate "Active Days" and "Time Blocks" counts
+- **Data Consistency**: Both ScheduleEditor and dashboard use same data source
+
+### **🔧 For Future Developers - CRITICAL PATTERNS**
+
+#### **RLS Policy Architecture Rule**
+> **When admin client inserts data, frontend must use admin-privileged endpoints to read that data**
+
+#### **Provider Schedule Data Flow**
+```
+User saves schedule → ScheduleEditor → POST /api/providers/availability → supabaseAdmin.insert()
+User views schedule → Dashboard → GET /api/providers/availability → supabaseAdmin.select()
+```
+
+#### **Authentication Requirements**
+- **Provider Access**: Must verify `auth_user_id` matches logged-in user
+- **Admin Permissions**: Use `supabaseAdmin` client for database operations
+- **Error Handling**: Return 401/403 for authentication/authorization failures
+
+---
+
+*Last updated: September 12, 2025*  
+*Status: **DUAL-ROLE AUTHENTICATION & SCHEDULE MANAGEMENT COMPLETE*** ✅  
+*Latest Achievement: **Complete provider schedule system with RLS-compliant API architecture***  
+*Current Branch: feature/dual-role-auth*  
+*MILESTONE: Dr. Rufus Sweeney can successfully switch between admin and provider roles, edit schedules, and view accurate dashboard statistics*
 
 ---
 
@@ -2333,7 +2423,110 @@ const renderLanguages = () => {
 - **Maintained Functionality**: Provider modal access and booking flows preserved
 - **Professional Presentation**: Clean, medical-grade interface appropriate for healthcare booking
 
+---
+
+## 🔧 **CRITICAL AVAILABILITY SYSTEM FIX (September 11, 2025)**
+
+### **🚨 Emergency JavaScript Runtime Error Resolution**
+**File**: `src/app/api/patient-booking/merged-availability/route.ts`
+
+#### ✅ **Critical Issues Fixed**
+
+**Issue #1: Undefined Variable Reference**
+- **🚨 Problem**: JavaScript runtime error causing server crashes in exception handling code
+- **Root Cause**: Line 159 referenced undefined `providers` variable instead of `bookableProviders`
+- **Error Message**: `ReferenceError: providers is not defined`
+- **Impact**: Complete availability API failure, preventing appointment slot generation
+
+**Issue #2: Database View Column Error** 
+- **🚨 Problem**: SQL error when querying canonical view `v_bookable_provider_payer`
+- **Root Cause**: API tried to filter by non-existent `is_bookable` column in database view
+- **Error Message**: `column v_bookable_provider_payer.is_bookable does not exist`
+- **Impact**: Database query failures preventing provider relationship lookups
+
+#### ✅ **Technical Fixes Applied**
+
+**Fix #1: Variable Reference Correction**
+```typescript
+// Before (causing runtime error):
+if (hasException) {
+    const provider = providers.find(p => p.id === avail.provider_id)  // ❌ undefined variable
+    console.log(`🚫 Filtered out availability for ${provider?.first_name}...`)
+}
+
+// After (working correctly):
+if (hasException) {
+    const provider = bookableProviders.find(p => p.provider_id === avail.provider_id)  // ✅ correct reference
+    console.log(`🚫 Filtered out availability for ${provider?.first_name}...`)
+}
+```
+
+**Fix #2: Database Query Correction**
+```typescript
+// Before (causing SQL error):
+const { data: bookableRelationships, error: networkError } = await supabaseAdmin
+    .from('v_bookable_provider_payer')
+    .select('*')
+    .eq('payer_id', payer_id)
+    .neq('is_bookable', false)  // ❌ column doesn't exist in view
+
+// After (working correctly):
+const { data: bookableRelationships, error: networkError } = await supabaseAdmin
+    .from('v_bookable_provider_payer')
+    .select('*')
+    .eq('payer_id', payer_id)  // ✅ removed invalid filter
+```
+
+#### ✅ **System Recovery Validation**
+
+**Molina Utah Test Results** (Payer ID: `62ab291d-b68e-4c71-a093-2d6e380764c3`):
+```
+✅ 40 available appointment slots generated
+✅ 4 providers available: Travis Norseth, Tatiana Kaehler, Merrick Reynolds, Rufus Sweeney
+✅ Clinical supervision model working: All providers show "via": "supervised"
+✅ API validation: 100% pass rate on all contract tests
+✅ No JavaScript runtime errors in server logs
+✅ Database queries executing successfully
+```
+
+**API Contract Validation**:
+```
+✅ /api/patient-booking/providers-for-payer: PASS - All required fields present
+✅ /api/patient-booking/merged-availability: PASS - All required fields present  
+✅ Provider names loading correctly: "Tatiana Kaehler", "Travis Norseth", etc.
+✅ Availability slots properly structured with time, date, provider info
+```
+
+### **🎯 Production Impact**
+- **✅ Availability System Restored**: Patients can now see and book appointment slots for all insurance types
+- **✅ Clinical Supervision Working**: Molina Utah patients see 4 supervised providers instead of 0
+- **✅ Error Handling Improved**: Exception processing now works without runtime crashes
+- **✅ Database Integration Stable**: Canonical view queries execute without SQL errors
+- **✅ IntakeQ Rate Limiting**: Production-ready fallbacks handle API rate limits gracefully
+
+### **🔧 Technical Debt Resolved**
+- **Variable Scope Issues**: Fixed undefined variable references in exception handling
+- **Database Schema Alignment**: Removed filters for non-existent view columns
+- **Error Handling Robustness**: Exception processing now handles missing provider data gracefully
+- **API Reliability**: Availability generation no longer crashes on JavaScript errors
+
+### **✅ Testing Results (September 11, 2025)**
+```
+✅ Server compiles and runs without JavaScript errors
+✅ Availability API returns 40+ slots for test payers
+✅ Provider-for-payer API returns complete provider data
+✅ Exception handling processes without crashes
+✅ Database queries execute successfully against canonical views
+✅ Clinical supervision model operational (supervised providers visible)
+✅ IntakeQ integration with rate limiting working
+✅ End-to-end booking flow functional
+```
+
+**Emergency Fix Complete**: The critical availability system issues have been resolved, restoring full booking functionality for all insurance types and clinical supervision scenarios.
+
+---
+
 *Last updated: September 11, 2025*  
-*Status: **PROVIDER CARD CHIP REMOVAL COMPLETE*** ✅  
-*Latest Enhancement: **Clean calendar view with unwanted chips removed***  
-*Production Ready: **Professional provider card system with variant-specific configurations***
+*Status: **CRITICAL AVAILABILITY SYSTEM FIX COMPLETE*** ✅  
+*Latest Fix: **JavaScript runtime error and database query fixes***  
+*Production Status: **Availability system fully operational with 40+ slots for Molina Utah***
