@@ -32,7 +32,7 @@ export const API_SCHEMAS = {
             service_instance_id: ['service_instance_id', 'serviceInstanceId']
         },
         // Required fields that must exist in some form
-        required: ['provider_id', 'provider_name', 'available', 'service_instance_id']
+        required: ['provider_id', 'provider_name', 'available']
     },
     PROVIDER_DATA: {
         primary: {
@@ -155,13 +155,36 @@ export function mapApiSlotToTimeSlot(apiSlot: any): any {
     
     try {
         // Convert to TimeSlot format expected by CalendarView
-        const startDateTime = normalizedSlot.start_time || `${apiSlot.date}T${apiSlot.time}:00`
+        let startDateTime: string
+        
+        // Handle different datetime formats
+        if (normalizedSlot.start_time && normalizedSlot.start_time.includes('T')) {
+            // Already a full ISO datetime
+            startDateTime = normalizedSlot.start_time
+        } else if (apiSlot.date && apiSlot.time) {
+            // Construct from separate date and time
+            const timeWithSeconds = apiSlot.time.includes(':') ? 
+                (apiSlot.time.split(':').length === 2 ? `${apiSlot.time}:00` : apiSlot.time) : 
+                `${apiSlot.time}:00:00`
+            startDateTime = `${apiSlot.date}T${timeWithSeconds}`
+        } else if (normalizedSlot.start_time) {
+            // Try to parse just time and use today's date
+            const today = new Date().toISOString().split('T')[0]
+            const timeWithSeconds = normalizedSlot.start_time.includes(':') ? 
+                (normalizedSlot.start_time.split(':').length === 2 ? `${normalizedSlot.start_time}:00` : normalizedSlot.start_time) : 
+                `${normalizedSlot.start_time}:00:00`
+            startDateTime = `${today}T${timeWithSeconds}`
+        } else {
+            console.error('🚨 Cannot construct datetime from slot:', apiSlot)
+            return mapApiSlotFallback(apiSlot)
+        }
+        
         const duration = normalizedSlot.duration_minutes || apiSlot.duration || 60
         
         // Validate the date string before using it
         const startDate = new Date(startDateTime)
         if (isNaN(startDate.getTime())) {
-            console.error('🚨 Invalid startDateTime:', startDateTime, 'from slot:', apiSlot)
+            console.error('🚨 Invalid startDateTime after construction:', startDateTime, 'from slot:', apiSlot)
             return mapApiSlotFallback(apiSlot)
         }
         
@@ -181,7 +204,7 @@ export function mapApiSlotToTimeSlot(apiSlot: any): any {
             available: normalizedSlot.available,
             duration_minutes: duration,
             provider_name: normalizedSlot.provider_name,
-            service_instance_id: normalizedSlot.service_instance_id,
+            service_instance_id: normalizedSlot.service_instance_id || 'default-service-instance',
             // Preserve original format for compatibility
             date: apiSlot.date,
             time: apiSlot.time,
@@ -200,7 +223,34 @@ function mapApiSlotFallback(apiSlot: any): any {
     console.warn('🚨 Using fallback API slot mapping for:', apiSlot)
     
     try {
-        const startDateTime = apiSlot.start_time || `${apiSlot.date}T${apiSlot.time}:00`
+        // Handle completely empty slot objects or objects with minimal data
+        if (!apiSlot || Object.keys(apiSlot).length === 0) {
+            console.error('🚨 Empty slot object received - should have been filtered upstream')
+            // Return null or throw error to indicate this should not be processed
+            throw new Error('Empty slot object passed to fallback mapping - check filtering logic')
+        }
+        
+        // Handle objects that only have invalid/minimal data
+        if (Object.keys(apiSlot).length <= 2 && 
+            !apiSlot.provider_id && !apiSlot.providerId && !apiSlot.id &&
+            !apiSlot.date && !apiSlot.start_time) {
+            console.error('🚨 Slot object with insufficient data:', apiSlot)
+            throw new Error('Slot object missing critical fields - should have been filtered upstream')
+        }
+        
+        let startDateTime: string
+        if (apiSlot.start_time && apiSlot.start_time.includes('T')) {
+            startDateTime = apiSlot.start_time
+        } else if (apiSlot.date && apiSlot.time) {
+            const timeWithSeconds = apiSlot.time.includes(':') ? 
+                (apiSlot.time.split(':').length === 2 ? `${apiSlot.time}:00` : apiSlot.time) : 
+                `${apiSlot.time}:00:00`
+            startDateTime = `${apiSlot.date}T${timeWithSeconds}`
+        } else {
+            // Last resort - use current time
+            startDateTime = new Date().toISOString()
+        }
+        
         const duration = apiSlot.duration_minutes || apiSlot.duration || 60
         
         // Validate the date string

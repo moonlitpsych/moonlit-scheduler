@@ -9,11 +9,11 @@ import crypto from 'crypto'
 // Use service role to avoid RLS blocks on inserts
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Must be present in env
+  process.env.SUPABASE_SERVICE_KEY! // Must be present in env
 );
 
 // One-time boolean log (no secrets)
-console.log('BOOKING DEBUG: service role present?', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+console.log('BOOKING DEBUG: service role present?', !!process.env.SUPABASE_SERVICE_KEY);
 
 interface AppointmentRequest {
   providerId: string
@@ -92,17 +92,17 @@ export async function POST(request: NextRequest) {
       payerId: !!payerId,
       date,
       time,
-      hasPatientFirstName: !!patient.firstName,
-      hasPatientLastName: !!patient.lastName,
-      hasPatientPhone: !!patient.phone,
-      hasPatientEmail: !!patient.email,
+      hasPatientFirstName: !!patient?.firstName,
+      hasPatientLastName: !!patient?.lastName,
+      hasPatientPhone: !!patient?.phone,
+      hasPatientEmail: !!patient?.email,
       createInEMR,
       isTest
     });
 
     // Validate required fields
     if (!providerId || !serviceInstanceId || !payerId || !date || !time || 
-        !patient.firstName || !patient.lastName || !patient.phone) {
+        !patient?.firstName || !patient?.lastName || !patient?.phone) {
       console.error('❌ BOOKING DEBUG - Missing required fields:', {
         hasProviderId: !!providerId,
         hasServiceInstanceId: !!serviceInstanceId,

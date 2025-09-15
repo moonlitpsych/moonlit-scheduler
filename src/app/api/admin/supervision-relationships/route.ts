@@ -108,14 +108,14 @@ export async function GET(request: NextRequest) {
         updated_at,
         created_by,
         updated_by,
-        resident:providers!supervision_relationships_resident_provider_id_fkey (
+        resident:providers!resident_provider_id (
           id,
           first_name,
           last_name,
           email,
           role_title
         ),
-        attending:providers!supervision_relationships_attending_provider_id_fkey (
+        attending:providers!attending_provider_id (
           id,
           first_name,
           last_name,

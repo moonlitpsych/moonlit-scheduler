@@ -61,10 +61,16 @@ export async function POST(request: NextRequest) {
         const defaultServiceInstanceId = serviceInstance.id
         console.log(`📋 Using service instance ID: ${defaultServiceInstanceId}`)
 
-        // Step 1: Get BOOKABLE providers using canonical view (consistent with providers-for-payer API)
+        // Step 1: Get BOOKABLE providers using canonical view 
         const { data: bookableRelationships, error: networkError } = await supabaseAdmin
             .from('v_bookable_provider_payer')
-            .select('*')
+            .select(`
+                provider_id,
+                payer_id, 
+                network_status,
+                billing_provider_id,
+                effective_date
+            `)
             .eq('payer_id', payer_id)
 
         if (networkError) {
@@ -75,24 +81,78 @@ export async function POST(request: NextRequest) {
             )
         }
 
+        if (!bookableRelationships || bookableRelationships.length === 0) {
+            return NextResponse.json({
+                success: true,
+                data: {
+                    totalSlots: 0,
+                    availableSlots: [],
+                    dateRange: { startDate: requestDate, endDate: requestEndDate },
+                    message: 'No bookable providers currently accept this insurance'
+                }
+            })
+        }
+
+        // Step 2: Get provider details for bookable providers
+        const providerIds = bookableRelationships.map(rel => rel.provider_id)
+        const { data: providerDetails, error: providerError } = await supabaseAdmin
+            .from('providers')
+            .select(`
+                id,
+                first_name,
+                last_name,
+                title,
+                role,
+                provider_type,
+                is_active,
+                is_bookable
+            `)
+            .in('id', providerIds)
+
+        if (providerError) {
+            console.error('❌ Error fetching provider details:', providerError)
+            return NextResponse.json(
+                { error: 'Failed to fetch provider details', details: providerError, success: false },
+                { status: 500 }
+            )
+        }
+
+        console.log(`📊 CANONICAL VIEW DEBUG: Found ${bookableRelationships?.length || 0} provider relationships`)
+        console.log(`📊 PROVIDER DETAILS DEBUG: Found ${providerDetails?.length || 0} provider details`)
+        
+        // Create lookup map for provider details
+        const providerMap = new Map(providerDetails?.map(p => [p.id, p]) || [])
+
         // Transform canonical view data to expected format
-        const bookableProviders = bookableRelationships?.map(rel => ({
-            provider_id: rel.provider_id,
-            payer_id: rel.payer_id,
-            via: rel.network_status === 'in_network' ? 'direct' : 'supervised',
-            attending_provider_id: rel.billing_provider_id,
-            supervision_level: rel.network_status === 'supervised' ? 'standard' : null,
-            requires_co_visit: false, // Not modeled in new view
-            effective: true,
-            bookable_from_date: rel.effective_date,
-            first_name: rel.first_name,
-            last_name: rel.last_name,
-            title: rel.title,
-            role: rel.role,
-            provider_type: rel.provider_type,
-            is_active: rel.is_active,
-            is_bookable: rel.is_bookable
-        })) || []
+        const bookableProviders = bookableRelationships?.map(rel => {
+            const provider = providerMap.get(rel.provider_id)
+            return {
+                provider_id: rel.provider_id,
+                payer_id: rel.payer_id,
+                via: rel.network_status === 'in_network' ? 'direct' : 'supervised',
+                attending_provider_id: rel.billing_provider_id,
+                supervision_level: rel.network_status === 'supervised' ? 'standard' : null,
+                requires_co_visit: false, // Not modeled in new view
+                effective: true,
+                bookable_from_date: rel.effective_date,
+                first_name: provider?.first_name || 'Unknown',
+                last_name: provider?.last_name || 'Provider',
+                title: provider?.title || '',
+                role: provider?.role || '',
+                provider_type: provider?.provider_type || '',
+                is_active: provider?.is_active || false,
+                is_bookable: provider?.is_bookable || false
+            }
+        }) || []
+
+        if (bookableProviders.length > 0) {
+            console.log('📋 First provider sample:', {
+                provider_id: bookableProviders[0].provider_id,
+                first_name: bookableProviders[0].first_name,
+                last_name: bookableProviders[0].last_name,
+                has_provider_details: !!providerMap.get(bookableProviders[0].provider_id)
+            })
+        }
 
         if (provider_id) {
             const filtered = bookableProviders.filter(bp => bp.provider_id === provider_id)
@@ -112,8 +172,8 @@ export async function POST(request: NextRequest) {
             })
         }
 
-        const providerIds = bookableProviders.map(bp => bp.provider_id)
-        console.log(`👥 NEW: Found ${bookableProviders.length} BOOKABLE providers from fallback logic:`, 
+        const finalProviderIds = bookableProviders.map(bp => bp.provider_id)
+        console.log(`👥 NEW: Found ${bookableProviders.length} BOOKABLE providers from canonical view:`, 
             bookableProviders.map(bp => `${bp.first_name} ${bp.last_name} (via: ${bp.via}, co-visit: ${bp.requires_co_visit})`))
 
         // Separate providers that need co-visit from regular providers
@@ -130,7 +190,7 @@ export async function POST(request: NextRequest) {
         const { data: availability, error: availabilityError } = await supabaseAdmin
             .from('provider_availability')
             .select('*')
-            .in('provider_id', providerIds) // Only query providers in payer network
+            .in('provider_id', finalProviderIds) // Only query providers in payer network
             .eq('day_of_week', dayOfWeek)
             .eq('is_recurring', true)
 
@@ -148,7 +208,7 @@ export async function POST(request: NextRequest) {
         const { data: exceptions, error: exceptionsError } = await supabaseAdmin
             .from('availability_exceptions')
             .select('*')
-            .in('provider_id', providerIds)
+            .in('provider_id', finalProviderIds)
             .eq('exception_date', requestDate)
 
         if (exceptionsError) {
