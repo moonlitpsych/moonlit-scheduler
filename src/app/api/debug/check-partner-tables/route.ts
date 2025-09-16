@@ -15,14 +15,14 @@ export async function GET(request: NextRequest) {
 
     console.log('📋 Partner-related tables:', tables)
 
-    // Check partner_contacts table structure and data
-    const { data: partnerContacts, error: contactsError } = await supabaseAdmin
-      .from('partner_contacts')
+    // Check contacts table structure and data
+    const { data: contacts, error: contactsError } = await supabaseAdmin
+      .from('contacts')
       .select('*')
       .limit(5)
 
-    console.log('👥 partner_contacts sample data:', partnerContacts)
-    console.log('❌ partner_contacts error:', contactsError)
+    console.log('👥 contacts sample data:', contacts)
+    console.log('❌ contacts error:', contactsError)
 
     // Check organizations table structure and data  
     const { data: organizations, error: orgsError } = await supabaseAdmin
@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
     console.log('❌ organizations error:', orgsError)
 
     // Get counts
-    const { count: partnerContactsCount } = await supabaseAdmin
-      .from('partner_contacts')
+    const { count: contactsCount } = await supabaseAdmin
+      .from('contacts')
       .select('*', { count: 'exact', head: true })
 
     const { count: organizationsCount } = await supabaseAdmin
@@ -45,9 +45,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       tables: tables,
-      partner_contacts: {
-        count: partnerContactsCount,
-        sample: partnerContacts,
+      contacts: {
+        count: contactsCount,
+        sample: contacts,
         error: contactsError
       },
       organizations: {
