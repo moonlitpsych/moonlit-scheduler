@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react'
 import BookingFlow from '@/components/booking/BookingFlow'
 import { Provider } from '@/types/provider'
 
+// Force this route to be dynamic so middleware can run
+export const dynamic = 'force-dynamic'
+
 export default function ProviderSpecificBookingPage() {
     const params = useParams()
     const searchParams = useSearchParams()
