@@ -24,7 +24,16 @@ const nextConfig = {
   typescript: {
     // Temporarily ignore TypeScript errors during builds for deployment
     ignoreBuildErrors: true,
-  }
+  },
+  async redirects() {
+    return [
+      {
+        source: '/book/:path*',
+        destination: 'https://booknow.trymoonlit.com',
+        permanent: false, // 302/307
+      },
+    ];
+  },
 }
 
 module.exports = nextConfig

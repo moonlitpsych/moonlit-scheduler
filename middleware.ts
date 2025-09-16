@@ -5,6 +5,9 @@ export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
   const host = request.headers.get('host')
 
+  // Temporary logging to debug middleware execution
+  console.log('[MW]', host, pathname)
+
   // 1. Host redirect: trymoonlit.com → booking.trymoonlit.com (301)
   // Redirect all traffic from trymoonlit.com to booking.trymoonlit.com preserving path and query
   if (host === 'trymoonlit.com') {
