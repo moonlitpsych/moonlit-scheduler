@@ -12,10 +12,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl, 301)
   }
 
-  // 2. Route redirect: /book/* → https://trymoonlit.com/see_a_psychiatrist (302)
+  // 2. Route redirect: /book/* → https://booknow.trymoonlit.com (302)
   // Temporary redirect to Bubble booking page for any /book routes
   if (pathname === '/book' || pathname.startsWith('/book/')) {
-    const redirectUrl = new URL('https://trymoonlit.com/see_a_psychiatrist')
+    const redirectUrl = new URL('https://booknow.trymoonlit.com')
     return NextResponse.redirect(redirectUrl, 302)
   }
 
