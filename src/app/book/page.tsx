@@ -2,5 +2,5 @@
 import { redirect } from 'next/navigation'
 
 export default function BookPage() {
-  redirect('https://booknow.trymoonlit.com')
+  redirect('https://booknow.trymoonlit.com/see_a_psychiatrist')
 }

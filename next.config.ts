@@ -29,7 +29,7 @@ const nextConfig = {
     return [
       {
         source: '/book/:path*',
-        destination: 'https://booknow.trymoonlit.com',
+        destination: 'https://booknow.trymoonlit.com/see_a_psychiatrist',
         permanent: false, // 302/307
       },
     ];
