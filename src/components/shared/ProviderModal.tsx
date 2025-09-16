@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useProviderModal } from '@/contexts/ProviderModalContext'
-import { Provider, FocusAreaType } from '@/types/provider'
+import { Provider } from '@/types/provider'
 import { generateProviderSlug } from '@/lib/utils/providerSlug'
 
 interface AcceptedPayment {
@@ -65,19 +65,7 @@ export default function ProviderModal() {
     const displayName = provider.full_name || `${provider.first_name} ${provider.last_name}`
     const initials = `${provider.first_name?.charAt(0) || ''}${provider.last_name?.charAt(0) || ''}`
 
-    const chipClassForType = (type: FocusAreaType): string => {
-        const baseClass = "inline-block px-3 py-2 text-sm rounded font-['Newsreader'] transition-colors"
-        
-        switch (type) {
-            case 'specialty':
-                return `${baseClass} bg-[#BF9C73]/30 text-[#BF9C73] border border-[#BF9C73]/50 font-medium`
-            case 'population':
-                return `${baseClass} bg-[#E67A47]/20 text-[#E67A47] rounded-full`
-            case 'condition':
-            default:
-                return `${baseClass} bg-[#BF9C73]/20 text-[#BF9C73]`
-        }
-    }
+    const uniformChipClass = "inline-block px-3 py-2 text-sm rounded font-['Newsreader'] transition-colors bg-[#BF9C73]/20 text-[#BF9C73]"
 
     return (
         <>
@@ -181,9 +169,9 @@ export default function ProviderModal() {
                                     <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">Areas of Focus</h3>
                                     <div className="flex flex-wrap gap-2">
                                         {provider.focus_json.map((focus) => (
-                                            <span 
+                                            <span
                                                 key={focus.id}
-                                                className={chipClassForType(focus.type)}
+                                                className={uniformChipClass}
                                                 title={`${focus.type}: ${focus.name}`}
                                             >
                                                 {focus.name}

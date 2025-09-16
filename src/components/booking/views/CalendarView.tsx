@@ -445,31 +445,26 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
             console.log('✅ FINAL SUCCESS: Got availability slots:', apiSlots.length)
 
-<<<<<<< HEAD
-            // Convert AvailableSlot to TimeSlot format using data validation
-            const convertedSlots: TimeSlot[] = apiSlots.map(mapApiSlotToTimeSlot)
-=======
             // Filter out empty or invalid slot objects before processing
             const validApiSlots = apiSlots.filter(slot => {
                 if (!slot || typeof slot !== 'object') {
                     console.warn('🚨 Filtering out non-object slot:', slot)
                     return false
                 }
-                
+
                 if (Object.keys(slot).length === 0) {
                     console.warn('🚨 Filtering out empty slot object:', slot)
                     return false
                 }
-                
+
                 // Check for minimal required fields to ensure slot is processable
                 if (!slot.provider_id && !slot.providerId && !slot.id) {
                     console.warn('🚨 Filtering out slot without provider ID:', slot)
                     return false
                 }
-                
+
                 return true
             })
->>>>>>> feature/full-functionality
 
             console.log(`🔄 Filtered slots: ${apiSlots.length} → ${validApiSlots.length} valid slots`)
 
