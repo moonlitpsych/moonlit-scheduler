@@ -150,7 +150,10 @@ export async function POST(request: NextRequest) {
       localDateTime: `${date}T${time} America/Denver`,
       startUTC: start,
       endUTC: end,
-      duration
+      duration,
+      providerId,
+      date,
+      time
     });
 
     // Get provider details for validation
