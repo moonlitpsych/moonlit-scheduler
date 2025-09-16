@@ -86,10 +86,62 @@ export async function POST(request: NextRequest) {
 
         console.log('📊 Availability records found:', availability?.length || 0)
 
-        // Step 4: Generate time slots from availability
+        // Step 4: Get availability exceptions for the specific date
+        const { data: exceptions, error: exceptionsError } = await supabase
+            .from('availability_exceptions')
+            .select('*')
+            .in('provider_id', acceptingProviders)
+            .eq('exception_date', date)
+
+        if (exceptionsError) {
+            console.error('❌ Error fetching exceptions:', exceptionsError)
+            return NextResponse.json(
+                { success: false, error: 'Failed to fetch availability exceptions' },
+                { status: 500 }
+            )
+        }
+
+        console.log('🚫 Exceptions found for date:', exceptions?.length || 0)
+
+        // Step 5: Generate time slots from availability, respecting exceptions
         const timeSlots: TimeSlot[] = []
-        
+
         availability?.forEach(avail => {
+            // Check if this provider has any exceptions for this date
+            const providerException = exceptions?.find(e => e.provider_id === avail.provider_id)
+
+            if (providerException) {
+                // Handle different exception types
+                if (providerException.exception_type === 'unavailable' ||
+                    providerException.exception_type === 'vacation') {
+                    // Skip this provider entirely for this date
+                    console.log(`🚫 Provider ${avail.provider_id} unavailable on ${date}`)
+                    return
+                } else if (providerException.exception_type === 'custom_hours' &&
+                          providerException.start_time && providerException.end_time) {
+                    // Use custom hours instead of regular availability
+                    const customAvail = {
+                        ...avail,
+                        start_time: providerException.start_time,
+                        end_time: providerException.end_time
+                    }
+                    const slots = generateTimeSlotsFromAvailability(customAvail, date)
+                    timeSlots.push(...slots)
+                    return
+                } else if (providerException.exception_type === 'partial_block') {
+                    // Generate regular slots but filter out blocked time
+                    const slots = generateTimeSlotsFromAvailability(avail, date)
+                    const filteredSlots = slots.filter(slot => {
+                        if (!providerException.start_time || !providerException.end_time) return true
+                        const slotTime = new Date(slot.start_time).toTimeString().slice(0, 8)
+                        return slotTime < providerException.start_time || slotTime >= providerException.end_time
+                    })
+                    timeSlots.push(...filteredSlots)
+                    return
+                }
+            }
+
+            // No exceptions or unhandled exception type - use regular availability
             const slots = generateTimeSlotsFromAvailability(avail, date)
             timeSlots.push(...slots)
         })
@@ -102,6 +154,7 @@ export async function POST(request: NextRequest) {
                 availableSlots: timeSlots,
                 providersCount: acceptingProviders.length,
                 availabilityRecords: availability?.length || 0,
+                exceptionsCount: exceptions?.length || 0,
                 date,
                 dayOfWeek
             }

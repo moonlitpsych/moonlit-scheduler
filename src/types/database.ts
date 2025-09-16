@@ -1599,6 +1599,11 @@ export interface TimeSlot {
     available: boolean
     provider_name?: string
     duration_minutes?: number
+    service_instance_id?: string // Required for appointment creation
+    // Additional properties from AvailableSlot
+    date?: string
+    time?: string
+    providerId?: string
 }
 
 export interface PatientInfo {

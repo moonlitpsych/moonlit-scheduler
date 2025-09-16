@@ -8,30 +8,30 @@ export async function GET(request: NextRequest) {
     
     const results: any = {}
     
-    // Check partner_contacts table
+    // Check contacts table
     try {
-      const { data: partnerContacts, error: contactsError } = await supabaseAdmin
-        .from('partner_contacts')
+      const { data: contacts, error: contactsError } = await supabaseAdmin
+        .from('contacts')
         .select('*')
         .limit(10)
         
       if (contactsError) {
-        results.partner_contacts = { 
-          error: contactsError.message, 
-          exists: false 
+        results.contacts = {
+          error: contactsError.message,
+          exists: false
         }
       } else {
-        results.partner_contacts = {
+        results.contacts = {
           exists: true,
-          count: partnerContacts?.length || 0,
-          sample_data: partnerContacts?.slice(0, 3) || [],
-          columns: partnerContacts?.[0] ? Object.keys(partnerContacts[0]) : []
+          count: contacts?.length || 0,
+          sample_data: contacts?.slice(0, 3) || [],
+          columns: contacts?.[0] ? Object.keys(contacts[0]) : []
         }
       }
     } catch (err: any) {
-      results.partner_contacts = { 
-        error: err.message, 
-        exists: false 
+      results.contacts = {
+        error: err.message,
+        exists: false
       }
     }
     

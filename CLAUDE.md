@@ -1,5 +1,4 @@
-
-CLAUDE CODE: Moonlit Scheduler
+🎉 CLAUDE CODE: Moonlit Scheduler
 🚨 Critical Development Policy
 
 No mock data without explicit permission.
@@ -7,6 +6,58 @@ No mock data without explicit permission.
 Never insert fake IntakeQ IDs, providers, or placeholder database rows.
 
 Data integrity is critical — this is a healthcare application.
+
+🌟 Project Status
+
+Moonlit Scheduler = production-ready healthcare website + booking platform
+
+Fully functional booking system (dual intent: Book Now vs See Availability).
+
+Provider directory with real data and filtering.
+
+Double-booking prevention + IntakeQ EMR integration.
+
+Provider auth with admin/provider dual roles.
+
+RLS-compliant schedule management API.
+
+🏗️ System Architecture
+
+Frontend: Next.js + TypeScript + Tailwind
+Backend: Next.js API routes + Supabase Postgres
+Auth: Supabase Auth (admin vs provider vs partner separation)
+EHRs: IntakeQ + Athena integrations
+Email: Resend API (logs to console if unset)
+
+✅ Current Functionality
+
+Website routes:
+
+/ homepage
+
+/book booking flow (?intent=book|explore)
+
+/practitioners searchable provider directory
+
+/ways-to-pay insurance directory
+
+Booking flow: Welcome → Insurance → Calendar → ROI → Summary → Confirmation
+
+APIs: availability, create appointment, providers-for-payer, ways-to-pay.
+
+Features: real-time conflict checking, language selection, clinical supervision model, exception handling, dual-role login, partner authentication.
+
+Status: All tested and working in production (as of Sept 12, 2025).
+
+👨‍⚕️ Provider/Auth Rules
+
+Dual-role support: e.g. Dr. C. Rufus Sweeney can switch between admin and provider dashboards.
+
+Provider visibility: controlled by list_on_provider_page + is_bookable.
+
+Supervision model: Residents bookable if supervised by attending (billing) provider.
+
+RLS compliance: All provider schedule reads/writes go through admin-privileged API endpoints.
 
 🌟 Project Status
 
@@ -119,4 +170,8 @@ Keep role separation clear: admin, provider, partner each have distinct routes a
 
 All production data must be real; confirm with Miriam before seeding.
 
+<<<<<<< HEAD
 Last updated: Sept 12, 2025
+=======
+Last updated: Sept 12, 2025
+>>>>>>> feature/full-functionality

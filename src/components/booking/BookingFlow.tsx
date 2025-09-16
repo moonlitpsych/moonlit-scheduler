@@ -170,55 +170,70 @@ export default function BookingFlow({
     }
 
     const handleAppointmentConfirmed = async () => {
-        // Create appointment using the EMR integration
+        // Create appointment with enhanced error handling
         try {
-            console.log('📅 Creating appointment with EMR integration...')
-            
-            // Debug: Log current state
-            console.log('🔍 Current booking state:', {
-                selectedTimeSlot: state.selectedTimeSlot,
-                selectedPayer: state.selectedPayer,
-                insuranceInfo: state.insuranceInfo
+            // Enhanced frontend logging
+            console.log('🚀 BOOKING DEBUG - Starting appointment creation:', {
+                hasTimeSlot: !!state.selectedTimeSlot,
+                hasProvider: !!state.selectedTimeSlot?.provider_id,
+                hasPayer: !!state.selectedPayer?.id,
+                hasPatientInfo: !!state.insuranceInfo,
+                hasServiceInstanceId: !!(state.selectedTimeSlot as any)?.service_instance_id,
+                patientName: `${state.insuranceInfo?.firstName} ${state.insuranceInfo?.lastName}`,
+                selectedDate: state.selectedTimeSlot?.date,
+                selectedTime: state.selectedTimeSlot?.time
             })
             
             // Validate required data
-            if (!state.selectedTimeSlot?.provider_id || !state.selectedPayer?.id || !state.selectedTimeSlot?.start_time) {
-                console.error('❌ Missing required booking data:', {
+            if (!state.selectedTimeSlot?.provider_id || !state.selectedPayer?.id || 
+                !state.selectedTimeSlot?.date || !state.selectedTimeSlot?.time) {
+                console.error('❌ BOOKING DEBUG - Missing required booking data:', {
                     hasTimeSlotProviderId: !!state.selectedTimeSlot?.provider_id,
                     hasPayerId: !!state.selectedPayer?.id,
-                    hasStartTime: !!state.selectedTimeSlot?.start_time,
+                    hasDate: !!state.selectedTimeSlot?.date,
+                    hasTime: !!state.selectedTimeSlot?.time,
                     timeSlot: state.selectedTimeSlot,
                     payer: state.selectedPayer
                 })
                 throw new Error('Missing required booking data')
             }
             
-            const startTime = state.selectedTimeSlot.start_time
-            const datePart = startTime.split('T')[0]
-            const timePart = startTime.split('T')[1]?.substring(0, 5)
-            
-            if (!datePart || !timePart) {
-                throw new Error('Invalid date/time format in selected time slot')
+            // Validate patient info
+            if (!state.insuranceInfo?.firstName || !state.insuranceInfo?.lastName || !state.insuranceInfo?.phone) {
+                console.error('❌ BOOKING DEBUG - Missing patient information:', {
+                    hasFirstName: !!state.insuranceInfo?.firstName,
+                    hasLastName: !!state.insuranceInfo?.lastName,
+                    hasPhone: !!state.insuranceInfo?.phone,
+                    hasEmail: !!state.insuranceInfo?.email
+                })
+                throw new Error('Missing required patient information')
             }
             
             const appointmentData = {
                 providerId: state.selectedTimeSlot.provider_id,
+                serviceInstanceId: (state.selectedTimeSlot as any).service_instance_id, // Pass from selected slot
                 payerId: state.selectedPayer.id,
-                date: datePart, // Extract date from start_time
-                time: timePart, // Extract HH:MM from start_time
+                date: state.selectedTimeSlot.date,
+                time: state.selectedTimeSlot.time,
                 patient: {
-                    firstName: state.insuranceInfo?.firstName || '',
-                    lastName: state.insuranceInfo?.lastName || '',
-                    email: state.insuranceInfo?.email || '',
-                    phone: state.insuranceInfo?.phone || '',
-                    dateOfBirth: state.insuranceInfo?.dob || state.insuranceInfo?.dateOfBirth || ''
+                    firstName: state.insuranceInfo.firstName,
+                    lastName: state.insuranceInfo.lastName,
+                    email: state.insuranceInfo.email || '',
+                    phone: state.insuranceInfo.phone,
+                    dateOfBirth: state.insuranceInfo.dob || state.insuranceInfo.dateOfBirth || ''
+                },
+                insurance: {
+                    policyNumber: state.insuranceInfo.policyNumber || '',
+                    groupNumber: state.insuranceInfo.groupNumber || '',
+                    memberName: state.insuranceInfo.memberName || ''
                 },
                 appointmentType: 'consultation',
                 reason: 'Scheduled appointment via booking flow',
-                createInEMR: true // ✅ FIXED: Use createInEMR instead of createInAthena
+                createInEMR: true,
+                isTest: false // Set to true for testing
             }
 
-            console.log('📋 Appointment data:', appointmentData)
+            console.log('📋 BOOKING DEBUG - Appointment payload:', appointmentData)
 
             const response = await fetch('/api/patient-booking/create-appointment', {
                 method: 'POST',
@@ -226,29 +241,45 @@ export default function BookingFlow({
                 body: JSON.stringify(appointmentData)
             })
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`)
+            let result: any = null
+            try { 
+                result = await response.json() 
+            } catch (parseError) { 
+                console.error('❌ BOOKING DEBUG - Failed to parse response:', parseError)
+                throw new Error('Invalid response from server')
             }
 
-            const result = await response.json()
-            
-            if (result.success) {
-                console.log('✅ Appointment created successfully:', result.data.appointment.id)
-                updateState({ 
-                    appointmentId: result.data.appointment.id,
-                    roiContacts: state.roiContacts
+            console.log('📨 BOOKING DEBUG - API Response:', {
+                status: response.status,
+                ok: response.ok,
+                success: result?.success,
+                hasAppointmentId: !!result?.data?.appointment?.id,
+                error: result?.error
+            })
+
+            // Only proceed to confirmation if API returned success with appointment ID
+            if (!response.ok || !result?.success || !result?.data?.appointment?.id) {
+                console.error('❌ BOOKING DEBUG - Appointment creation failed:', { 
+                    status: response.status, 
+                    result 
                 })
-            } else {
-                throw new Error(result.error || 'Appointment creation failed')
+                alert(`Appointment failed: ${result?.error ?? response.statusText ?? 'Unknown error'}`)
+                return // STOP — do not go to confirmation
             }
+
+            // Success case
+            console.log('✅ BOOKING DEBUG - Appointment created successfully:', result.data.appointment.id)
+            updateState({ 
+                appointmentId: result.data.appointment.id,
+                roiContacts: state.roiContacts
+            })
+            goToStep('confirmation') // Only on success
 
         } catch (error: any) {
-            console.error('❌ Appointment creation failed:', error)
-            // Still proceed to confirmation but without appointment ID
-            // User will see the error and can try again
+            console.error('❌ BOOKING DEBUG - Unexpected error:', error)
+            alert(`Booking failed: ${error.message}`)
+            return // STOP — do not go to confirmation
         }
-        
-        goToStep('confirmation')
     }
 
     const handleWaitlistSubmitted = () => {

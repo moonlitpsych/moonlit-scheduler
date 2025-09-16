@@ -14,9 +14,9 @@ export async function GET(request: NextRequest) {
 
     console.log('🔍 Admin fetching partners:', { page, perPage, search })
 
-    // Query partner_contacts table for individual partner contacts (172 records)
+    // Query contacts table for individual partner contacts (172 records)
     let query = supabaseAdmin
-      .from('partner_contacts')
+      .from('contacts')
       .select(`
         id,
         first_name,
@@ -32,14 +32,14 @@ export async function GET(request: NextRequest) {
         updated_at
       `)
 
-    // Apply filters (adapted for partner_contacts table)
+    // Apply filters (adapted for contacts table)
     if (search) {
       query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,title.ilike.%${search}%`)
     }
 
-    // Get total count for pagination (simpler approach)  
+    // Get total count for pagination (simpler approach)
     const { data: allContacts, error: countError } = await supabaseAdmin
-      .from('partner_contacts')
+      .from('contacts')
       .select('id')
     
     const totalCount = allContacts?.length || 0
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     // Get paginated results
     const offset = (page - 1) * perPage
-    const { data: partnerContacts, error } = await query
+    const { data: contacts, error } = await query
       .order('created_at', { ascending: false })
       .range(offset, offset + perPage - 1)
 
@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Transform partner_contacts data to look like partners for frontend compatibility
-    const transformedPartners = (partnerContacts || []).map(contact => ({
+    // Transform contacts data to look like partners for frontend compatibility
+    const transformedPartners = (contacts || []).map(contact => ({
       id: contact.id,
       name: `${contact.first_name} ${contact.last_name}`.trim(),
       contact_email: contact.email,
@@ -74,13 +74,13 @@ export async function GET(request: NextRequest) {
       last_contact_date: contact.updated_at?.split('T')[0],
       created_at: contact.created_at,
       updated_at: contact.updated_at,
-      // Add partner_contacts specific fields
+      // Add contacts specific fields
       partner_id: contact.partner_id,
       organization_id: contact.organization_id,
       is_primary: contact.is_primary
     }))
 
-    console.log(`✅ Found ${partnerContacts?.length || 0} partner contacts (${totalCount} total)`)
+    console.log(`✅ Found ${contacts?.length || 0} contacts (${totalCount} total)`)
 
     return NextResponse.json({
       success: true,
@@ -93,9 +93,9 @@ export async function GET(request: NextRequest) {
         total_pages: Math.ceil(totalCount / perPage)
       },
       debug: {
-        query_table: 'partner_contacts',
+        query_table: 'contacts',
         total_contacts: totalCount,
-        sample_names: partnerContacts?.slice(0, 3).map(c => `${c.first_name} ${c.last_name}`)
+        sample_names: contacts?.slice(0, 3).map(c => `${c.first_name} ${c.last_name}`)
       }
     })
 

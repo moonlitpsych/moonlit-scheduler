@@ -388,8 +388,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     if (data1.success) {
                         const rawSlots = data1.data?.availableSlots || []
                         // Validate and normalize slot data in development
-                        apiSlots = process.env.NODE_ENV === 'development' 
-                            ? rawSlots.map(mapApiSlotToTimeSlot)
+                        apiSlots = process.env.NODE_ENV === 'development'
+                            ? rawSlots.filter(slot => slot && typeof slot === 'object').map(mapApiSlotToTimeSlot)
                             : rawSlots
                         success = true
                         console.log(`📊 Processed ${apiSlots.length} slots with data validation`)
@@ -411,7 +411,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         body: JSON.stringify({
                             payer_id: payerId,
                             date: dateString,
-                            provider_id: bookingMode === 'by_provider' ? effectiveProviderId : undefined
+                            provider_id: viewMode === 'by_provider' && selectedProvider ? selectedProvider : undefined,
+                            language: selectedLanguage
                         })
                     })
                     
@@ -431,74 +432,58 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 }
             }
 
-            // STRATEGY 3: Use diagnostics endpoint to get raw data and calculate availability
-            if (!success) {
-                try {
-                    console.log('📡 STRATEGY 3: Using diagnostics data to generate availability')
-                    
-                    // Get day of week for the selected date
-                    const targetDate = new Date(dateString)
-                    const dayOfWeek = targetDate.getDay()
-                    
-                    // For provider-specific mode, generate slots for the selected provider
-                    if (bookingMode === 'by_provider' && effectiveProviderId) {
-                        console.log(`🏥 Generating availability for provider: ${effectiveProviderId}`)
-                        
-                        // Find the selected provider in our providers list
-                        const provider = providers.find(p => p.id === effectiveProviderId)
-                        const providerName = provider?.full_name || 'Selected Provider'
-                        
-                        // Generate mock availability for the selected provider (weekdays only for demo)
-                        if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday-Friday
-                            apiSlots = [
-                                { date: dateString, time: '09:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '10:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '11:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '14:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '15:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                                { date: dateString, time: '16:00', duration: 60, provider_id: selectedProvider, available: true, provider_name: providerName },
-                            ]
-                            success = true
-                            console.log(`✅ Strategy 3 SUCCESS: Generated availability for ${providerName}`)
-                        }
-                    } else {
-                        // Original merged availability logic for "by_availability" mode
-                        // Generate slots based on your diagnostics data
-                        // Travis (35ab086b-2894-446d-9ab5-3d41613017ad) has Sunday availability 09:00-17:00
-                        // DMBA payer_id is 8bd0bedb-226e-4253-bfeb-46ce835ef2a8
-                        
-                        if (payerId === '8bd0bedb-226e-4253-bfeb-46ce835ef2a8') { // DMBA
-                            if (dayOfWeek === 0) { // Sunday - Travis availability
-                                apiSlots = [
-                                    { date: dateString, time: '09:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '09:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '10:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '10:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '11:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '13:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '13:30', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '14:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '15:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                    { date: dateString, time: '16:00', duration: 60, provider_id: '35ab086b-2894-446d-9ab5-3d41613017ad', available: true, provider_name: 'Travis Norseth' },
-                                ]
-                                success = true
-                                console.log('✅ Strategy 3 SUCCESS: Generated Travis Sunday availability')
-                            }
-                        }
-                    }
-                } catch (error3) {
-                    console.log('❌ Strategy 3 failed:', error3)
-                }
-            }
+            // NO STRATEGY 3 - No fake data generation allowed
+            // Only use real availability from the database
 
             if (!success) {
-                throw new Error('All API strategies failed - please check Next.js dev server restart')
+                console.error('❌ All API strategies failed - no availability data')
+                setError('Unable to fetch availability. Please try again or contact support.')
+                setAvailableSlots([])
+                setConsolidatedSlots([])
+                return
             }
 
             console.log('✅ FINAL SUCCESS: Got availability slots:', apiSlots.length)
 
+<<<<<<< HEAD
             // Convert AvailableSlot to TimeSlot format using data validation
             const convertedSlots: TimeSlot[] = apiSlots.map(mapApiSlotToTimeSlot)
+=======
+            // Filter out empty or invalid slot objects before processing
+            const validApiSlots = apiSlots.filter(slot => {
+                if (!slot || typeof slot !== 'object') {
+                    console.warn('🚨 Filtering out non-object slot:', slot)
+                    return false
+                }
+                
+                if (Object.keys(slot).length === 0) {
+                    console.warn('🚨 Filtering out empty slot object:', slot)
+                    return false
+                }
+                
+                // Check for minimal required fields to ensure slot is processable
+                if (!slot.provider_id && !slot.providerId && !slot.id) {
+                    console.warn('🚨 Filtering out slot without provider ID:', slot)
+                    return false
+                }
+                
+                return true
+            })
+>>>>>>> feature/full-functionality
+
+            console.log(`🔄 Filtered slots: ${apiSlots.length} → ${validApiSlots.length} valid slots`)
+
+            // Convert AvailableSlot to TimeSlot format using data validation
+            const convertedSlots: TimeSlot[] = validApiSlots
+                .map(slot => {
+                    try {
+                        return mapApiSlotToTimeSlot(slot)
+                    } catch (error) {
+                        console.error('🚨 Failed to map slot, skipping:', slot, error)
+                        return null
+                    }
+                })
+                .filter(slot => slot !== null) as TimeSlot[]
 
             console.log('🔄 Final converted slots:', convertedSlots.length)
             
