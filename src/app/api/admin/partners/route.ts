@@ -47,9 +47,9 @@ export async function GET(request: NextRequest) {
 
     console.log('🔍 Admin fetching partners:', { page, perPage, search, status, stage })
 
-    // Query partner_contacts table for individual partner contacts (172 records)
+    // Query contacts table for individual partner contacts (172 records)
     let query = supabaseAdmin
-      .from('partner_contacts')
+      .from('contacts')
       .select(`
         id,
         first_name,
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
         updated_at
       `)
 
-    // Apply filters (adapted for partner_contacts table)
+    // Apply filters (adapted for contacts table)
     if (search) {
       query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,title.ilike.%${search}%`)
     }
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     // Get total count for pagination (simpler approach)
     const { data: allContacts, error: countError } = await supabaseAdmin
-      .from('partner_contacts')
+      .from('contacts')
       .select('id')
     
     const totalCount = allContacts?.length || 0
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     // Get paginated results
     const offset = (page - 1) * perPage
-    const { data: partnerContacts, error } = await query
+    const { data: contacts, error } = await query
       .order('created_at', { ascending: false })
       .range(offset, offset + perPage - 1)
 
@@ -101,8 +101,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Transform partner_contacts data to look like partners for frontend compatibility
-    const transformedPartners = (partnerContacts || []).map(contact => {
+    // Transform contacts data to look like partners for frontend compatibility
+    const transformedPartners = (contacts || []).map(contact => {
       // Determine stage based on contact data and notes
       let stage = 'lead' // Default to lead
       
@@ -148,14 +148,14 @@ export async function GET(request: NextRequest) {
         organization_type: null,
         organization_status: null,
         location: null,
-        // Add partner_contacts specific fields
+        // Add contacts specific fields
         partner_id: contact.partner_id,
         organization_id: contact.organization_id,
         is_primary: contact.is_primary
       }
     })
 
-    console.log(`✅ Found ${partnerContacts?.length || 0} partner contacts (${totalCount} total)`)
+    console.log(`✅ Found ${contacts?.length || 0} contacts (${totalCount} total)`)
 
     return NextResponse.json({
       success: true,
