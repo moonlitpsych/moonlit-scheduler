@@ -111,40 +111,40 @@ const SearchResultCard = ({ payer }: { payer: Payer }) => {
   const status = getPayerStatus()
 
   return (
-    <div className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-[#BF9C73] hover:bg-[#BF9C73]/5 transition-all duration-200 bg-white">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+    <div className="w-full p-3 sm:p-4 border-2 border-gray-200 rounded-xl hover:border-[#BF9C73] hover:bg-[#BF9C73]/5 transition-all duration-200 bg-white">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+        <div className="flex items-center space-x-3 sm:space-x-4">
           {/* Status Icon */}
-          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-            status.type === 'active' 
-              ? 'bg-green-100' 
-              : status.type === 'future' 
-                ? 'bg-blue-100' 
+          <div className={`flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${
+            status.type === 'active'
+              ? 'bg-green-100'
+              : status.type === 'future'
+                ? 'bg-blue-100'
                 : 'bg-gray-100'
           }`}>
             {status.icon === 'check' && (
-              <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
             )}
             {status.icon === 'calendar' && (
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             )}
             {status.icon === 'clock' && (
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             )}
           </div>
-          
+
           {/* Payer Info */}
-          <div>
-            <h3 className="font-semibold text-gray-900" style={{ fontFamily: 'Newsreader, serif' }}>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-gray-900 text-sm sm:text-base" style={{ fontFamily: 'Newsreader, serif' }}>
               {payer.name}
             </h3>
-            <p className="text-sm text-gray-500" style={{ fontFamily: 'Newsreader, serif' }}>
+            <p className="text-xs sm:text-sm text-gray-500" style={{ fontFamily: 'Newsreader, serif' }}>
               {status.text}
             </p>
             {payer.state && (
@@ -206,24 +206,22 @@ const PayerCard = ({ payer, showStatus = true, isEven = false }: { payer: Payer;
   }
   
   return (
-    <div className={`py-2 px-3 -mx-3 rounded ${isEven ? 'bg-[#FEF8F1]/30' : 'bg-transparent'}`}>
-      <div className="flex items-center justify-between">
+    <div className={`py-2 px-2 sm:px-3 -mx-2 sm:-mx-3 rounded ${isEven ? 'bg-[#FEF8F1]/30' : 'bg-transparent'}`}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
         <div className="flex items-center flex-1 min-w-0">
           {getStatusIcon()}
-          <div className={`
-            inline-block px-2 py-1 rounded text-sm font-medium mr-4
-            ${isActive 
-              ? 'bg-[#BF9C73] bg-opacity-20 text-[#BF9C73]' 
+          <div className={`inline-block px-2 py-1 rounded text-xs sm:text-sm font-medium mr-2 sm:mr-4 ${
+            isActive
+              ? 'bg-[#BF9C73] bg-opacity-20 text-[#BF9C73]'
               : hasFutureDate
                 ? 'bg-[#BF9C73] bg-opacity-10 text-[#BF9C73] opacity-50'
                 : 'bg-gray-100 text-gray-600'
-            }
-          `} style={{ fontFamily: 'Newsreader, serif' }}>
+          }`} style={{ fontFamily: 'Newsreader, serif' }}>
             {payer.name}
           </div>
         </div>
         {showStatus && (
-          <div className="text-right text-sm flex-shrink-0">
+          <div className="text-left sm:text-right text-xs sm:text-sm flex-shrink-0 ml-7 sm:ml-0">
             <StatusText payer={payer} />
           </div>
         )}
@@ -321,17 +319,17 @@ const StateSection = ({ stateName, payers }: { stateName: string; payers: Groupe
             <p className="text-sm text-gray-600 mb-3" style={{ fontFamily: 'Newsreader, serif' }}>
               Joining an insurance network can take time — months, in some cases. We are in the process of applying for and being able to accept the following payment methods:
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {remainingProjected.map((payer, index) => (
                 <div key={payer.id} className="flex items-center px-3 py-2 border border-[#BF9C73]/20 rounded-lg" style={{ fontFamily: 'Newsreader, serif' }}>
                   {/* Clock icon indicating coming soon */}
-                  <div className="flex-shrink-0 w-5 h-5 bg-[#BF9C73]/10 rounded-full flex items-center justify-center mr-3">
-                    <svg className="w-3 h-3 text-[#BF9C73]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 bg-[#BF9C73]/10 rounded-full flex items-center justify-center mr-2 sm:mr-3">
+                    <svg className="w-2 h-2 sm:w-3 sm:h-3 text-[#BF9C73]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <div>
-                    <div className="text-sm font-medium text-[#091747]">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs sm:text-sm font-medium text-[#091747] truncate">
                       {payer.name}
                     </div>
                     <div className="text-xs text-[#BF9C73]">
@@ -434,24 +432,24 @@ export default function WaysToPayPage() {
 
   return (
     <div className="bg-cream-50" style={{ backgroundColor: '#FEF8F1', fontFamily: 'Newsreader, serif' }}>
-        <div className="max-w-4xl mx-auto px-6 py-12">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-light text-navy-900 mb-4" style={{ color: '#091747' }}>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+          <div className="text-center mb-6 sm:mb-8">
+            <h1 className="text-2xl sm:text-4xl font-light text-navy-900 mb-4" style={{ color: '#091747' }}>
               Ways to pay for a Moonlit visit
             </h1>
-            <p className="text-lg text-gray-700 max-w-2xl mx-auto mb-6">
+            <p className="text-base sm:text-lg text-gray-700 max-w-2xl mx-auto mb-6 px-2">
               Verify which payers your physician accepts on the Our Practitioners page.
             </p>
-            
+
             {/* Search Bar */}
-            <div className="max-w-md mx-auto mb-6">
+            <div className="max-w-sm sm:max-w-md mx-auto mb-6 px-2">
               <div className="relative">
                 <input
                   type="text"
                   placeholder="Search for your insurance..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] outline-none"
+                  className="w-full px-4 py-3 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] outline-none"
                   style={{ fontFamily: 'Newsreader, serif' }}
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
