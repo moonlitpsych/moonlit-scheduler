@@ -22,15 +22,15 @@ export const API_SCHEMAS = {
         },
         // Alternative field names (what API might return)
         alternatives: {
-            provider_id: ['providerId', 'provider_id', 'id'],
-            provider_name: ['providerName', 'provider_name', 'name', 'full_name'],
+            provider_id: ['providerId', 'provider_id', 'id', 'provider.id'],
+            provider_name: ['providerName', 'provider_name', 'name', 'full_name', 'provider.first_name', 'provider.last_name'],
             available: ['isAvailable', 'available', 'is_available'],
             duration_minutes: ['duration', 'duration_minutes', 'durationMinutes'],
-            start_time: ['start_time', 'startTime', 'time'], 
+            start_time: ['start_time', 'startTime', 'time'],
             end_time: ['end_time', 'endTime']
         },
         // Required fields that must exist in some form
-        required: ['provider_id', 'provider_name', 'available']
+        required: ['provider_id', 'available']
     },
     PROVIDER_DATA: {
         primary: {
@@ -87,7 +87,25 @@ export function validateAndNormalizeData<T extends SchemaType>(
 
             // Try to find the field using alternative names
             for (const altField of alternatives) {
-                if (item.hasOwnProperty(altField)) {
+                if (altField.includes('.')) {
+                    // Handle nested object paths like 'provider.id'
+                    const pathParts = altField.split('.')
+                    let value = item
+                    let isValid = true
+                    for (const part of pathParts) {
+                        if (value && typeof value === 'object' && value.hasOwnProperty(part)) {
+                            value = value[part]
+                        } else {
+                            isValid = false
+                            break
+                        }
+                    }
+                    if (isValid && value !== undefined) {
+                        foundValue = value
+                        foundField = altField
+                        break
+                    }
+                } else if (item.hasOwnProperty(altField)) {
                     foundValue = item[altField]
                     foundField = altField
                     break
@@ -134,51 +152,65 @@ export function validateAndNormalizeData<T extends SchemaType>(
 }
 
 /**
- * Smart field mapper that handles common API response variations
+ * Direct field mapper for API slot responses
+ *
+ * ⚠️  CRITICAL: DO NOT RE-ADD VALIDATION TO THIS FUNCTION ⚠️
+ *
+ * This function previously used validateAndNormalizeData() which caused recurring
+ * "Invalid startDateTime" errors by corrupting slot data. The validation expected
+ * arrays but received individual objects, resulting in empty {} objects.
+ *
+ * Multiple Claude instances "fixed" this by adding more validation/fallbacks,
+ * but the real solution was REMOVING the problematic validation entirely.
+ *
+ * If you see startDateTime errors, DO NOT add validation back.
+ * Instead, check that this function hasn't been modified.
  */
 export function mapApiSlotToTimeSlot(apiSlot: any): any {
-    const validation = validateAndNormalizeData([apiSlot], 'AVAILABLE_SLOT', 'API Slot')
-    
-    if (!validation.isValid) {
-        console.warn('⚠️ API Slot validation failed:', validation.errors)
-        // Fall back to best-effort mapping
+    if (!apiSlot || typeof apiSlot !== 'object') {
+        console.error('🚨 Invalid apiSlot received:', apiSlot)
         return mapApiSlotFallback(apiSlot)
     }
 
-    if (validation.warnings.length > 0) {
-        console.warn('⚠️ API Slot mapping warnings:', validation.warnings)
-    }
-
-    const normalizedSlot = validation.normalizedData![0]
-    
     try {
-        // Convert to TimeSlot format expected by CalendarView
-        const startDateTime = normalizedSlot.start_time || `${apiSlot.date}T${apiSlot.time}:00`
-        const duration = normalizedSlot.duration_minutes || apiSlot.duration || 60
-        
-        // Validate the date string before using it
+        // Build datetime string from API format: {date: "2025-09-18", time: "09:00"}
+        let startDateTime: string
+        if (apiSlot.start_time) {
+            startDateTime = apiSlot.start_time
+        } else if (apiSlot.date && apiSlot.time) {
+            startDateTime = `${apiSlot.date}T${apiSlot.time}:00`
+        } else {
+            console.error('🚨 Missing date/time fields in slot:', apiSlot)
+            return mapApiSlotFallback(apiSlot)
+        }
+
+        // Validate the constructed datetime
         const startDate = new Date(startDateTime)
         if (isNaN(startDate.getTime())) {
             console.error('🚨 Invalid startDateTime:', startDateTime, 'from slot:', apiSlot)
             return mapApiSlotFallback(apiSlot)
         }
-        
-        const endTime = normalizedSlot.end_time || (() => {
-            const endDate = new Date(startDate.getTime() + duration * 60 * 1000)
-            if (isNaN(endDate.getTime())) {
-                console.error('🚨 Invalid endDate calculation for:', startDateTime, duration)
-                return new Date(startDate.getTime() + 60 * 60 * 1000).toISOString() // Default to 1 hour
-            }
-            return endDate.toISOString()
-        })()
+
+        // Extract duration
+        const duration = apiSlot.duration_minutes || apiSlot.duration || 60
+
+        // Calculate end time
+        const endDate = new Date(startDate.getTime() + duration * 60 * 1000)
+        const endTime = endDate.toISOString()
+
+        // Map provider fields (handle nested provider object)
+        const providerId = apiSlot.providerId || apiSlot.provider?.id || 'unknown'
+        const providerName = apiSlot.providerName ||
+                           (apiSlot.provider ? `${apiSlot.provider.first_name || ''} ${apiSlot.provider.last_name || ''}`.trim() : '') ||
+                           'Unknown Provider'
 
         return {
             start_time: startDateTime,
             end_time: endTime,
-            provider_id: normalizedSlot.provider_id,
-            available: normalizedSlot.available,
+            provider_id: providerId,
+            available: apiSlot.isAvailable ?? apiSlot.available ?? true,
             duration_minutes: duration,
-            provider_name: normalizedSlot.provider_name
+            provider_name: providerName
         }
     } catch (error) {
         console.error('🚨 Error in mapApiSlotToTimeSlot:', error, 'slot:', apiSlot)
@@ -193,9 +225,20 @@ function mapApiSlotFallback(apiSlot: any): any {
     console.warn('🚨 Using fallback API slot mapping for:', apiSlot)
     
     try {
-        const startDateTime = apiSlot.start_time || `${apiSlot.date}T${apiSlot.time}:00`
+        // Build proper datetime string from API format
+        let startDateTime: string
+        if (apiSlot.start_time) {
+            startDateTime = apiSlot.start_time
+        } else if (apiSlot.date && apiSlot.time) {
+            startDateTime = `${apiSlot.date}T${apiSlot.time}:00`
+        } else {
+            // Create a fallback datetime
+            const now = new Date()
+            startDateTime = now.toISOString()
+        }
+
         const duration = apiSlot.duration_minutes || apiSlot.duration || 60
-        
+
         // Validate the date string
         const startDate = new Date(startDateTime)
         if (isNaN(startDate.getTime())) {

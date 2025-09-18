@@ -387,7 +387,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     
                     if (data1.success) {
                         const rawSlots = data1.data?.availableSlots || []
-                        // Validate and normalize slot data in development
+                        console.log('🔍 DEBUG: Raw API slots before mapping:', JSON.stringify(rawSlots.slice(0, 3), null, 2))
+                        // Map slot data using direct field mapping (NO VALIDATION - see dataValidation.ts comments)
                         apiSlots = process.env.NODE_ENV === 'development'
                             ? rawSlots.filter(slot => slot && typeof slot === 'object').map(mapApiSlotToTimeSlot)
                             : rawSlots
