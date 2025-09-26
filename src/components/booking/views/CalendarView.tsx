@@ -8,6 +8,57 @@ import { useState, useEffect, useRef } from 'react'
 import ProviderCard, { Provider } from '@/components/shared/ProviderCard'
 import { mapApiSlotToTimeSlot, devValidateApiData, validateApiResponse } from '@/lib/utils/dataValidation'
 
+// UNIFIED SLOT NORMALIZER - Fixes providerId vs provider_id mismatch
+type UxSlot = {
+    id: string;                // `${date}T${time}-${providerId}`
+    date: string;              // 'YYYY-MM-DD' in America/Denver
+    time: string;              // 'HH:mm' in America/Denver
+    start_time: string;        // ISO string for compatibility with existing TimeSlot
+    end_time: string;          // ISO string for compatibility with existing TimeSlot
+    timezone: 'America/Denver';
+    provider_id: string;       // ALWAYS snake_case (normalized from API camelCase)
+    duration_minutes: number;
+    available: boolean;
+    provider_name?: string;    // from providerMap; never trust API name
+}
+
+const CLINIC_TZ = 'America/Denver';
+
+function normalizeApiSlot(api: any, providerMap: Record<string, string> = {}): UxSlot {
+    // Handle both camelCase (API) and snake_case fields
+    const providerId = api.providerId || api.provider_id || 'unknown';
+    const duration = api.duration_minutes || api.duration || 60;
+    const available = api.isAvailable ?? api.available ?? true;
+
+    // Build datetime string from API format: {date: "2025-09-23", time: "13:00"}
+    let startDateTime: string;
+    if (api.start_time) {
+        startDateTime = api.start_time;
+    } else if (api.date && api.time) {
+        startDateTime = `${api.date}T${api.time}:00`;
+    } else {
+        console.error('🚨 Invalid slot - missing date/time:', api);
+        startDateTime = new Date().toISOString();
+    }
+
+    // Calculate end time
+    const startDate = new Date(startDateTime);
+    const endDate = new Date(startDate.getTime() + duration * 60 * 1000);
+
+    return {
+        id: `${api.date}T${api.time}-${providerId}`,
+        date: api.date || startDateTime.split('T')[0],
+        time: api.time || startDateTime.split('T')[1]?.substring(0, 5) || '00:00',
+        start_time: startDate.toISOString(),
+        end_time: endDate.toISOString(),
+        timezone: CLINIC_TZ,
+        provider_id: providerId,  // ALWAYS normalized to snake_case
+        duration_minutes: duration,
+        available,
+        provider_name: providerMap[providerId] || 'Provider'
+    };
+}
+
 export type BookingIntent = 'book' | 'explore'
 
 interface CalendarViewProps {
@@ -22,7 +73,7 @@ interface CalendarViewProps {
 interface ConsolidatedTimeSlot {
     time: string
     displayTime: string
-    availableSlots: TimeSlot[]
+    availableSlots: UxSlot[]
     isSelected: boolean
 }
 
@@ -39,13 +90,15 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const [currentMonth, setCurrentMonth] = useState(new Date())
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date()) // Initialize with today
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
-    const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([])
+    const [availableSlots, setAvailableSlots] = useState<UxSlot[]>([])
     const [consolidatedSlots, setConsolidatedSlots] = useState<ConsolidatedTimeSlot[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string>('')
     // Removed showInsuranceBanner state - redundant with subheader
     const [viewMode, setViewMode] = useState<'by_availability' | 'by_provider'>(propsSelectedProvider ? 'by_provider' : 'by_availability')
     const [providers, setProviders] = useState<any[]>([])
+    const [providerMap, setProviderMap] = useState<Record<string, string>>({}) // ID -> "First Last"
+    const [acceptanceMap, setAcceptanceMap] = useState<Record<string, { serviceInstanceId?: string }>>({}) // ID -> service instance
     const [selectedProvider, setSelectedProvider] = useState<string | null>(propsSelectedProvider?.id || null)
     const [loadingProviders, setLoadingProviders] = useState(false)
     
@@ -59,6 +112,14 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     // Ref for calendar section to enable smooth scrolling
     const calendarSectionRef = useRef<HTMLDivElement>(null)
     const [showCalendarHighlight, setShowCalendarHighlight] = useState(false)
+
+    // ✅ RACE CONDITION FIX: Single source of truth + request keys
+    const fetchKeyRef = useRef<string>('')
+    const abortRef = useRef<AbortController | null>(null)
+
+    function makeFetchKey(date: Date, mode: 'by_availability' | 'by_provider', providerId?: string | null) {
+        return `${format(date, 'yyyy-MM-dd')}|${mode}|${providerId ?? 'none'}`
+    }
 
     // Smooth scroll to calendar section with visual highlight
     const scrollToCalendar = () => {
@@ -91,13 +152,15 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
     const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
-    // Auto-load today's availability when component mounts
+    // ✅ GUARDED: Auto-load today's availability when component mounts
+    // Only run when in by_availability mode and no provider selected
     useEffect(() => {
-        if (selectedPayer?.id && selectedDate) {
-            console.log('🔄 Auto-loading availability for today...')
-            fetchAvailabilityForDate(selectedDate)
-        }
-    }, [selectedPayer?.id]) // Re-run when payer changes
+        if (viewMode !== 'by_availability' || selectedProvider) return
+        if (!selectedPayer?.id || !selectedDate) return
+
+        console.log('🔄 Auto-loading availability for today (by_availability mode)...')
+        fetchAvailabilityForDate(selectedDate, { mode: 'by_availability', providerId: null })
+    }, [viewMode, selectedProvider, selectedPayer?.id, selectedDate]) // ❌ do NOT include providers/providerMap
 
     // Load available languages when component mounts
     useEffect(() => {
@@ -120,11 +183,16 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         loadLanguages()
     }, [])
 
-    // Refetch providers and availability when language changes
+    // Load providers when component mounts for name lookups
+    useEffect(() => {
+        loadProviders()
+    }, [])
+
+    // ✅ FIXED: Refetch providers and availability when language changes
     useEffect(() => {
         if (selectedPayer?.id && selectedDate && selectedLanguage !== 'English') {
             console.log('🌍 Language changed to:', selectedLanguage, '- refetching availability and providers')
-            fetchAvailabilityForDate(selectedDate)
+            fetchAvailabilityForDate(selectedDate, { mode: viewMode, providerId: selectedProvider })
             if (viewMode === 'by_provider') {
                 fetchProviders()
             }
@@ -215,30 +283,33 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         return today
     }
 
-    // Handle provider selection
+    // ✅ LOCKED: Handle provider selection with mode lock
     const handleProviderSelect = async (providerId: string) => {
         console.log('🔄 Provider selection starting:', { providerId, viewMode, currentSelectedProvider: selectedProvider })
-        
+
+        // Lock mode and clear stale UI
+        setViewMode('by_provider')
         setSelectedProvider(providerId)
         setSelectedSlot(null)
+        setAvailableSlots([])  // Clear stale slots while fetching
         setConsolidatedSlots([])
-        
+
         // Smooth scroll to calendar section to guide user to next step
         setTimeout(() => {
             scrollToCalendar()
         }, 100) // Small delay to ensure state updates have rendered
-        
+
         if (selectedDate) {
             // If a date is already selected, refresh availability for this provider
             console.log('📅 Using existing selected date:', selectedDate, 'for provider:', providerId)
-            await fetchAvailabilityForDate(selectedDate, providerId)
+            await fetchAvailabilityForDate(selectedDate, { mode: 'by_provider', providerId })
         } else {
             // Find and load soonest available date
             console.log('🔍 Finding soonest availability for provider:', providerId)
             const soonestDate = await findSoonestAvailableDate(providerId)
             console.log('📅 Setting soonest available date:', format(soonestDate, 'yyyy-MM-dd'), 'for provider:', providerId)
             setSelectedDate(soonestDate)
-            await fetchAvailabilityForDate(soonestDate, providerId)
+            await fetchAvailabilityForDate(soonestDate, { mode: 'by_provider', providerId })
         }
     }
 
@@ -278,7 +349,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
     // Consolidate multiple provider slots into single time slots
     // Filter out past time slots for same-day appointments
-    const filterFutureTimeSlots = (slots: TimeSlot[], targetDate: Date): TimeSlot[] => {
+    const filterFutureTimeSlots = (slots: UxSlot[], targetDate: Date): UxSlot[] => {
         const today = new Date()
         const isToday = format(targetDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')
         
@@ -293,18 +364,33 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         })
     }
 
-    const consolidateTimeSlots = (slots: TimeSlot[]): ConsolidatedTimeSlot[] => {
+    const consolidateTimeSlots = (slots: UxSlot[], filterByProviderId?: string): ConsolidatedTimeSlot[] => {
         // First filter out past time slots if this is for today
-        const filteredSlots = selectedDate ? filterFutureTimeSlots(slots, selectedDate) : slots
-        
+        let filteredSlots = selectedDate ? filterFutureTimeSlots(slots, selectedDate) : slots
+
+        // If in "by_provider" mode and a specific provider is selected, only show slots from that provider
+        const providerToFilter = filterByProviderId || (viewMode === 'by_provider' ? selectedProvider : null)
+        if (providerToFilter) {
+            const beforeCount = filteredSlots.length
+            filteredSlots = filteredSlots.filter(slot => slot.provider_id === providerToFilter)
+            console.log(`🔍 FILTERING: Provider ${providerToFilter} in ${viewMode} mode: ${beforeCount} → ${filteredSlots.length} slots`)
+
+            // Log which providers were in the original slots for debugging
+            const originalProviders = [...new Set(slots.map(s => s.provider_id))]
+            console.log(`📊 ORIGINAL SLOTS: ${originalProviders.length} providers:`, originalProviders)
+            console.log(`📊 FILTERED SLOTS: ${filteredSlots.length} slots for provider ${providerToFilter}`)
+        } else {
+            console.log(`📊 NO FILTERING: ${viewMode} mode, showing all ${filteredSlots.length} slots`)
+        }
+
         const grouped = filteredSlots.reduce((acc, slot) => {
-            const time = slot.start_time.split('T')[1]?.substring(0, 5) || slot.start_time
+            const time = slot.time // Use normalized time field (e.g., "13:00")
             if (!acc[time]) {
                 acc[time] = []
             }
             acc[time].push(slot)
             return acc
-        }, {} as Record<string, TimeSlot[]>)
+        }, {} as Record<string, UxSlot[]>)
 
         return Object.entries(grouped)
             .map(([time, timeSlots]) => ({
@@ -316,17 +402,155 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             .sort((a, b) => a.time.localeCompare(b.time))
     }
 
-    // EMERGENCY FIX: Multiple API endpoint attempts with different strategies
-    const fetchAvailabilityForDate = async (date: Date, explicitProviderId?: string) => {
-        // Allow a fallback payer ID for cash payments or fetch all providers when missing
+    // ✅ Reload acceptance map when payer changes
+    useEffect(() => {
+        if (selectedPayer?.id) {
+            console.log('🔄 Payer changed, reloading acceptance map:', selectedPayer.id)
+            loadAcceptanceMap()
+        }
+    }, [selectedPayer?.id]) // loadAcceptanceMap is defined below, will be available when this runs
+
+    // Load providers for provider name lookup
+    const loadProviders = async () => {
+        try {
+            setLoadingProviders(true)
+            console.log('👥 FRONTEND: Loading providers from API for name mapping... [v2]')
+
+            const response = await fetch('/api/providers/all')
+            if (response.ok) {
+                const data = await response.json()
+                if (data.success && data.data?.providers) {
+                    setProviders(data.data.providers)
+                    console.log(`✅ FRONTEND: Loaded ${data.data.providers.length} providers for name lookup`)
+
+                    // Create and log provider name mapping for debugging
+                    const nameMap = data.data.providers.reduce((map, p) => {
+                        const fullName = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+                        map[p.id] = fullName || 'Provider';
+                        return map
+                    }, {} as Record<string, string>)
+                    setProviderMap(nameMap)
+                    console.log('🗺️ PROVIDER NAME MAP:', nameMap)
+
+                    // Specifically check for Dr. Norseth
+                    const norseth = data.data.providers.find(p => p.id === '35ab086b-2894-446d-9ab5-3d41613017ad')
+                    if (norseth) {
+                        console.log('👨‍⚕️ FOUND TRAVIS NORSETH:', norseth.first_name, norseth.last_name, '→', nameMap[norseth.id])
+                    } else {
+                        console.warn('⚠️ Travis Norseth not found in provider list')
+                    }
+
+                    // ✅ INITIAL LOAD of acceptance map (useEffect will reload on payer changes)
+                    await loadAcceptanceMap()
+                } else {
+                    console.warn('⚠️ FRONTEND: No provider data in response:', data)
+                    setProviders([])
+                }
+            } else {
+                console.error('❌ FRONTEND: Failed to load providers:', response.status, response.statusText)
+                setProviders([])
+            }
+        } catch (error) {
+            console.error('❌ FRONTEND: Error loading providers:', error)
+            setProviders([])
+        } finally {
+            setLoadingProviders(false)
+        }
+    }
+
+    // ✅ NEW: Load acceptance map from providers-for-payer API
+    const loadAcceptanceMap = async () => {
+        try {
+            const payerId = selectedPayer?.id || 'cash-payment'
+            console.log('🔐 FRONTEND: Loading acceptance map from providers-for-payer...', { payerId })
+
+            const response = await fetch(`/api/patient-booking/providers-for-payer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ payer_id: payerId })
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                if (data.success && data.data?.providers) {
+                    // ✅ Known constants matching seeded database
+                    const TELEHEALTH_INTAKE_SERVICE_ID = 'f0a05d4c-188a-4f1b-9600-54d6c27a3f62'
+
+                    // Build acceptance map from providers with service instances
+                    const accMap = (data.data.providers || []).reduce((m: any, p: any) => {
+                        // Look for accepted services in the API response
+                        const services = p.accepted_services || p.services || []
+                        console.log(`🔍 Provider ${p.id} services:`, services)
+
+                        // First try exact service ID match for Telehealth Intake
+                        let intake = services.find((s: any) =>
+                            s.service_id === TELEHEALTH_INTAKE_SERVICE_ID || s.serviceId === TELEHEALTH_INTAKE_SERVICE_ID
+                        )
+
+                        // Fallback to name regex if exact match not found
+                        if (!intake) {
+                            intake = services.find((s: any) =>
+                                /intake|initial|new\s*patient/i.test(s.name || s.service_name || s.type || '')
+                            )
+                        }
+
+                        // Extract service_instance_id only (not service id)
+                        const sid = intake?.service_instance_id || intake?.serviceInstanceId
+                        m[p.id] = { serviceInstanceId: sid }
+
+                        if (sid) {
+                            console.log(`✅ Provider ${p.id}: found serviceInstanceId = ${sid}`)
+                            // Verify it's the expected housed instance UUID
+                            if (sid === '12191f44-a09c-426f-8e22-0c5b8e57b3b7') {
+                                console.log(`🏠 Provider ${p.id}: using HOUSED Telehealth Intake instance`)
+                            } else if (sid === '1a659f8e-249a-4690-86e7-359c6c381bc0') {
+                                console.log(`🏕️ Provider ${p.id}: using UNHOUSED Telehealth Intake instance`)
+                            }
+                        } else {
+                            console.warn(`⚠️ No Telehealth Intake service instance for provider ${p.id}`, { services })
+                        }
+
+                        return m
+                    }, {})
+
+                    setAcceptanceMap(accMap)
+                    console.log('🗺️ ACCEPTANCE MAP', accMap)
+                } else {
+                    console.warn('⚠️ FRONTEND: No provider acceptance data:', data)
+                    setAcceptanceMap({})
+                }
+            } else {
+                console.error('❌ FRONTEND: Failed to load acceptance map:', response.status, response.statusText)
+                setAcceptanceMap({})
+            }
+        } catch (error) {
+            console.error('❌ FRONTEND: Error loading acceptance map:', error)
+            setAcceptanceMap({})
+        }
+    }
+
+    // ✅ RACE CONDITION FIX: Fetch with key system and abort controller
+    const fetchAvailabilityForDate = async (date: Date, opts?: { mode?: 'by_availability' | 'by_provider', providerId?: string | null }) => {
+        // Determine fetch parameters
+        const mode = opts?.mode ?? viewMode
+        const providerId = opts?.providerId ?? selectedProvider
         const payerId = selectedPayer?.id || 'cash-payment'
-        const effectiveProviderId = explicitProviderId || selectedProvider
-        
+        const key = makeFetchKey(date, mode, providerId)
+
+        // Cancel any in-flight request
+        abortRef.current?.abort()
+        const ac = new AbortController()
+        abortRef.current = ac
+
+        // Set current fetch key
+        fetchKeyRef.current = key
+        console.log('🛰️ FETCH_AVAIL start:', key)
+
         console.log('🔍 fetchAvailabilityForDate called:', {
             date: format(date, 'yyyy-MM-dd'),
-            explicitProviderId,
-            selectedProvider,
-            effectiveProviderId,
+            mode,
+            providerId,
+            key,
             bookingMode
         })
 
@@ -368,15 +592,23 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     body: JSON.stringify({
                         payer_id: payerId,
                         date: dateString,
-                        provider_id: viewMode === 'by_provider' || selectedProvider ? selectedProvider : undefined,
+                        provider_id: mode === 'by_provider' && providerId ? providerId : undefined,
                         language: selectedLanguage
-                    })
+                    }),
+                    signal: ac.signal
                 })
                 
                 console.log('📊 Strategy 1 Response status:', response1.status)
                 
                 if (response1.ok) {
                     const data1 = await response1.json()
+
+                    // ✅ Check for stale response
+                    if (fetchKeyRef.current !== key) {
+                        console.warn('⏭️ Stale availability response ignored (Strategy 1):', key, 'current=', fetchKeyRef.current)
+                        return
+                    }
+
                     console.log('✅ Strategy 1 SUCCESS:', data1)
                     
                     // Validate API response structure
@@ -397,6 +629,11 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     }
                 }
             } catch (error1) {
+                // ✅ HARDENING: Treat abort errors as non-errors (expected behavior)
+                if (error1?.name === 'AbortError') {
+                    console.debug('🛑 Strategy 1 fetch aborted (expected):', key)
+                    return
+                }
                 console.log('❌ Strategy 1 failed:', error1)
             }
 
@@ -412,15 +649,23 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         body: JSON.stringify({
                             payer_id: payerId,
                             date: dateString,
-                            provider_id: viewMode === 'by_provider' && selectedProvider ? selectedProvider : undefined,
+                            provider_id: mode === 'by_provider' && providerId ? providerId : undefined,
                             language: selectedLanguage
-                        })
+                        }),
+                        signal: ac.signal
                     })
                     
                     console.log('📊 Strategy 2 Response status:', response2.status)
                     
                     if (response2.ok) {
                         const data2 = await response2.json()
+
+                        // ✅ Check for stale response
+                        if (fetchKeyRef.current !== key) {
+                            console.warn('⏭️ Stale availability response ignored (Strategy 2):', key, 'current=', fetchKeyRef.current)
+                            return
+                        }
+
                         console.log('✅ Strategy 2 SUCCESS:', data2)
                         
                         if (data2.success) {
@@ -429,6 +674,11 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         }
                     }
                 } catch (error2) {
+                    // ✅ HARDENING: Treat abort errors as non-errors (expected behavior)
+                    if (error2?.name === 'AbortError') {
+                        console.debug('🛑 Strategy 2 fetch aborted (expected):', key)
+                        return
+                    }
                     console.log('❌ Strategy 2 failed:', error2)
                 }
             }
@@ -436,7 +686,18 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             // NO STRATEGY 3 - No fake data generation allowed
             // Only use real availability from the database
 
+            // ✅ HARDENING: Only set error for current, non-aborted requests
             if (!success) {
+                // Check if this response is stale or if the request was aborted
+                if (fetchKeyRef.current !== key) {
+                    console.debug('⏭️ Ignoring error from stale request:', key, 'current=', fetchKeyRef.current)
+                    return
+                }
+                if (ac.signal.aborted) {
+                    console.debug('🛑 Ignoring error from aborted request:', key)
+                    return
+                }
+
                 console.error('❌ All API strategies failed - no availability data')
                 setError('Unable to fetch availability. Please try again or contact support.')
                 setAvailableSlots([])
@@ -469,32 +730,69 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
             console.log(`🔄 Filtered slots: ${apiSlots.length} → ${validApiSlots.length} valid slots`)
 
-            // Convert AvailableSlot to TimeSlot format using data validation
-            const convertedSlots: TimeSlot[] = validApiSlots
+            // ✅ NEW: Convert using unified normalizer with provider name mapping
+            console.log('🔄 Raw API slots before normalization:', validApiSlots.slice(0, 3))
+            const convertedSlots: UxSlot[] = validApiSlots
                 .map(slot => {
                     try {
-                        return mapApiSlotToTimeSlot(slot)
+                        return normalizeApiSlot(slot, providerMap)
                     } catch (error) {
-                        console.error('🚨 Failed to map slot, skipping:', slot, error)
+                        console.error('🚨 Failed to normalize slot, skipping:', slot, error)
                         return null
                     }
                 })
-                .filter(slot => slot !== null) as TimeSlot[]
+                .filter(slot => slot !== null) as UxSlot[]
+
+            console.log('🔄 Normalized UX slots:', convertedSlots.slice(0, 3))
 
             console.log('🔄 Final converted slots:', convertedSlots.length)
-            
+
+            // ✅ Specifically track Dr. Norseth's availability (35ab086b-2894-446d-9ab5-3d41613017ad)
+            const norsethSlots = convertedSlots.filter(slot => slot.provider_id === '35ab086b-2894-446d-9ab5-3d41613017ad')
+            if (norsethSlots.length > 0) {
+                console.log(`🎯 TRAVIS NORSETH SLOTS FOUND: ${norsethSlots.length}`)
+                norsethSlots.forEach(slot => {
+                    console.log(`   📅 ${slot.date} ${slot.time} → ${slot.provider_name} (ID: ${slot.provider_id})`)
+                })
+            } else {
+                console.log('❌ NO TRAVIS NORSETH SLOTS FOUND in final converted slots')
+                console.log('🔍 Raw API had provider IDs:', [...new Set(validApiSlots.map(s => s.providerId || s.provider_id))])
+                console.log('🔍 Converted slots have provider IDs:', [...new Set(convertedSlots.map(s => s.provider_id))])
+            }
+
             setAvailableSlots(convertedSlots)
-            setConsolidatedSlots(consolidateTimeSlots(convertedSlots))
+            setConsolidatedSlots(consolidateTimeSlots(convertedSlots, mode === 'by_provider' ? providerId ?? undefined : undefined))
+
+            console.log('✅ FETCH_AVAIL applied:', key, 'slots=', convertedSlots.length)
             
         } catch (error) {
+            // ✅ HARDENING: Treat abort errors as non-errors (expected behavior)
+            if (error?.name === 'AbortError') {
+                console.debug('🛑 fetch aborted (expected):', key)
+                return
+            }
+
+            // ✅ HARDENING: Only set error for current, non-aborted requests
+            if (fetchKeyRef.current !== key) {
+                console.debug('⏭️ Ignoring error from stale request:', key, 'current=', fetchKeyRef.current)
+                return
+            }
+            if (ac.signal.aborted) {
+                console.debug('🛑 Ignoring error from aborted request:', key)
+                return
+            }
+
             console.error('💥 ALL STRATEGIES FAILED:', error)
             const errorMessage = error instanceof Error ? error.message : 'Failed to fetch availability'
             setError(`${errorMessage} - Try restarting the Next.js dev server (npm run dev)`)
-            
+
             setAvailableSlots([])
             setConsolidatedSlots([])
         } finally {
-            setLoading(false)
+            // ✅ HARDENING: Only update loading state for current request
+            if (fetchKeyRef.current === key && !ac.signal.aborted) {
+                setLoading(false)
+            }
         }
     }
 
@@ -502,49 +800,43 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         setSelectedDate(date)
         setSelectedSlot(null)
         setConsolidatedSlots(prev => prev.map(slot => ({ ...slot, isSelected: false })))
-        await fetchAvailabilityForDate(date)
+        await fetchAvailabilityForDate(date, { mode: viewMode, providerId: selectedProvider })
     }
 
-    // FIXED: Handle slot click with proper time parsing
+    // ✅ UPDATED: Handle slot click with normalized UxSlot data
     const handleSlotClick = async (consolidatedSlot: ConsolidatedTimeSlot) => {
         try {
             const firstSlot = consolidatedSlot.availableSlots[0]
-            
-            console.log('🔍 CalendarView handleSlotClick:', {
+
+            console.log('🔍 CalendarView handleSlotClick (NORMALIZED):', {
                 firstSlot,
                 viewMode,
                 selectedProvider,
-                firstSlotProviderId: firstSlot?.provider_id
+                providerId: firstSlot?.provider_id,
+                providerName: firstSlot?.provider_name,
+                date: firstSlot?.date,
+                time: firstSlot?.time
             })
-            
-            // Calculate end time by adding duration to start time
-            const startTime = selectedDate 
-                ? `${format(selectedDate, 'yyyy-MM-dd')}T${consolidatedSlot.time}:00`
-                : firstSlot.start_time
-            
-            const endTime = selectedDate 
-                ? (() => {
-                    const duration = firstSlot.duration_minutes || 60 // Default to 60 minutes
-                    const startDate = new Date(startTime)
-                    const endDate = new Date(startDate.getTime() + duration * 60 * 1000)
-                    return endDate.toISOString().slice(0, 19) // Remove Z and milliseconds
-                  })()
-                : firstSlot.end_time
 
+            // ✅ Use normalized UxSlot data directly - no need to reconstruct
             const properTimeSlot: TimeSlot = {
-                ...firstSlot,
-                start_time: startTime,
-                end_time: endTime,
-                // For provider mode, ensure we have the selected provider ID
-                provider_id: viewMode === 'by_provider' && selectedProvider 
-                    ? selectedProvider 
-                    : firstSlot.provider_id
+                start_time: firstSlot.start_time,
+                end_time: firstSlot.end_time,
+                provider_id: firstSlot.provider_id,  // Always normalized to snake_case
+                available: firstSlot.available,
+                duration_minutes: firstSlot.duration_minutes,
+                provider_name: firstSlot.provider_name,
+                // Add additional fields for booking compatibility
+                date: firstSlot.date,
+                time: firstSlot.time,
+                timezone: firstSlot.timezone
             }
             
-            console.log('🔍 CalendarView properTimeSlot created:', {
+            console.log('🔍 CalendarView properTimeSlot created (FINAL):', {
                 properTimeSlot,
-                firstSlotProviderId: firstSlot.provider_id,
-                finalProviderId: properTimeSlot.provider_id
+                providerId: properTimeSlot.provider_id,
+                providerName: properTimeSlot.provider_name,
+                hasRequiredFields: !!(properTimeSlot.date && properTimeSlot.time && properTimeSlot.provider_id)
             })
             
             setSelectedSlot(properTimeSlot)
@@ -650,7 +942,21 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
     const handleNext = () => {
         if (selectedSlot) {
-            onTimeSlotSelected(selectedSlot)
+            // ✅ B) Capture serviceInstanceId when slot is selected
+            const sid = acceptanceMap[selectedSlot.provider_id]?.serviceInstanceId
+            console.log('🔐 CAPTURE serviceInstanceId', { providerId: selectedSlot.provider_id, sid })
+
+            // Add acceptance data to the slot for BookingFlow
+            const enrichedSlot = {
+                ...selectedSlot,
+                acceptance: {
+                    service_instance_id: sid,
+                    verified: !!sid,
+                    status: sid ? 'accepted' : 'pending'
+                }
+            }
+
+            onTimeSlotSelected(enrichedSlot)
         }
     }
 
@@ -847,7 +1153,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                                 
                                                 return (
                                                     <button
-                                                        key={slot.time}
+                                                        key={`${slot.time}-${slot.availableSlots[0]?.provider_id || 'unknown'}`}
                                                         onClick={() => handleSlotClick(slot)}
                                                         className={`
                                                             py-4 px-4 rounded-xl text-sm font-medium transition-all duration-200 font-['Newsreader'] relative
@@ -867,18 +1173,23 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                                         
                                                         <div>{slot.displayTime}</div>
                                                         <div className="text-xs opacity-80 mt-1">
-                                                            {viewMode === 'by_provider' && selectedProvider
-                                                                ? (() => {
-                                                                    const provider = providers.find(p => p.id === selectedProvider);
-                                                                    return provider ? `${provider.first_name} ${provider.last_name}` : 'Selected Provider';
+                                                            {hasCoVisit && coVisitSlot
+                                                                ? `Co-visit: ${(coVisitSlot as any).provider_name}`
+                                                                : (() => {
+                                                                    const uniqueProviders = new Set(slot.availableSlots.map((s: any) => s.provider_id));
+                                                                    const count = uniqueProviders.size;
+
+                                                                    if (count === 1) {
+                                                                        // Single provider - use normalized provider_name from UxSlot
+                                                                        const firstSlot = slot.availableSlots[0];
+                                                                        const providerName = firstSlot.provider_name || 'Provider';
+                                                                        console.log(`🏷️ Displaying provider name: ${providerName} (ID: ${firstSlot.provider_id})`);
+                                                                        return providerName;
+                                                                    } else {
+                                                                        // Multiple providers
+                                                                        return `${count} providers available`;
+                                                                    }
                                                                 })()
-                                                                : hasCoVisit && coVisitSlot
-                                                                    ? `Co-visit: ${(coVisitSlot as any).provider_name}`
-                                                                    : (() => {
-                                                                        const uniqueProviders = new Set(slot.availableSlots.map((s: any) => s.provider_id));
-                                                                        const count = uniqueProviders.size;
-                                                                        return `${count} provider${count !== 1 ? 's' : ''} available`;
-                                                                    })()
                                                             }
                                                         </div>
                                                     </button>
