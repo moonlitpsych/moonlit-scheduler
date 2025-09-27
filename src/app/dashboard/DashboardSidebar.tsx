@@ -8,7 +8,8 @@ import {
     LogOut,
     Settings,
     User,
-    Users
+    Users,
+    Network
 } from 'lucide-react';
 import React, { useState } from 'react';
 
@@ -43,7 +44,10 @@ const DashboardSidebar: React.FC<SidebarProps> = ({
     { id: 'availability', label: 'My Availability', icon: Calendar, href: '/dashboard/availability', section: 'scheduling' },
     { id: 'calendar', label: 'My Calendar', icon: CalendarDays, href: '/dashboard/calendar', section: 'scheduling' },
     { id: 'exceptions', label: 'Schedule Exceptions', icon: Clock, href: '/dashboard/exceptions', section: 'scheduling' },
-    
+
+    // Network & Coverage Section
+    { id: 'bookability', label: 'Network & Coverage', icon: Network, href: '/dashboard/bookability', section: 'network' },
+
     // Personal Profile Section
     { id: 'profile', label: 'Edit Profile', icon: User, href: '/dashboard/profile', section: 'profile' },
     { id: 'settings', label: 'Account Settings', icon: Settings, href: '/dashboard/settings', section: 'profile' },
@@ -72,6 +76,7 @@ const DashboardSidebar: React.FC<SidebarProps> = ({
   const getSectionLabel = (section: string | undefined) => {
     switch (section) {
       case 'scheduling': return 'Scheduling';
+      case 'network': return 'Network & Coverage';
       case 'profile': return 'Personal Profile';
       case 'admin': return 'Administration';
       default: return null;
@@ -160,7 +165,10 @@ const DashboardSidebar: React.FC<SidebarProps> = ({
         
         {/* Scheduling Section */}
         {renderNavigationSection('scheduling')}
-        
+
+        {/* Network & Coverage Section */}
+        {renderNavigationSection('network')}
+
         {/* Profile Section */}
         {renderNavigationSection('profile')}
         

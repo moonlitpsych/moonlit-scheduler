@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, X } from 'lucide-react'
 import { FilterState } from './page'
 
@@ -18,6 +18,21 @@ export default function BookabilityFilters({
   availableProviders
 }: BookabilityFiltersProps) {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
 
   const toggleDropdown = (dropdown: string) => {
     setOpenDropdown(openDropdown === dropdown ? null : dropdown)
@@ -180,7 +195,7 @@ export default function BookabilityFilters({
   }
 
   return (
-    <div className="mb-6 p-4 bg-stone-50 rounded-lg border border-stone-200">
+    <div ref={containerRef} className="mb-6 p-4 bg-stone-50 rounded-lg border border-stone-200">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-medium text-[#091747]">Filters</h3>
         <button

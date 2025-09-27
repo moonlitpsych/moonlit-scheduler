@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronRight, Calendar, User, Building } from 'lucide-react'
 import { BookabilityRow } from './page'
 import BookabilityRowDetails from './BookabilityRowDetails'
 import { formatDateSafe } from '@/lib/utils/dateFormatting'
+import { getRenderingProviderId } from '@/lib/bookability/mapRenderingProvider'
+import { fetchRenderingProviderNames } from '@/lib/bookability/fetchRenderingProviders'
 
 interface BookabilityTableProps {
   data: BookabilityRow[]
@@ -15,6 +17,54 @@ export default function BookabilityTable({ data, loading }: BookabilityTableProp
   const [selectedRow, setSelectedRow] = useState<BookabilityRow | null>(null)
   const [sortField, setSortField] = useState<keyof BookabilityRow>('provider_last_name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [renderingProviderNames, setRenderingProviderNames] = useState<Map<string, string>>(new Map())
+
+  // Load rendering provider names when data changes
+  useEffect(() => {
+    const loadRenderingProviderNames = async () => {
+      if (!data.length) return
+
+      const renderingIds = data
+        .map(row => getRenderingProviderId(row))
+        .filter(Boolean) as string[]
+
+      if (renderingIds.length === 0) return
+
+      try {
+        const nameMap = await fetchRenderingProviderNames(renderingIds)
+        setRenderingProviderNames(nameMap)
+      } catch (error) {
+        console.error('Failed to load rendering provider names:', error)
+      }
+    }
+
+    loadRenderingProviderNames()
+  }, [data])
+
+  // RenderingProviderCell component
+  const RenderingProviderCell = ({ row }: { row: BookabilityRow }) => {
+    const renderingProviderId = getRenderingProviderId(row)
+
+    if (!renderingProviderId) {
+      return <span className="text-[#091747]/40">-</span>
+    }
+
+    const name = renderingProviderNames.get(renderingProviderId)
+    if (name) {
+      return <span className="text-[#091747]">{name}</span>
+    }
+
+    // Fallback to existing logic while names are loading
+    if (row.billing_provider_id === row.provider_id) {
+      return (
+        <span className="text-[#091747]">
+          {row.provider_first_name} {row.provider_last_name}
+        </span>
+      )
+    }
+
+    return <span className="text-[#091747]">Dr. Privratsky</span>
+  }
 
   // Chip component for consistent styling
   const Chip = ({ 
@@ -127,7 +177,7 @@ export default function BookabilityTable({ data, loading }: BookabilityTableProp
               </th>
               <th className="px-4 py-3 text-left">Requires Attending</th>
               <th className="px-4 py-3 text-left">Supervision Level</th>
-              <th className="px-4 py-3 text-left">Billing Provider</th>
+              <th className="px-4 py-3 text-left">Rendering Provider</th>
               <th className="px-4 py-3 text-left">
                 <SortHeader field="state">State</SortHeader>
               </th>
@@ -182,18 +232,9 @@ export default function BookabilityTable({ data, loading }: BookabilityTableProp
                   )}
                 </td>
 
-                {/* Billing Provider */}
+                {/* Rendering Provider */}
                 <td className="px-4 py-3">
-                  {row.billing_provider_id ? (
-                    <span className="text-[#091747]">
-                      {row.billing_provider_id === row.provider_id 
-                        ? `${row.provider_first_name} ${row.provider_last_name}`
-                        : 'Dr. Privratsky' // TODO: Resolve actual name
-                      }
-                    </span>
-                  ) : (
-                    <span className="text-[#091747]/40">-</span>
-                  )}
+                  <RenderingProviderCell row={row} />
                 </td>
 
                 {/* State */}

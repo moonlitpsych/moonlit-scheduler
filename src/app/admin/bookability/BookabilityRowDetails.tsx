@@ -6,6 +6,7 @@ import { BookabilityRow } from './page'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
 import { formatDateSafe } from '@/lib/utils/dateFormatting'
+import { getRenderingProviderId } from '@/lib/bookability/mapRenderingProvider'
 
 interface BookabilityRowDetailsProps {
   row: BookabilityRow
@@ -21,20 +22,23 @@ interface ProviderDetail {
 }
 
 export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDetailsProps) {
-  const [billingProvider, setBillingProvider] = useState<ProviderDetail | null>(null)
+  const [supervisingProvider, setSupervisingProvider] = useState<ProviderDetail | null>(null)
   const [renderingProvider, setRenderingProvider] = useState<ProviderDetail | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch provider details for billing and rendering providers
+  // Fetch provider details for supervising and rendering providers
   useEffect(() => {
     const fetchProviderDetails = async () => {
       try {
         setLoading(true)
-        
+
+        // Get rendering provider ID using the helper
+        const renderingProviderId = getRenderingProviderId(row)
+
         // Get provider IDs to fetch
         const providerIds = [
-          row.billing_provider_id,
-          row.rendering_provider_id
+          row.billing_provider_id, // Still fetch billing for supervising provider display
+          renderingProviderId
         ].filter(Boolean) as string[]
 
         if (providerIds.length === 0) {
@@ -54,14 +58,14 @@ export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDe
           return
         }
 
-        // Map providers to billing/rendering
+        // Map providers to supervising/rendering
         if (row.billing_provider_id) {
-          const billing = providers?.find(p => p.id === row.billing_provider_id)
-          setBillingProvider(billing || null)
+          const supervising = providers?.find(p => p.id === row.billing_provider_id)
+          setSupervisingProvider(supervising || null)
         }
 
-        if (row.rendering_provider_id) {
-          const rendering = providers?.find(p => p.id === row.rendering_provider_id)
+        if (renderingProviderId) {
+          const rendering = providers?.find(p => p.id === renderingProviderId)
           setRenderingProvider(rendering || null)
         }
 
@@ -193,28 +197,28 @@ export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDe
               </p>
             </div>
 
-            {/* Billing Provider (for supervised relationships) */}
+            {/* Supervising Provider (for supervised relationships) */}
             {row.network_status === 'supervised' && (
               <div className="bg-blue-50 rounded-lg p-4">
                 <div className="flex items-center space-x-2 mb-2">
                   <Building2 className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-800">Billing Provider</span>
+                  <span className="text-sm font-medium text-blue-800">Supervising Provider</span>
                 </div>
                 {loading ? (
                   <div className="text-sm text-blue-700">Loading...</div>
                 ) : (
                   <p className="text-blue-800 font-medium">
-                    {formatProviderName(billingProvider)}
+                    {formatProviderName(supervisingProvider)}
                   </p>
                 )}
                 <p className="text-xs text-blue-600 mt-1">
-                  Claims are billed under this attending physician
+                  Attending physician who supervises this relationship
                 </p>
               </div>
             )}
 
-            {/* Rendering Provider (for supervised relationships) */}
-            {row.network_status === 'supervised' && row.rendering_provider_id && (
+            {/* Rendering Provider */}
+            {getRenderingProviderId(row) && (
               <div className="bg-yellow-50 rounded-lg p-4">
                 <div className="flex items-center space-x-2 mb-2">
                   <User className="h-4 w-4 text-yellow-600" />
@@ -228,7 +232,7 @@ export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDe
                   </p>
                 )}
                 <p className="text-xs text-yellow-600 mt-1">
-                  Actually provides patient care
+                  Provider whose NPI appears on claims for this relationship
                 </p>
               </div>
             )}
