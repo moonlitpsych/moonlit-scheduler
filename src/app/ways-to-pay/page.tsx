@@ -212,9 +212,9 @@ const PayerCard = ({ payer, showStatus = true, isEven = false }: { payer: Payer;
           {getStatusIcon()}
           <div className={`inline-block px-3 py-1 rounded-lg text-sm font-medium mr-2 sm:mr-4 ${
             isActive
-              ? 'bg-[#f28c69] text-white border border-[#f28c69] shadow-sm'
+              ? 'bg-transparent text-gray-900 border border-[#f28c69] shadow-sm'
               : hasFutureDate
-                ? 'bg-[#f28c69]/60 text-white border border-[#f28c69]/60 shadow-sm'
+                ? 'bg-transparent text-gray-700 border border-[#f28c69]/60 shadow-sm'
                 : 'bg-gray-100 text-gray-600'
           }`} style={{ fontFamily: 'Newsreader, serif' }}>
             {payer.name}
