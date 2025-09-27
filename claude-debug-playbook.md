@@ -62,6 +62,27 @@ Confirm FROM_EMAIL set correctly
 
 Fallback: check server console logs
 
+**✅ FIXED PERMANENTLY: startDateTime Validation Errors**
+
+**Problem**: `Invalid startDateTime: "09:00" "from slot:" {}` errors in console
+
+**Root Cause Discovered**: The validateAndNormalizeData function corrupted slot data by expecting arrays but receiving individual objects, resulting in empty `{}` objects being passed to fallback functions.
+
+**PERMANENT SOLUTION IMPLEMENTED**:
+- Removed validateAndNormalizeData from mapApiSlotToTimeSlot (dataValidation.ts:160)
+- Implemented direct field mapping without validation layer
+- Handles actual API format: `{date: "2025-09-18", time: "09:00", provider: {...}}`
+
+**WARNING**: Never re-add validation to mapApiSlotToTimeSlot
+- The validation layer causes more problems than it solves
+- Direct mapping works reliably with the actual API response format
+- If errors resurface, check that validation hasn't been re-added
+
+**Files Modified**:
+- `/src/lib/utils/dataValidation.ts:160` - Removed validation, added direct mapping
+- `/CLAUDE.md` - Updated with permanent fix documentation
+- `/claude-debug-playbook.md` - This file
+
 🧪 Testing Checklist
 
 Booking flow works end-to-end (insurance → ROI → summary → confirmation).

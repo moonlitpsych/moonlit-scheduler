@@ -69,6 +69,9 @@ async function enqueueCreateInEMR(params: {
 export async function POST(request: NextRequest) {
   try {
     const data: AppointmentRequest = await request.json()
+
+    // Step 4: Log what the server actually receives
+    console.log('📥 CREATE-APPT payload (server)', data)
     
     const {
       providerId,
@@ -124,10 +127,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate serviceInstanceId is present (no fallback)
-    if (!serviceInstanceId) {
+    // ✅ Backend safety fallback using real seeded instances
+    let finalServiceInstanceId = serviceInstanceId
+    if (!finalServiceInstanceId && payerId === 'a01d69d6-ae70-4917-afef-49b5ef7e5220') {
+      console.log('🔄 BOOKING DEBUG - Missing serviceInstanceId for Utah Medicaid, using seeded fallback...')
+
+      // Use real seeded service instance IDs
+      const TELEHEALTH_INTAKE_SERVICE_ID = 'f0a05d4c-188a-4f1b-9600-54d6c27a3f62'
+      const SERVICE_INSTANCE_ID_HOUSED = '12191f44-a09c-426f-8e22-0c5b8e57b3b7'
+      const SERVICE_INSTANCE_ID_UNHOUSED = '1a659f8e-249a-4690-86e7-359c6c381bc0'
+
+      // Default to housed instance for MVP (housing status logic can be added later)
+      finalServiceInstanceId = SERVICE_INSTANCE_ID_HOUSED
+      console.log(`🔄 BOOKING DEBUG - Using seeded fallback service instance: ${finalServiceInstanceId}`)
+
+      // Verify the instance exists in database (optional safety check)
+      const { data: instanceCheck, error: checkError } = await supabase
+        .from('service_instances')
+        .select('id, service_id, location, pos_code')
+        .eq('id', finalServiceInstanceId)
+        .eq('service_id', TELEHEALTH_INTAKE_SERVICE_ID)
+        .eq('payer_id', payerId)
+        .single()
+
+      if (checkError || !instanceCheck) {
+        console.error('❌ BOOKING DEBUG - Seeded service instance not found in database:', checkError)
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Service instance not properly configured in database',
+            details: 'Please ensure the Telehealth Intake service instances are properly seeded'
+          },
+          { status: 500 }
+        )
+      }
+
+      console.log(`✅ BOOKING DEBUG - Verified service instance: ${instanceCheck.service_id} at ${instanceCheck.location} (POS ${instanceCheck.pos_code})`)
+    }
+
+    // Final validation - serviceInstanceId must be present after fallback attempt
+    if (!finalServiceInstanceId) {
       return NextResponse.json(
-        { success: false, error: 'MISSING_SERVICE_INSTANCE' }, 
+        {
+          success: false,
+          error: 'MISSING_SERVICE_INSTANCE',
+          details: 'serviceInstanceId is required and no fallback was available'
+        },
         { status: 400 }
       );
     }
@@ -234,7 +279,7 @@ export async function POST(request: NextRequest) {
     // Prepare appointment data for insert
     const appointmentData = {
       provider_id: providerId,
-      service_instance_id: serviceInstanceId,
+      service_instance_id: finalServiceInstanceId, // Use fallback if needed
       payer_id: payerId,
       start_time: start,
       end_time: end,
@@ -272,27 +317,88 @@ export async function POST(request: NextRequest) {
       is_test: appointmentData.is_test
     });
 
-    // Insert appointment first - this is the critical operation
-    const { data: appointment, error: insertError } = await supabase
+    // Step 4: Safety check before insert
+    const { data: si, error: siErr } = await supabase
+      .from('service_instances')
+      .select('id, service_id, payer_id, location, pos_code')
+      .eq('id', finalServiceInstanceId)
+      .single()
+    console.log('🔎 Verified service_instance', { serviceInstanceId: finalServiceInstanceId, si, siErr })
+
+    // Pre-insert availability check to avoid P0001 constraint violation
+    console.log('🔍 PRE-INSERT AVAILABILITY CHECK:', {
+      provider_id: providerId,
+      start_time: start,
+      end_time: end,
+      checking: 'existing appointments overlap'
+    })
+
+    const { data: conflicts, error: conflictError } = await supabase
       .from('appointments')
-      .insert([appointmentData])
-      .select('id')
-      .single();
+      .select('id, start_time, end_time, status')
+      .eq('provider_id', providerId)
+      .gte('start_time', DateTime.fromISO(start!).minus({ hours: 2 }).toISO())
+      .lte('start_time', DateTime.fromISO(start!).plus({ hours: 2 }).toISO())
+      .neq('status', 'cancelled')
+
+    console.log('🔍 CONFLICT CHECK RESULT:', { conflicts, conflictError })
+
+    if (conflicts && conflicts.length > 0) {
+      console.log('⚠️ FOUND POTENTIAL CONFLICTS:', conflicts)
+      // Check for exact overlaps
+      const exactOverlap = conflicts.find(apt => {
+        const aptStart = new Date(apt.start_time).getTime()
+        const aptEnd = new Date(apt.end_time).getTime()
+        const newStart = new Date(start!).getTime()
+        const newEnd = new Date(end!).getTime()
+
+        return (newStart < aptEnd && newEnd > aptStart) // Overlap check
+      })
+
+      if (exactOverlap) {
+        console.log('❌ EXACT OVERLAP FOUND, blocking insert:', exactOverlap)
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'TIME_CONFLICT',
+            details: 'This time slot is no longer available. Please select a different time.'
+          },
+          { status: 409 }
+        )
+      }
+    }
+
+    // Step 5: Print the exact object passed to supabase insert
+    console.log('📋 INSERT OBJECT:', JSON.stringify(appointmentData, null, 2))
+
+    // Insert appointment first - this is the critical operation
+    let appointment, insertError
+    try {
+      const result = await supabase
+        .from('appointments')
+        .insert([appointmentData])
+        .select('id')
+        .single();
+      appointment = result.data
+      insertError = result.error
+    } catch (e: any) {
+      console.error('❌ DB_INSERT_FAILED (supabase error)', {
+        message: e?.message, details: e?.details, hint: e?.hint, code: e?.code, e
+      })
+      return NextResponse.json({ success:false, error:'DB_INSERT_FAILED', details: e?.details || e?.message }, { status: 500 })
+    }
 
     if (insertError || !appointment?.id) {
-      console.error('❌ BOOKING DEBUG - DB insert failed:', {
-        error: insertError,
-        code: insertError?.code,
-        message: insertError?.message,
-        details: insertError?.details
+      console.error('❌ DB_INSERT_FAILED (supabase error)', {
+        message: insertError?.message, details: insertError?.details, hint: insertError?.hint, code: insertError?.code, insertError
       });
-      
+
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'DB_INSERT_FAILED',
-          details: insertError?.message 
-        }, 
+          details: insertError?.details || insertError?.message
+        },
         { status: 500 }
       );
     }

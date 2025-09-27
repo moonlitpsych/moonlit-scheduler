@@ -90,7 +90,7 @@ export interface BookableProvider {
   med_school_org?: string | null
   med_school_grad_year?: string | null
   residency_org?: string | null
-  
+
   // Network relationship info (legacy format)
   via: 'direct' | 'supervised'
   attending_provider_id: string | null
@@ -98,6 +98,14 @@ export interface BookableProvider {
   requires_co_visit: boolean
   effective: string
   bookable_from_date: string | null
+
+  // Service instances for booking
+  accepted_services?: Array<{
+    service_id: string
+    service_instance_id: string
+    name?: string
+    type?: string
+  }>
   
   // Legacy compatibility fields
   network_effective_date: string

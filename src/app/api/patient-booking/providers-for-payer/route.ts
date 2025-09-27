@@ -115,15 +115,57 @@ export async function POST(request: NextRequest) {
                 }
             }
 
+            // ✅ B) Build accepted_services with real seeded service instances
+            const providersWithServiceInstances = []
+            if (providersWithFocus) {
+                // Known constants from seeded database
+                const PAYER_ID_UTAH_MEDICAID = 'a01d69d6-ae70-4917-afef-49b5ef7e5220'
+                const TELEHEALTH_INTAKE_SERVICE_ID = 'f0a05d4c-188a-4f1b-9600-54d6c27a3f62'
+                const SERVICE_INSTANCE_ID_HOUSED = '12191f44-a09c-426f-8e22-0c5b8e57b3b7'
+                const SERVICE_INSTANCE_ID_UNHOUSED = '1a659f8e-249a-4690-86e7-359c6c381bc0'
+
+                for (const provider of providersWithFocus) {
+                    let accepted_services = []
+
+                    // For Utah Medicaid, add Telehealth Intake service with real instance
+                    if (payer_id === PAYER_ID_UTAH_MEDICAID) {
+                        // Default to Housed instance (can be enhanced later with housing status logic)
+                        const serviceInstanceId = SERVICE_INSTANCE_ID_HOUSED
+
+                        accepted_services.push({
+                            service_id: TELEHEALTH_INTAKE_SERVICE_ID,
+                            service_instance_id: serviceInstanceId,
+                            name: 'Intake (Telehealth, 60m)',
+                            type: 'intake'
+                        })
+
+                        console.log(`✅ Provider ${provider.id}: Telehealth Intake service_instance_id = ${serviceInstanceId}`)
+                    } else {
+                        console.warn(`⚠️ Provider ${provider.id}: No service instances configured for payer ${payer_id}`)
+                    }
+
+                    providersWithServiceInstances.push({
+                        ...provider,
+                        accepted_services
+                    })
+                }
+            }
+
             // Join relationships with provider data using bookability mapper
             const data = relationships.map(rel => {
-                const provider = providersWithFocus?.find(p => p.id === rel.provider_id)
+                const provider = providersWithServiceInstances?.find(p => p.id === rel.provider_id)
                 if (!provider) return null
-                
-                return mapViewToLegacyFormat(
-                    rel as BookableProviderPayerView, 
+
+                const mappedProvider = mapViewToLegacyFormat(
+                    rel as BookableProviderPayerView,
                     provider as ProviderData
                 )
+
+                // Add service instances to the mapped provider
+                return {
+                    ...mappedProvider,
+                    accepted_services: provider.accepted_services
+                }
             }).filter(Boolean) // Only include successful mappings
 
         console.log(`✅ Canonical view success: Found ${data.length} bookable providers`)
@@ -176,6 +218,9 @@ export async function POST(request: NextRequest) {
                 }
             }
         }
+
+        // Step 1: Log accepted_services snapshot
+        console.log('API/providers-for-payer → accepted_services snapshot', JSON.stringify(providersWithServiceInstances, null, 2))
 
         return NextResponse.json(response)
 

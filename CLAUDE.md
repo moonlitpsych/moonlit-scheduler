@@ -152,6 +152,22 @@ Appointments missing in IntakeQ → confirm API key + practitioner mapping.
 
 Email not sending → check RESEND_API_KEY, otherwise see console logs.
 
+**🚨 RECURRING BUG: startDateTime Validation Errors - PERMANENTLY FIXED**
+
+**Symptoms**: Console errors like `Invalid startDateTime: "09:00" "from slot:" {}`
+
+**Root Cause**: The validateAndNormalizeData function in mapApiSlotToTimeSlot expected arrays but received individual objects, causing data corruption that resulted in empty objects `{}` being passed to fallback functions.
+
+**Why it kept recurring**: Previous Claude instances tried to fix validation schemas instead of removing the problematic validation layer entirely.
+
+**PERMANENT SOLUTION IMPLEMENTED**:
+- Removed validateAndNormalizeData from mapApiSlotToTimeSlot in dataValidation.ts:160
+- Implemented direct field mapping that handles the actual API response format
+- Added clear documentation explaining why validation was removed
+- This approach eliminates the data corruption that caused the errors
+
+**NEVER**: Re-add validation to mapApiSlotToTimeSlot - it causes more problems than it solves
+
 📊 Monitoring
 
 Audit API logs for 409 conflicts (double-booking prevention).

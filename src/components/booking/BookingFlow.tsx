@@ -47,6 +47,13 @@ export interface BookingState {
     // NEW: Third-party booking detection
     bookingForSomeoneElse?: boolean // Checkbox state on patient info page
     thirdPartyType?: 'case-manager' | 'referral' // Only appears when checkbox is checked
+    // NEW: Insurance acceptance data with service instance
+    acceptance?: {
+        service_instance_id?: string
+        serviceInstanceId?: string
+        verified?: boolean
+        status?: 'verified' | 'accepted' | 'pending'
+    }
 }
 
 interface BookingFlowProps {
@@ -143,7 +150,16 @@ export default function BookingFlow({
     }
 
     const handleTimeSlotSelected = (timeSlot: TimeSlot) => {
-        updateState({ selectedTimeSlot: timeSlot })
+        // Extract acceptance data if present (from enriched CalendarView slot)
+        const enrichedSlot = timeSlot as any
+        if (enrichedSlot.acceptance) {
+            updateState({
+                selectedTimeSlot: timeSlot,
+                acceptance: enrichedSlot.acceptance
+            })
+        } else {
+            updateState({ selectedTimeSlot: timeSlot })
+        }
         goToStep('insurance-info')
     }
 
@@ -172,73 +188,87 @@ export default function BookingFlow({
     const handleAppointmentConfirmed = async () => {
         // Create appointment with enhanced error handling
         try {
-            // Enhanced frontend logging
-            console.log('🚀 BOOKING DEBUG - Starting appointment creation:', {
-                hasTimeSlot: !!state.selectedTimeSlot,
-                hasProvider: !!state.selectedTimeSlot?.provider_id,
-                hasPayer: !!state.selectedPayer?.id,
-                hasPatientInfo: !!state.insuranceInfo,
-                hasServiceInstanceId: !!(state.selectedTimeSlot as any)?.service_instance_id,
-                patientName: `${state.insuranceInfo?.firstName} ${state.insuranceInfo?.lastName}`,
-                selectedDate: state.selectedTimeSlot?.date,
-                selectedTime: state.selectedTimeSlot?.time
-            })
-            
-            // Validate required data
-            if (!state.selectedTimeSlot?.provider_id || !state.selectedPayer?.id || 
-                !state.selectedTimeSlot?.date || !state.selectedTimeSlot?.time) {
-                console.error('❌ BOOKING DEBUG - Missing required booking data:', {
-                    hasTimeSlotProviderId: !!state.selectedTimeSlot?.provider_id,
-                    hasPayerId: !!state.selectedPayer?.id,
-                    hasDate: !!state.selectedTimeSlot?.date,
-                    hasTime: !!state.selectedTimeSlot?.time,
-                    timeSlot: state.selectedTimeSlot,
-                    payer: state.selectedPayer
-                })
-                throw new Error('Missing required booking data')
-            }
-            
-            // Validate patient info
-            if (!state.insuranceInfo?.firstName || !state.insuranceInfo?.lastName || !state.insuranceInfo?.phone) {
-                console.error('❌ BOOKING DEBUG - Missing patient information:', {
-                    hasFirstName: !!state.insuranceInfo?.firstName,
-                    hasLastName: !!state.insuranceInfo?.lastName,
-                    hasPhone: !!state.insuranceInfo?.phone,
-                    hasEmail: !!state.insuranceInfo?.email
-                })
-                throw new Error('Missing required patient information')
-            }
-            
-            const appointmentData = {
-                providerId: state.selectedTimeSlot.provider_id,
-                serviceInstanceId: (state.selectedTimeSlot as any).service_instance_id, // Pass from selected slot
-                payerId: state.selectedPayer.id,
-                date: state.selectedTimeSlot.date,
-                time: state.selectedTimeSlot.time,
+            // Map normalized slot → booking payload with exact API structure
+            const slot = state.selectedTimeSlot
+            const patient = state.insuranceInfo
+            const acceptance = state.acceptance || (state as any).acceptance
+
+            // Build payload with exact keys our API expects (camelCase)
+            const payload = {
+                providerId: slot?.provider_id,
+                serviceInstanceId: acceptance?.service_instance_id || acceptance?.serviceInstanceId,
+                payerId: state.selectedPayer?.id,
+                date: slot?.date,
+                time: slot?.time,
+                durationMinutes: slot?.duration_minutes ?? 60,
                 patient: {
-                    firstName: state.insuranceInfo.firstName,
-                    lastName: state.insuranceInfo.lastName,
-                    email: state.insuranceInfo.email || '',
-                    phone: state.insuranceInfo.phone,
-                    dateOfBirth: state.insuranceInfo.dob || state.insuranceInfo.dateOfBirth || ''
-                },
-                insurance: {
-                    policyNumber: state.insuranceInfo.policyNumber || '',
-                    groupNumber: state.insuranceInfo.groupNumber || '',
-                    memberName: state.insuranceInfo.memberName || ''
-                },
-                appointmentType: 'consultation',
-                reason: 'Scheduled appointment via booking flow',
-                createInEMR: true,
-                isTest: false // Set to true for testing
+                    firstName: patient?.first_name || patient?.firstName,
+                    lastName: patient?.last_name || patient?.lastName,
+                    phone: patient?.phone,
+                    email: patient?.email,
+                    dob: patient?.dob
+                }
             }
 
-            console.log('📋 BOOKING DEBUG - Appointment payload:', appointmentData)
+            // ✅ UUID validation helper
+            const isUuid = (v?: string) => !!v && /^[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}$/.test(v)
+
+            // ✅ DEV-ONLY GUARD: Surface mistakes immediately
+            if (process.env.NODE_ENV === 'development') {
+                const required = [
+                    'providerId', 'serviceInstanceId', 'payerId', 'date', 'time',
+                    'patient.firstName', 'patient.lastName', 'patient.phone'
+                ]
+                const missing = required.filter(k => !k.split('.').reduce((o, p) => o?.[p], payload))
+                if (missing.length) {
+                    console.error('Missing fields', { missing, payload })
+                    alert('Dev: Missing ' + missing.join(', '))
+                    return
+                }
+
+                // Dev guard: ensure valid UUID and correct service
+                if (!isUuid(payload.serviceInstanceId)) {
+                    console.error('Invalid serviceInstanceId', payload.serviceInstanceId)
+                    alert('Dev: serviceInstanceId missing/invalid')
+                    return
+                }
+
+                // Additional check for expected seeded UUIDs
+                const expectedUUIDs = [
+                    '12191f44-a09c-426f-8e22-0c5b8e57b3b7', // Housed
+                    '1a659f8e-249a-4690-86e7-359c6c381bc0'  // Unhoused
+                ]
+                if (!expectedUUIDs.includes(payload.serviceInstanceId)) {
+                    console.warn('⚠️ Dev: Unexpected serviceInstanceId (not in seeded list):', payload.serviceInstanceId)
+                }
+            }
+
+            // ✅ USER-SAFE BLOCK: If we can't resolve the SID, show friendly message and stop
+            if (!payload.serviceInstanceId) {
+                alert('This clinician is not yet configured for Telehealth Intake with your insurance. Please pick another clinician or contact support.')
+                return
+            }
+
+            // Enhanced frontend logging
+            console.log('🚀 BOOKING DEBUG - Starting appointment creation:', {
+                hasTimeSlot: !!slot,
+                hasProvider: !!slot?.provider_id,
+                hasPayer: !!state.selectedPayer?.id,
+                hasPatientInfo: !!patient,
+                hasServiceInstanceId: !!payload.serviceInstanceId,
+                patientName: `${payload.patient.firstName} ${payload.patient.lastName}`,
+                selectedDate: slot?.date,
+                selectedTime: slot?.time,
+                payload
+            })
+
+            console.log('📋 BOOKING DEBUG - Appointment payload:', payload)
+            console.log('📤 CREATE-APPT payload (client)', payload)
 
             const response = await fetch('/api/patient-booking/create-appointment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(appointmentData)
+                body: JSON.stringify(payload)
             })
 
             let result: any = null
