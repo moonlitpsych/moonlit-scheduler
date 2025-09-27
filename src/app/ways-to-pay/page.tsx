@@ -210,11 +210,11 @@ const PayerCard = ({ payer, showStatus = true, isEven = false }: { payer: Payer;
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
         <div className="flex items-center flex-1 min-w-0">
           {getStatusIcon()}
-          <div className={`inline-block px-2 py-1 rounded text-xs sm:text-sm font-medium mr-2 sm:mr-4 ${
+          <div className={`inline-block px-3 py-1 rounded-lg text-sm font-medium mr-2 sm:mr-4 ${
             isActive
-              ? 'bg-[#BF9C73] bg-opacity-20 text-[#BF9C73]'
+              ? 'bg-[#f28c69] text-white border border-[#f28c69] shadow-sm'
               : hasFutureDate
-                ? 'bg-[#BF9C73] bg-opacity-10 text-[#BF9C73] opacity-50'
+                ? 'bg-[#f28c69]/60 text-white border border-[#f28c69]/60 shadow-sm'
                 : 'bg-gray-100 text-gray-600'
           }`} style={{ fontFamily: 'Newsreader, serif' }}>
             {payer.name}
