@@ -22,8 +22,14 @@ export default function ResetPasswordPage() {
     try {
       // Always use production domain for reset links unless explicitly on localhost
       const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      const isProduction = window.location.hostname.includes('trymoonlit.com')
+
+      // Use the main domain for password resets (not subdomain)
       const baseUrl = isLocalhost ? window.location.origin : 'https://trymoonlit.com'
 
+      console.log('Current hostname:', window.location.hostname)
+      console.log('Is localhost:', isLocalhost)
+      console.log('Is production:', isProduction)
       console.log('Password reset redirect URL:', `${baseUrl}/auth/reset-password/confirm`)
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
