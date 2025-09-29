@@ -20,10 +20,11 @@ export default function ResetPasswordPage() {
     setError(null)
 
     try {
-      // Use production domain for reset links, fallback to current origin for development
-      const baseUrl = process.env.NODE_ENV === 'production'
-        ? 'https://trymoonlit.com'
-        : window.location.origin
+      // Always use production domain for reset links unless explicitly on localhost
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      const baseUrl = isLocalhost ? window.location.origin : 'https://trymoonlit.com'
+
+      console.log('Password reset redirect URL:', `${baseUrl}/auth/reset-password/confirm`)
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${baseUrl}/auth/reset-password/confirm`
