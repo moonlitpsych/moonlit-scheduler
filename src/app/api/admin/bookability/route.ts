@@ -11,6 +11,7 @@ export interface BookabilityRow {
   network_status: 'in_network' | 'supervised'
   billing_provider_id: string | null
   rendering_provider_id: string | null
+  rendering_provider_id_effective: string | null
   state: string | null
   effective_date: string | null
   expiration_date: string | null
@@ -20,22 +21,52 @@ export interface BookabilityRow {
 
 export async function GET() {
   try {
-    console.log('🔍 Admin: Fetching bookability data from canonical view...')
+    console.log('🔍 Admin: Fetching bookability data from corrected view...')
 
-    // Fetch from the canonical view with manual joins for provider and payer names
-    const { data: viewData, error: viewError } = await supabaseAdmin
-      .from('v_bookable_provider_payer')
+    // Try the corrected view first, fallback to original if needed
+    let viewData, viewError, usingCorrectedView = true
+
+    const correctedViewResult = await supabaseAdmin
+      .from('v_bookable_provider_payer_corrected')
       .select(`
         provider_id,
         payer_id,
         network_status,
         billing_provider_id,
         rendering_provider_id,
+        rendering_provider_id_effective,
         state,
         effective_date,
         expiration_date,
         bookable_from_date
       `)
+
+    if (correctedViewResult.error) {
+      console.log('⚠️ Corrected view not available, falling back to original view...')
+      usingCorrectedView = false
+
+      const originalViewResult = await supabaseAdmin
+        .from('v_bookable_provider_payer')
+        .select(`
+          provider_id,
+          payer_id,
+          network_status,
+          billing_provider_id,
+          rendering_provider_id,
+          state,
+          effective_date,
+          expiration_date,
+          bookable_from_date
+        `)
+
+      viewData = originalViewResult.data
+      viewError = originalViewResult.error
+    } else {
+      viewData = correctedViewResult.data
+      viewError = correctedViewResult.error
+    }
+
+    console.log(`📊 Using ${usingCorrectedView ? 'corrected' : 'original'} bookability view`)
 
     if (viewError) {
       console.error('❌ Error fetching from canonical view:', viewError)
@@ -101,6 +132,7 @@ export async function GET() {
         network_status: row.network_status,
         billing_provider_id: row.billing_provider_id,
         rendering_provider_id: row.rendering_provider_id,
+        rendering_provider_id_effective: usingCorrectedView ? row.rendering_provider_id_effective : row.rendering_provider_id,
         state: row.state,
         effective_date: row.effective_date,
         expiration_date: row.expiration_date,

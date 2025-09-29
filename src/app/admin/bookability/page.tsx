@@ -9,6 +9,7 @@ export interface BookabilityRow {
   network_status: 'in_network' | 'supervised'
   billing_provider_id: string | null
   rendering_provider_id: string | null
+  rendering_provider_id_effective: string | null
   state: string | null
   effective_date: string | null
   expiration_date: string | null

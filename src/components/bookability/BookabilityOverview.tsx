@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Filter, RefreshCw, Info } from 'lucide-react'
+import { Search, Filter, RefreshCw, Info, Download } from 'lucide-react'
 import BookabilityTable from '@/app/admin/bookability/BookabilityTable'
 import BookabilityFilters from '@/app/admin/bookability/BookabilityFilters'
 import { BookabilityRow, FilterState } from '@/app/admin/bookability/page'
+import { getRenderingProviderId } from '@/lib/bookability/mapRenderingProvider'
 
 interface BookabilityOverviewProps {
   isReadOnly?: boolean
@@ -143,11 +144,71 @@ export default function BookabilityOverview({ isReadOnly = false }: BookabilityO
     return count
   }
 
+  // Export all bookability data to CSV
+  const exportAllBookabilityData = () => {
+    if (bookabilityRows.length === 0) return
+
+    const headers = [
+      'Provider Name',
+      'Provider ID',
+      'Payer Name',
+      'Payer ID',
+      'Network Status',
+      'Path Type',
+      'Requires Attending',
+      'Rendering Provider ID',
+      'Billing Provider ID',
+      'State',
+      'Effective Date',
+      'Expiration Date',
+      'Bookable From Date'
+    ]
+
+    const rows = bookabilityRows.map(row => [
+      `${row.provider_first_name} ${row.provider_last_name}`,
+      row.provider_id,
+      row.payer_name,
+      row.payer_id,
+      row.network_status,
+      row.network_status === 'in_network' ? 'Direct' : 'Supervised',
+      row.requires_attending ? 'Yes' : 'No',
+      getRenderingProviderId(row) || '',
+      row.billing_provider_id || '',
+      row.state || '',
+      row.effective_date ? new Date(row.effective_date).toLocaleDateString() : '',
+      row.expiration_date ? new Date(row.expiration_date).toLocaleDateString() : '',
+      row.bookable_from_date ? new Date(row.bookable_from_date).toLocaleDateString() : ''
+    ])
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `bookability_overview_all_data_${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="max-w-full">
       {/* Controls */}
       <div className="mb-6">
-        <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center justify-end gap-3 mb-4">
+          <button
+            onClick={exportAllBookabilityData}
+            disabled={loading || bookabilityRows.length === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white rounded-lg transition-colors"
+            title={`Export all ${bookabilityRows.length} relationships to CSV`}
+          >
+            <Download className="h-4 w-4" />
+            <span>Export All ({bookabilityRows.length})</span>
+          </button>
           <button
             onClick={fetchBookabilityData}
             disabled={loading}
@@ -240,6 +301,9 @@ export default function BookabilityOverview({ isReadOnly = false }: BookabilityO
             <strong>Data Source:</strong> This table shows relationships from the canonical <code className="bg-blue-100 px-1 rounded">v_bookable_provider_payer</code> view.
             <strong className="ml-2">Direct</strong> relationships are provider-payer contracts.
             <strong className="ml-2">Supervised</strong> relationships allow residents to see patients under attending physician supervision.
+            <div className="mt-2">
+              <strong>Export All:</strong> The "Export All" button downloads a CSV file containing ALL bookability relationships, including complete provider/payer details, network status, contract dates, and rendering provider information - regardless of current filters or search terms.
+            </div>
             {isReadOnly && (
               <div className="mt-2">
                 <strong>Read-Only:</strong> This view is for informational purposes only.
