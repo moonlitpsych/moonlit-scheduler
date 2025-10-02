@@ -64,7 +64,7 @@ export default function DashboardLayout({
 
   const navigation = [
     { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner },
-    { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
+    { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner || isAdmin },
     { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
     { name: 'Manage Providers', href: '/dashboard/admin/providers', icon: Users, show: isAdmin },
     { name: 'System Settings', href: '/dashboard/admin/settings', icon: Settings, show: isAdmin },

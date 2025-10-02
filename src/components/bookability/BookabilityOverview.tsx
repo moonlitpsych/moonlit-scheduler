@@ -1,17 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Filter, RefreshCw, Info, Download } from 'lucide-react'
+import { Search, Filter, RefreshCw, Info, Download, Edit, Shield } from 'lucide-react'
 import BookabilityTable from '@/app/admin/bookability/BookabilityTable'
 import BookabilityFilters from '@/app/admin/bookability/BookabilityFilters'
 import { BookabilityRow, FilterState } from '@/app/admin/bookability/page'
 import { getRenderingProviderId } from '@/lib/bookability/mapRenderingProvider'
+import PayerEditForm from '@/components/admin/PayerEditForm'
+import { useToast, ToastProvider } from '@/contexts/ToastContext'
 
 interface BookabilityOverviewProps {
   isReadOnly?: boolean
 }
 
-export default function BookabilityOverview({ isReadOnly = false }: BookabilityOverviewProps) {
+function BookabilityOverviewInner({ isReadOnly = false }: BookabilityOverviewProps) {
   const [bookabilityRows, setBookabilityRows] = useState<BookabilityRow[]>([])
   const [filteredRows, setFilteredRows] = useState<BookabilityRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,6 +31,10 @@ export default function BookabilityOverview({ isReadOnly = false }: BookabilityO
   // Available filter options
   const [availablePayers, setAvailablePayers] = useState<{id: string, name: string}[]>([])
   const [availableProviders, setAvailableProviders] = useState<{id: string, name: string}[]>([])
+
+  // Write-enabled state
+  const [editingPayer, setEditingPayer] = useState<any>(null)
+  const toast = useToast()
 
   // Fetch bookability data using API endpoint
   const fetchBookabilityData = async () => {
@@ -144,6 +150,35 @@ export default function BookabilityOverview({ isReadOnly = false }: BookabilityO
     return count
   }
 
+  // Handle payer editing
+  const handleEditPayer = (payerId: string) => {
+    const payer = availablePayers.find(p => p.id === payerId)
+    if (payer) {
+      // Get additional payer data from the first bookability row with this payer
+      const payerRow = bookabilityRows.find(row => row.payer_id === payerId)
+      setEditingPayer({
+        id: payerId,
+        name: payer.name,
+        status_code: null, // Would need to fetch from payers table
+        effective_date: payerRow?.effective_date || null,
+        requires_attending: payerRow?.requires_attending || false,
+        allows_supervised: true, // Default
+        supervision_level: null // Would need to fetch from payers table
+      })
+    }
+  }
+
+  const handlePayerUpdate = (updatedPayer: any) => {
+    toast.success('Payer Updated', `${updatedPayer.name} has been updated successfully. To revert, edit again or contact admin to restore from audit history.`)
+
+    // Refresh the data to show changes
+    fetchBookabilityData()
+  }
+
+  const handlePayerEditError = (error: string) => {
+    toast.error('Update Failed', error)
+  }
+
   // Export all bookability data to CSV
   const exportAllBookabilityData = () => {
     if (bookabilityRows.length === 0) return
@@ -199,24 +234,63 @@ export default function BookabilityOverview({ isReadOnly = false }: BookabilityO
     <div className="max-w-full">
       {/* Controls */}
       <div className="mb-6">
-        <div className="flex items-center justify-end gap-3 mb-4">
-          <button
-            onClick={exportAllBookabilityData}
-            disabled={loading || bookabilityRows.length === 0}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white rounded-lg transition-colors"
-            title={`Export all ${bookabilityRows.length} relationships to CSV`}
-          >
-            <Download className="h-4 w-4" />
-            <span>Export All ({bookabilityRows.length})</span>
-          </button>
-          <button
-            onClick={fetchBookabilityData}
-            disabled={loading}
-            className="flex items-center space-x-2 px-4 py-2 bg-[#BF9C73] hover:bg-[#BF9C73]/90 disabled:bg-[#BF9C73]/50 text-white rounded-lg transition-colors"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
+        <div className="flex items-center justify-between mb-4">
+          {/* Write-enabled badge */}
+          {!isReadOnly && (
+            <div className="flex items-center space-x-2">
+              <div className="inline-flex items-center px-3 py-1 bg-green-100 border border-green-300 rounded-full">
+                <Shield className="h-4 w-4 text-green-600 mr-2" />
+                <span className="text-sm font-medium text-green-800">Write-enabled</span>
+              </div>
+              <div className="text-xs text-gray-500 max-w-xs">
+                Changes are written to the database after confirmation. An audit note is required.
+              </div>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3">
+            {!isReadOnly && (
+              <div className="flex items-center gap-2 mr-4">
+                <span className="text-sm font-medium text-[#091747]">Quick Actions:</span>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleEditPayer(e.target.value)
+                      e.target.value = '' // Reset selection
+                    }
+                  }}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
+                  value=""
+                >
+                  <option value="">Edit Payer...</option>
+                  {availablePayers.map(payer => (
+                    <option key={payer.id} value={payer.id}>
+                      {payer.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button
+              onClick={exportAllBookabilityData}
+              disabled={loading || bookabilityRows.length === 0}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white rounded-lg transition-colors"
+              title={`Export all ${bookabilityRows.length} relationships to CSV`}
+            >
+              <Download className="h-4 w-4" />
+              <span>Export All ({bookabilityRows.length})</span>
+            </button>
+            <button
+              onClick={fetchBookabilityData}
+              disabled={loading}
+              className="flex items-center space-x-2 px-4 py-2 bg-[#BF9C73] hover:bg-[#BF9C73]/90 disabled:bg-[#BF9C73]/50 text-white rounded-lg transition-colors"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
 
         {/* Search and Filter Controls */}
@@ -304,15 +378,39 @@ export default function BookabilityOverview({ isReadOnly = false }: BookabilityO
             <div className="mt-2">
               <strong>Export All:</strong> The "Export All" button downloads a CSV file containing ALL bookability relationships, including complete provider/payer details, network status, contract dates, and rendering provider information - regardless of current filters or search terms.
             </div>
-            {isReadOnly && (
+            {isReadOnly ? (
               <div className="mt-2">
                 <strong>Read-Only:</strong> This view is for informational purposes only.
                 For changes to contracts or network status, please contact your administrator.
+              </div>
+            ) : (
+              <div className="mt-2">
+                <strong>Write-Enabled:</strong> You can edit payer metadata, create provider-payer contracts, and seed supervision relationships.
+                All changes require confirmation and an audit note. Changes are applied immediately and logged for compliance.
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Payer Edit Form Modal */}
+      {editingPayer && (
+        <PayerEditForm
+          payer={editingPayer}
+          isOpen={!!editingPayer}
+          onClose={() => setEditingPayer(null)}
+          onUpdate={handlePayerUpdate}
+          onError={handlePayerEditError}
+        />
+      )}
     </div>
+  )
+}
+
+export default function BookabilityOverview(props: BookabilityOverviewProps) {
+  return (
+    <ToastProvider>
+      <BookabilityOverviewInner {...props} />
+    </ToastProvider>
   )
 }

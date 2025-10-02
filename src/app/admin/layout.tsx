@@ -123,6 +123,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <Building2 className="h-4 w-4" />
             <span>Partner CRM</span>
+            <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
           </Link>
           
           <Link
@@ -131,6 +132,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <Users className="h-4 w-4" />
             <span>Organizations</span>
+            <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
           </Link>
 
           {/* Operations Section */}
@@ -141,11 +143,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
 
           <Link
-            href="/admin/payer-rules"
+            href="/admin/payers"
             className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
           >
             <Shield className="h-4 w-4" />
-            <span>Payer Rules</span>
+            <span>Payers</span>
           </Link>
 
           <Link
@@ -154,6 +156,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <Network className="h-4 w-4" />
             <span>Supervision</span>
+            <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
           </Link>
 
           <Link
@@ -162,6 +165,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <Activity className="h-4 w-4" />
             <span>Contracts</span>
+            <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
           </Link>
 
           <Link
@@ -178,6 +182,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <BarChart3 className="h-4 w-4" />
             <span>Analytics</span>
+            <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
           </Link>
         </nav>
 
