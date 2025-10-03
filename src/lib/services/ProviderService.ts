@@ -1,6 +1,6 @@
 // src/lib/services/ProviderService.ts
 import { supabase as supabaseClient } from '@/lib/supabase'
-import { Payer, Provider } from '@/types/database'
+import { Provider } from '@/types/database'
 
 export interface ProviderWithAvailability extends Provider {
   isAvailable: boolean

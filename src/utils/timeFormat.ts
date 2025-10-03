@@ -41,7 +41,7 @@ export function formatTo24Hour(time12: string): string {
       return time12; // Return original if doesn't match pattern
     }
     
-    let [, hours, minutes, period] = match;
+    const [, hours, minutes, period] = match;
     let hour24 = parseInt(hours);
     
     if (period === 'am' && hour24 === 12) {

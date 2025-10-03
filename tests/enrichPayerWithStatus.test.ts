@@ -10,7 +10,7 @@ function basePayer(overrides: Partial<Payer>): Payer {
     name: 'Test Payer',
     payer_type: null,
     notes: null,
-    credentialing_status: null,
+    status_code: null,
     effective_date: null,
     projected_effective_date: null,
     requires_attending: false,
@@ -22,20 +22,20 @@ function basePayer(overrides: Partial<Payer>): Payer {
 
 // Fixture: Active payer
 const activePayer = basePayer({
-  credentialing_status: 'Approved',
+  status_code: 'Approved',
   effective_date: '2000-01-01'
 })
 
 // Fixture: Future payer
 const futureDate = '2099-01-01'
 const futurePayer = basePayer({
-  credentialing_status: 'Approved',
+  status_code: 'Approved',
   effective_date: futureDate
 })
 
 // Fixture: Not accepted payer
 const notAcceptedPayer = basePayer({
-  credentialing_status: 'Not started'
+  status_code: 'Not started'
 })
 
 // Assertions
