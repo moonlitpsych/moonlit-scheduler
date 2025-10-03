@@ -60,12 +60,12 @@ export default function DashboardLayout({
   // No auto-redirect - dashboard home page now exists
 
   const isAdmin = provider?.role === 'admin'
-  const isPractitioner = provider && ['practitioner', 'psychiatrist', 'psychiatry_resident'].includes(provider.role)
+  const isPractitioner = provider && ['practitioner', 'psychiatrist', 'psychiatry_resident', 'provider'].includes(provider.role)
 
   const navigation = [
-    { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner },
+    { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner, beta: true },
     { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner || isAdmin },
-    { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
+    { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner, beta: true },
     { name: 'Manage Providers', href: '/dashboard/admin/providers', icon: Users, show: isAdmin },
     { name: 'System Settings', href: '/dashboard/admin/settings', icon: Settings, show: isAdmin },
   ].filter(item => item.show)
@@ -154,6 +154,11 @@ export default function DashboardLayout({
                       <span className={`font-medium ${isActive ? 'text-white' : 'text-[#091747]'}`}>
                         {item.name}
                       </span>
+                      {item.beta && (
+                        <span className="ml-2 px-2 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs rounded-full font-medium">
+                          Beta
+                        </span>
+                      )}
                       {isActive && (
                         <div className="ml-auto w-2 h-2 bg-white rounded-full opacity-80" />
                       )}
