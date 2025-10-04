@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { DateTime } from 'luxon'
 import crypto from 'crypto'
+import { intakeQService } from '@/lib/services/intakeQService'
 
 // Use service role to avoid RLS blocks on inserts
 const supabase = createClient(
@@ -40,28 +41,98 @@ interface AppointmentRequest {
   isTest?: boolean // For testing purposes
 }
 
-// Simple background EMR queue (fire-and-forget)
-async function enqueueCreateInEMR(params: { 
-  appointmentId: string, 
-  providerId: string, 
-  start: string 
+// Background EMR creation (fire-and-forget)
+async function enqueueCreateInEMR(params: {
+  appointmentId: string
+  providerId: string
+  start: string
+  end: string
+  patientFirstName: string
+  patientLastName: string
+  patientEmail: string
+  patientPhone: string
+  patientDateOfBirth?: string
 }): Promise<void> {
-  // In production, this would use a proper job queue
-  // For now, just log that we would enqueue it
-  console.log('BOOKING DEBUG - EMR creation enqueued:', {
+  console.log('📤 BOOKING DEBUG - EMR creation enqueued:', {
     appointmentId: params.appointmentId,
     providerId: params.providerId,
     start: params.start
   });
-  
-  // Simulate async EMR creation without blocking response
+
+  // Run async EMR creation without blocking the response
   setTimeout(async () => {
     try {
-      console.log('BOOKING DEBUG - EMR background job started for:', params.appointmentId);
-      // Here you would call intakeQService or athenaService
-      // await emrService.createAppointment(...)
-    } catch (error) {
-      console.error('BOOKING DEBUG - EMR background job failed:', error);
+      console.log('🚀 BOOKING DEBUG - EMR background job started for:', params.appointmentId);
+
+      // Step 1: Get provider details (including IntakeQ practitioner ID)
+      const { data: provider, error: providerError } = await supabase
+        .from('providers')
+        .select('id, first_name, last_name, intakeq_practitioner_id, intakeq_service_id, intakeq_location_id')
+        .eq('id', params.providerId)
+        .single();
+
+      if (providerError || !provider) {
+        throw new Error(`Provider not found: ${providerError?.message}`);
+      }
+
+      if (!provider.intakeq_practitioner_id) {
+        console.log('⚠️ Provider has no IntakeQ practitioner ID, skipping EMR creation');
+        return;
+      }
+
+      console.log('👨‍⚕️ Provider found:', {
+        name: `${provider.first_name} ${provider.last_name}`,
+        intakeq_id: provider.intakeq_practitioner_id
+      });
+
+      // Step 2: Create appointment in IntakeQ
+      const intakeQAppointmentId = await intakeQService.createAppointment({
+        practitionerId: provider.intakeq_practitioner_id,
+        clientFirstName: params.patientFirstName,
+        clientLastName: params.patientLastName,
+        clientEmail: params.patientEmail,
+        clientPhone: params.patientPhone,
+        clientDateOfBirth: params.patientDateOfBirth,
+        serviceId: provider.intakeq_service_id || '01JDQR0MT6MGADAMR7N8XHGZQ1', // Fallback if not set
+        locationId: provider.intakeq_location_id || '1', // Fallback if not set
+        dateTime: new Date(params.start),
+        status: 'Confirmed',
+        sendEmailNotification: true
+      });
+
+      console.log('✅ IntakeQ appointment created:', intakeQAppointmentId);
+
+      // Step 3: Update database with IntakeQ appointment ID
+      const { error: updateError } = await supabase
+        .from('appointments')
+        .update({
+          emr_appointment_id: intakeQAppointmentId,
+          emr_system: 'intakeq',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', params.appointmentId);
+
+      if (updateError) {
+        console.error('❌ Failed to update appointment with IntakeQ ID:', updateError);
+      } else {
+        console.log('✅ Database updated with IntakeQ appointment ID');
+      }
+
+    } catch (error: any) {
+      console.error('❌ BOOKING DEBUG - EMR background job failed:', {
+        error: error.message,
+        stack: error.stack,
+        appointmentId: params.appointmentId
+      });
+
+      // Update appointment to note EMR creation failed
+      await supabase
+        .from('appointments')
+        .update({
+          notes: `EMR creation failed: ${error.message}`,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', params.appointmentId);
     }
   }, 100);
 }
@@ -410,13 +481,19 @@ export async function POST(request: NextRequest) {
       patientName: `${patient.firstName} ${patient.lastName}`
     });
 
-    // Fire-and-log EMR creation; do not block success response
+    // Queue EMR creation in background (if not a test)
     if (createInEMR && !isTest) {
-      enqueueCreateInEMR({ 
-        appointmentId: appointment.id, 
-        providerId, 
-        start: start! 
-      }).catch(error => 
+      enqueueCreateInEMR({
+        appointmentId: appointment.id,
+        providerId,
+        start: start!,
+        end: end!,
+        patientFirstName: patient.firstName,
+        patientLastName: patient.lastName,
+        patientEmail: patient.email,
+        patientPhone: patient.phone,
+        patientDateOfBirth: patient.dateOfBirth
+      }).catch(error =>
         console.error('BOOKING DEBUG - EMR enqueue failed:', error)
       );
     }
