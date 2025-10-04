@@ -409,6 +409,30 @@ class IntakeQService {
       cache: intakeQCache.getStats()
     }
   }
+
+  // List available services from IntakeQ
+  async listServices(): Promise<any[]> {
+    try {
+      const response = await fetch('https://intakeq.com/api/v1/services', {
+        method: 'GET',
+        headers: {
+          'X-Auth-Key': this.apiKey,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`IntakeQ API error: ${response.status} ${response.statusText}`)
+      }
+
+      const services = await response.json()
+      console.log(`✅ Fetched ${Array.isArray(services) ? services.length : 0} services from IntakeQ`)
+      return Array.isArray(services) ? services : []
+    } catch (error: any) {
+      console.error('❌ Failed to fetch IntakeQ services:', error.message)
+      throw error
+    }
+  }
 }
 
 // Create and export singleton instance

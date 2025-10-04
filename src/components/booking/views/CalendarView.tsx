@@ -477,10 +477,11 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     const TELEHEALTH_INTAKE_SERVICE_ID = 'f0a05d4c-188a-4f1b-9600-54d6c27a3f62'
 
                     // Build acceptance map from providers with service instances
+                    console.log('📦 Building acceptance map from providers:', data.data.providers.length)
                     const accMap = (data.data.providers || []).reduce((m: any, p: any) => {
                         // Look for accepted services in the API response
                         const services = p.accepted_services || p.services || []
-                        console.log(`🔍 Provider ${p.id} services:`, services)
+                        console.log(`🔍 Provider ${p.first_name} ${p.last_name} (${p.id}) services:`, services)
 
                         // First try exact service ID match for Telehealth Intake
                         let intake = services.find((s: any) =>
@@ -499,22 +500,23 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         m[p.id] = { serviceInstanceId: sid }
 
                         if (sid) {
-                            console.log(`✅ Provider ${p.id}: found serviceInstanceId = ${sid}`)
+                            console.log(`✅ Provider ${p.first_name} ${p.last_name} (${p.id}): found serviceInstanceId = ${sid}`)
                             // Verify it's the expected housed instance UUID
                             if (sid === '12191f44-a09c-426f-8e22-0c5b8e57b3b7') {
-                                console.log(`🏠 Provider ${p.id}: using HOUSED Telehealth Intake instance`)
+                                console.log(`🏠 Provider ${p.first_name} ${p.last_name}: using HOUSED Telehealth Intake instance`)
                             } else if (sid === '1a659f8e-249a-4690-86e7-359c6c381bc0') {
-                                console.log(`🏕️ Provider ${p.id}: using UNHOUSED Telehealth Intake instance`)
+                                console.log(`🏕️ Provider ${p.first_name} ${p.last_name}: using UNHOUSED Telehealth Intake instance`)
                             }
                         } else {
-                            console.warn(`⚠️ No Telehealth Intake service instance for provider ${p.id}`, { services })
+                            console.warn(`⚠️ No Telehealth Intake service instance for provider ${p.first_name} ${p.last_name} (${p.id})`, { services })
                         }
 
                         return m
                     }, {})
 
                     setAcceptanceMap(accMap)
-                    console.log('🗺️ ACCEPTANCE MAP', accMap)
+                    console.log('🗺️ ACCEPTANCE MAP COMPLETE:', accMap)
+                    console.log('🗺️ ACCEPTANCE MAP KEYS:', Object.keys(accMap))
                 } else {
                     console.warn('⚠️ FRONTEND: No provider acceptance data:', data)
                     setAcceptanceMap({})
@@ -943,8 +945,14 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const handleNext = () => {
         if (selectedSlot) {
             // ✅ B) Capture serviceInstanceId when slot is selected
+            console.log('🔐 FULL ACCEPTANCE MAP:', acceptanceMap)
             const sid = acceptanceMap[selectedSlot.provider_id]?.serviceInstanceId
-            console.log('🔐 CAPTURE serviceInstanceId', { providerId: selectedSlot.provider_id, sid })
+            console.log('🔐 CAPTURE serviceInstanceId', {
+                providerId: selectedSlot.provider_id,
+                sid,
+                hasAcceptanceMap: Object.keys(acceptanceMap).length > 0,
+                acceptanceMapKeys: Object.keys(acceptanceMap)
+            })
 
             // Add acceptance data to the slot for BookingFlow
             const enrichedSlot = {
@@ -956,6 +964,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 }
             }
 
+            console.log('🔐 ENRICHED SLOT:', enrichedSlot)
             onTimeSlotSelected(enrichedSlot)
         }
     }

@@ -7,6 +7,47 @@ Never insert fake IntakeQ IDs, providers, or placeholder database rows.
 
 Data integrity is critical — this is a healthcare application.
 
+⚠️ **ALWAYS VERIFY BEFORE MODIFYING DATABASE SCHEMA**
+
+Before adding columns or modifying tables:
+1. Create debug API endpoints to verify column existence
+2. Use multiple verification methods (direct SELECT, SELECT *, UPDATE attempt)
+3. Check related tables for similar columns
+4. Document findings in a verification report
+5. Get explicit user confirmation before proceeding
+
+**Example verification endpoints:**
+- `/api/debug/check-[table]-columns` - Direct column checks
+- `/api/debug/search-all-tables-for-columns` - Cross-table searches
+- `/api/debug/final-column-verification` - Multi-method verification
+
+This prevents duplicate columns, schema conflicts, and maintains data integrity.
+
+## 🚨 PENDING TASK: IntakeQ Service/Location ID Integration (Oct 4, 2025)
+
+**STATUS:** Database migration ready, awaiting execution
+
+**WHAT'S NEEDED:** Two columns must be added to `providers` table:
+- `intakeq_service_id` (TEXT)
+- `intakeq_location_id` (TEXT)
+
+**VERIFICATION COMPLETED:** Columns confirmed NOT to exist (see `COLUMN_VERIFICATION_REPORT.md`)
+
+**ACTION FOR NEXT CLAUDE CODE:**
+1. Run migration: `curl -X POST http://localhost:3000/api/admin/migrate-intakeq-fields`
+2. Verify: `curl http://localhost:3000/api/admin/update-provider-intakeq-ids`
+3. Wait for user to provide IntakeQ Service/Location IDs from their dashboard
+4. Update providers as user provides IDs
+
+**FILES READY:**
+- Migration SQL: `/database-migrations/002-add-intakeq-service-location-ids.sql`
+- Setup guide: `INTAKEQ_SETUP_GUIDE.md`
+- Handoff doc: `HANDOFF_TO_NEXT_CLAUDE.md`
+
+**WHY:** Appointments currently save to Supabase but don't sync to IntakeQ (missing IDs)
+
+---
+
 🌟 Project Status
 
 Moonlit Scheduler = production-ready healthcare website + booking platform

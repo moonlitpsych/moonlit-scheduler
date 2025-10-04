@@ -108,10 +108,22 @@ export async function POST(request: NextRequest) {
         console.log(`📅 Target date ${requestDate} is day of week ${dayOfWeek} (0=Sun, 1=Mon, etc.)`)
 
         // Step 2: Get base availability for ONLY these bookable providers
+        // CRITICAL: Filter by bookable providers to exclude Doug Sirutis and other non-bookable providers
+        const { data: allProviders } = await supabaseAdmin
+            .from('providers')
+            .select('id')
+            .eq('is_bookable', true)
+            .not('intakeq_practitioner_id', 'is', null)
+
+        const bookableProviderIds = allProviders?.map(p => p.id) || []
+        const filteredProviderIds = providerIds.filter(id => bookableProviderIds.includes(id))
+
+        console.log(`🔒 Filtered providers: ${providerIds.length} → ${filteredProviderIds.length} bookable`)
+
         const { data: availability, error: availabilityError } = await supabaseAdmin
             .from('provider_availability')
             .select('*')
-            .in('provider_id', providerIds) // Only query providers in payer network
+            .in('provider_id', filteredProviderIds) // Only query BOOKABLE providers in payer network
             .eq('day_of_week', dayOfWeek)
             .eq('is_recurring', true)
 

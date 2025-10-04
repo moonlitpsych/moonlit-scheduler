@@ -265,7 +265,7 @@ export default function BookingFlow({
             console.log('📋 BOOKING DEBUG - Appointment payload:', payload)
             console.log('📤 CREATE-APPT payload (client)', payload)
 
-            const response = await fetch('/api/patient-booking/create-appointment', {
+            const response = await fetch('/api/patient-booking/create-appointment-v2', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
