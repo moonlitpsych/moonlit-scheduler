@@ -12,6 +12,9 @@ interface AvailableSlot {
     providerName: string
     duration: number
     isAvailable: boolean
+    // NEW: Service instance identifier for booking
+    serviceInstanceId?: string
+    serviceId?: string
     provider: {
         id: string
         first_name: string
@@ -209,6 +212,9 @@ export async function POST(request: NextRequest) {
                     providerName: `${coVisitProvider.first_name} ${coVisitProvider.last_name} (with ${cvSlot.attending_name})`,
                     duration: appointmentDuration,
                     isAvailable: true,
+                    // TODO: This should be properly mapped from provider service configurations
+                    // For now, using default service instance for dev
+                    serviceInstanceId: '12191f44-a09c-426f-8e22-0c5b8e57b3b7', // Housed service
                     provider: {
                         id: coVisitProvider.provider_id,
                         first_name: coVisitProvider.first_name || '',
@@ -232,6 +238,17 @@ export async function POST(request: NextRequest) {
 
         allSlots.sort((a, b) => a.time.localeCompare(b.time))
         console.log(`✅ Generated ${allSlots.length} total time slots from bookable providers`)
+
+        // DEV: Log serviceInstanceId presence for debugging
+        if (process.env.NODE_ENV === 'development' && allSlots.length > 0) {
+            const sampleSlot = allSlots[0]
+            console.log('🔧 DEV: Sample slot with serviceInstanceId:', {
+                time: sampleSlot.time,
+                provider: sampleSlot.providerName,
+                serviceInstanceId: sampleSlot.serviceInstanceId,
+                hasServiceId: !!sampleSlot.serviceInstanceId
+            })
+        }
 
         // Step 6: Filter out IntakeQ conflicts
         const finalSlots = await filterConflictingAppointments(allSlots, requestDate)
@@ -330,6 +347,9 @@ function generateTimeSlotsFromAvailability(
                     providerName: `${provider.first_name} ${provider.last_name}`,
                     duration: appointmentDuration,
                     isAvailable: true,
+                    // TODO: This should be properly mapped from provider service configurations
+                    // For now, using default service instance for dev
+                    serviceInstanceId: '12191f44-a09c-426f-8e22-0c5b8e57b3b7', // Housed service
                     provider: {
                         id: provider.id,
                         first_name: provider.first_name,
