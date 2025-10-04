@@ -140,7 +140,7 @@ class ProviderAvailabilityService {
   async saveWeeklySchedule(providerId: string, schedule: WeeklySchedule): Promise<void> {
     try {
       // First, get or create the provider schedule record
-      let { data: scheduleData, error: scheduleError } = await supabase
+      const { data: scheduleData, error: scheduleError } = await supabase
         .from('provider_schedules')
         .select('id')
         .eq('provider_id', providerId)

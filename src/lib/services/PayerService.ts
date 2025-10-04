@@ -1,6 +1,6 @@
 // src/lib/services/PayerService.ts
 import { supabase as supabaseClient } from '@/lib/supabase'
-import { Payer } from '@/types/database'
+import type { Payer } from './payerStatus'
 import {
   enrichPayerWithStatus as enrichPayerStatus,
   type PayerAcceptanceStatus,

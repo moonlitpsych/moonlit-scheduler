@@ -15,10 +15,10 @@ interface BookabilityRowDetailsProps {
 
 interface ProviderDetail {
   id: string
-  first_name: string
-  last_name: string
-  title: string
-  role: string
+  first_name: string | null
+  last_name: string | null
+  title: string | null
+  role: string | null
 }
 
 export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDetailsProps) {

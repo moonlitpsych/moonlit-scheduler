@@ -100,8 +100,8 @@ export function formatDateSafe(dateString: string | null, options?: {
 export function validateDateFormatting(originalDate: string, formattedDate: string): boolean {
   const dateParts = parseDateString(originalDate)
   if (!dateParts) return false
-  
-  const { year, month, day } = dateParts
+
+  const { year, day } = dateParts
   
   // Check if formatted date contains the correct day and year
   const dayStr = day.toString()
