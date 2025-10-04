@@ -271,6 +271,7 @@ export default function BookingFlow({
 
             // For visibility, log the payload right before validation
             console.log('[BOOKING] Payload before required-fields check', payload);
+            console.log('[BOOKING] serviceInstanceId present?', !!payload.serviceInstanceId);
 
             // ✅ DEV-ONLY GUARD: Surface mistakes immediately
             if (process.env.NODE_ENV === 'development') {
