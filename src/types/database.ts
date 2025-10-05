@@ -577,6 +577,41 @@ export type Database = {
           },
         ]
       }
+      provider_intakeq_settings: {
+        Row: {
+          provider_id: string
+          practitioner_id: string | null
+          service_id: string
+          location_id: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          provider_id: string
+          practitioner_id?: string | null
+          service_id: string
+          location_id: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          provider_id?: string
+          practitioner_id?: string | null
+          service_id?: string
+          location_id?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_intakeq_settings_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: true
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       provider_licenses: {
         Row: {
           created_date: string | null

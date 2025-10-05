@@ -433,6 +433,76 @@ class IntakeQService {
       throw error
     }
   }
+
+  // Get booking settings (locations, services, practitioners)
+  async getBookingSettings(): Promise<{
+    locations: Array<{Id: string, Name: string}>
+    services: Array<{Id: string, Name: string, Duration: number, Price: number}>
+    practitioners: Array<{Id: string, Name: string, Email: string}>
+  }> {
+    try {
+      const response = await this.makeRequest<any>('/appointments/settings', {
+        method: 'GET'
+      })
+
+      console.log(`✅ Fetched IntakeQ booking settings:`, {
+        locations: response.Locations?.length || 0,
+        services: response.Services?.length || 0,
+        practitioners: response.Practitioners?.length || 0
+      })
+
+      return {
+        locations: response.Locations || [],
+        services: response.Services || [],
+        practitioners: response.Practitioners || []
+      }
+    } catch (error: any) {
+      console.error('❌ Failed to fetch IntakeQ booking settings:', error.message)
+      throw error
+    }
+  }
+
+  // Send intake questionnaire to client
+  async sendQuestionnaire(params: {
+    questionnaireId: string
+    clientName: string
+    clientEmail: string
+    practitionerId?: string
+    clientPhone?: string
+  }): Promise<{ success: boolean; message?: string }> {
+    try {
+      console.log(`📋 Sending intake questionnaire ${params.questionnaireId} to ${params.clientEmail}...`)
+
+      const payload: any = {
+        QuestionnaireId: params.questionnaireId,
+        ClientName: params.clientName,
+        ClientEmail: params.clientEmail
+      }
+
+      if (params.practitionerId) {
+        payload.PractitionerId = params.practitionerId
+      }
+
+      if (params.clientPhone) {
+        payload.ClientPhone = params.clientPhone
+      }
+
+      await this.makeRequest<void>('/intakes/send', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      })
+
+      console.log(`✅ Intake questionnaire sent successfully to ${params.clientEmail}`)
+
+      return {
+        success: true,
+        message: 'Questionnaire sent successfully'
+      }
+    } catch (error: any) {
+      console.error('❌ Failed to send questionnaire:', error.message)
+      throw error
+    }
+  }
 }
 
 // Create and export singleton instance

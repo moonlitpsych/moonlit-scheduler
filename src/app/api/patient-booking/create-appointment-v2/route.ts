@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { DateTime } from 'luxon'
 import { intakeQService } from '@/lib/services/intakeQService'
+import { emailService } from '@/lib/services/emailService'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
     // Get provider details
     const { data: provider, error: providerError } = await supabase
       .from('providers')
-      .select('id, first_name, last_name, intakeq_practitioner_id, is_active, is_bookable')
+      .select('id, first_name, last_name, email, intakeq_practitioner_id, is_active, is_bookable')
       .eq('id', providerId)
       .single()
 
@@ -241,28 +242,32 @@ export async function POST(request: NextRequest) {
     // STEP 4: Create in IntakeQ (if enabled)
     let intakeQAppointmentId = null
     if (provider.intakeq_practitioner_id && createInEMR && !isTest) {
-      // Check if provider has IntakeQ service/location configured
-      const { data: providerWithSettings } = await supabase
-        .from('providers')
-        .select('intakeq_service_id, intakeq_location_id')
-        .eq('id', providerId)
+      // Check if provider has IntakeQ service/location configured via join table
+      const { data: intakeqSettings } = await supabase
+        .from('provider_intakeq_settings')
+        .select('practitioner_id, service_id, location_id')
+        .eq('provider_id', providerId)
         .single()
 
-      if (!providerWithSettings?.intakeq_service_id || !providerWithSettings?.intakeq_location_id) {
-        console.log('⚠️ V2 - Provider missing intakeq_service_id or intakeq_location_id, skipping IntakeQ creation')
+      if (!intakeqSettings?.service_id || !intakeqSettings?.location_id) {
+        console.log('⚠️ V2 - Provider missing IntakeQ settings (service_id or location_id), skipping IntakeQ creation')
       } else {
         try {
-          console.log('📤 V2 - Creating in IntakeQ...')
+          console.log('📤 V2 - Creating in IntakeQ...', {
+            practitionerId: intakeqSettings.practitioner_id,
+            serviceId: intakeqSettings.service_id,
+            locationId: intakeqSettings.location_id
+          })
 
           intakeQAppointmentId = await intakeQService.createAppointment({
-            practitionerId: provider.intakeq_practitioner_id,
+            practitionerId: intakeqSettings.practitioner_id,
             clientFirstName: patient.firstName,
             clientLastName: patient.lastName,
             clientEmail: patient.email,
             clientPhone: patient.phone,
             clientDateOfBirth: patient.dateOfBirth,
-            serviceId: providerWithSettings.intakeq_service_id,
-            locationId: providerWithSettings.intakeq_location_id,
+            serviceId: intakeqSettings.service_id,
+            locationId: intakeqSettings.location_id,
             dateTime: new Date(start!),
             status: 'Confirmed',
             sendEmailNotification: true
@@ -277,6 +282,56 @@ export async function POST(request: NextRequest) {
             athena_appointment_id: intakeQAppointmentId // Using athena field for IntakeQ ID
           })
           .eq('id', appointment.id)
+
+        // STEP 5: Send intake questionnaire to patient
+        try {
+          const INTAKE_QUESTIONNAIRE_ID = '687ad30e356f38c6e4b11e62' // Pre-visit intake questionnaire
+
+          await intakeQService.sendQuestionnaire({
+            questionnaireId: INTAKE_QUESTIONNAIRE_ID,
+            clientName: `${patient.firstName} ${patient.lastName}`,
+            clientEmail: patient.email,
+            practitionerId: intakeqSettings.practitioner_id,
+            clientPhone: patient.phone
+          })
+
+          console.log('✅ V2 - Intake questionnaire sent to patient')
+        } catch (questionnaireError: any) {
+          console.error('⚠️ V2 - Failed to send intake questionnaire:', questionnaireError.message)
+          // Non-fatal - appointment is still created
+        }
+
+        // STEP 6: Send admin notification email
+        try {
+          await emailService.sendAppointmentNotifications({
+            appointmentId: appointment.id,
+            emrAppointmentId: intakeQAppointmentId || undefined,
+            provider: {
+              id: providerId,
+              name: `${provider.first_name} ${provider.last_name}`,
+              email: provider.email || 'noreply@moonlit.health'
+            },
+            patient: {
+              name: `${patient.firstName} ${patient.lastName}`,
+              email: patient.email,
+              phone: patient.phone
+            },
+            schedule: {
+              date,
+              startTime: time,
+              endTime: DateTime.fromISO(`${date}T${time}`, { zone: 'America/Denver' })
+                .plus({ minutes: duration })
+                .toFormat('HH:mm'),
+              duration: `${duration} minutes`
+            },
+            emrSystem: 'IntakeQ'
+          })
+
+          console.log('✅ V2 - Admin notification email sent')
+        } catch (emailError: any) {
+          console.error('⚠️ V2 - Failed to send admin notification:', emailError.message)
+          // Non-fatal - appointment is still created
+        }
 
         } catch (intakeQError: any) {
           console.error('❌ V2 - IntakeQ creation failed:', intakeQError.message)

@@ -2,6 +2,7 @@
 import { supabaseAdmin } from '@/lib/supabase'
 import { intakeQService } from '@/lib/services/intakeQService'
 import { coVisitService } from '@/lib/services/coVisitService'
+import { ensureCacheExists } from '@/lib/services/availabilityCacheService'
 import { BookableProviderPayer } from '@/types/database'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -41,6 +42,17 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`🔍 Getting ${provider_id ? 'provider-specific' : 'merged'} availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
+
+        // Step 0: Auto-populate cache if needed (Option A implementation)
+        console.log(`🔄 Ensuring cache exists for date range ${requestDate} to ${requestEndDate}...`)
+        const cacheResult = await ensureCacheExists(requestDate, requestEndDate)
+        if (!cacheResult.success) {
+            console.error(`⚠️ Cache auto-population failed (non-fatal): ${cacheResult.error}`)
+        } else if (cacheResult.recordsCreated > 0) {
+            console.log(`✅ Auto-populated cache with ${cacheResult.recordsCreated} records`)
+        } else {
+            console.log(`✅ Cache already exists for requested date range`)
+        }
 
         // Step 1: Get BOOKABLE providers using canonical view (consistent with providers-for-payer API)
         const { data: bookableRelationships, error: networkError } = await supabaseAdmin

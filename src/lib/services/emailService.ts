@@ -26,20 +26,27 @@ class EmailService {
   
   async sendAppointmentNotifications(appointmentDetails: AppointmentDetails): Promise<void> {
     console.log('📧 Sending appointment notifications...')
-    
+
+    // Send admin notification
     try {
-      // Always send admin notification
       await this.sendAdminNotification(appointmentDetails)
       console.log('✅ Admin notification sent successfully')
-      
-      // IntakeQ handles patient/provider emails natively
-      console.log('ℹ️ Patient/Provider notifications handled by IntakeQ natively')
-      console.log('📧 If IntakeQ emails bounce, they will appear in IntakeQ notifications/logs')
-      
     } catch (error: any) {
       console.error('❌ Failed to send admin notification:', error.message)
       // Don't throw - email failure shouldn't break appointment creation
     }
+
+    // Send provider notification
+    try {
+      await this.sendPractitionerNotification(appointmentDetails)
+      console.log('✅ Provider notification sent successfully')
+    } catch (error: any) {
+      console.error('❌ Failed to send provider notification:', error.message)
+      // Don't throw - email failure shouldn't break appointment creation
+    }
+
+    // IntakeQ handles patient emails natively
+    console.log('ℹ️ Patient notification handled by IntakeQ natively')
   }
 
   // Future method for handling bounced emails from IntakeQ
