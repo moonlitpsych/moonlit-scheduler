@@ -1620,6 +1620,11 @@ export type CompositeTypes<
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
+// Export common table row types for convenience
+export type Provider = Database['public']['Tables']['providers']['Row']
+export type Payer = Database['public']['Tables']['payers']['Row']
+export type Appointment = Database['public']['Tables']['appointments']['Row']
+
 export const Constants = {
   public: {
     Enums: {},
@@ -1662,21 +1667,6 @@ export interface ROIContact {
     relationship: string
 }
 
-export interface Payer {
-    id: string
-    name: string
-    payer_type?: string
-    state?: string
-    status_code?: string
-    effective_date?: string | null
-    notes?: string | null
-    projected_effective_date?: string | null
-    requires_attending?: boolean | null
-    requires_individual_contract?: boolean
-    allows_supervised?: boolean
-    supervision_level?: 'sign_off_only' | 'first_visit_in_person' | 'co_visit_required' | null
-    created_at?: string | null
-}
 
 // New view for optimized provider-payer bookability
 export interface BookableProviderPayer {

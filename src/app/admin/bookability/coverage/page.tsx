@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Users, Building, Calendar, RefreshCw, Download } from 'lucide-react'
+import { Search, Users, Building, Calendar, Download } from 'lucide-react'
 import { loadProvidersForCoverageList, loadPayersForCoverageList, ProviderForCoverage } from '@/lib/data/providers'
 
 interface CoverageItem {

@@ -213,6 +213,66 @@ export default function BookingFlow({
             // ✅ UUID validation helper
             const isUuid = (v?: string) => !!v && /^[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}$/.test(v)
 
+            // ---- DEV DEBUG START (ok to remove later) ----
+            console.log('[BOOKING] Selected IDs', {
+                selectedProviderId: slot?.provider_id,
+                selectedPayerId: state.selectedPayer?.id,
+            });
+            console.log('[BOOKING] Latest availability (first 3)', (typeof latestAvailability !== 'undefined' ? latestAvailability : []).slice(0, 3));
+            console.log('[BOOKING] Selected slot', slot);
+
+            // If you have an acceptance/eligibility map in state or props, log the node for this provider+payer
+            // (Use whatever object you're already using in this component; if not available, skip gracefully.)
+            const acceptanceNode =
+              (typeof acceptanceMap !== 'undefined')
+                ? acceptanceMap?.[slot?.provider_id]?.payers?.[state.selectedPayer?.id]
+                : undefined;
+            console.log('[BOOKING] Acceptance node', acceptanceNode);
+            console.log('[BOOKING] Gates', {
+              directInNetwork: acceptanceNode?.directInNetwork,
+              supervisedAllowed: acceptanceNode?.supervisedAllowed,
+              telehealthConfigured: acceptanceNode?.telehealthConfigured,
+              requiresIndividualContract: acceptanceNode?.requiresIndividualContract,
+              supervision: acceptanceNode?.supervision,
+            });
+            // ---- DEV DEBUG END ----
+
+            // Fill serviceInstanceId if missing, pulling from selectedSlot or acceptance data
+            if (!payload.serviceInstanceId) {
+              const fromSelected =
+                slot?.serviceInstanceId ??
+                slot?.service?.id ??
+                slot?.serviceId ?? // try common naming
+                null;
+
+              const fromAcceptance =
+                acceptanceNode?.serviceInstanceId ??
+                acceptanceNode?.serviceId ??
+                null;
+
+              payload.serviceInstanceId = fromSelected ?? fromAcceptance ?? null;
+            }
+
+            // Optional: allow dev fallback so we can continue testing even if the upstream isn't wiring it yet
+            if (process.env.NEXT_PUBLIC_APP_ENV === 'dev' && !payload.serviceInstanceId) {
+              const firstFromAvail =
+                (typeof latestAvailability !== 'undefined' && latestAvailability && latestAvailability.length > 0)
+                  ? (latestAvailability[0].serviceInstanceId ??
+                     latestAvailability[0].service?.id ??
+                     latestAvailability[0].serviceId ??
+                     null)
+                  : null;
+
+              if (firstFromAvail) {
+                console.warn('[BOOKING][DEV] serviceInstanceId was missing; using first from availability:', firstFromAvail);
+                payload.serviceInstanceId = firstFromAvail;
+              }
+            }
+
+            // For visibility, log the payload right before validation
+            console.log('[BOOKING] Payload before required-fields check', payload);
+            console.log('[BOOKING] serviceInstanceId present?', !!payload.serviceInstanceId);
+
             // ✅ DEV-ONLY GUARD: Surface mistakes immediately
             if (process.env.NODE_ENV === 'development') {
                 const required = [

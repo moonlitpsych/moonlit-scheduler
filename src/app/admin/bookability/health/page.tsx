@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AlertTriangle, Users, FileText, Calendar, RefreshCw, ChevronDown, ChevronRight, Download } from 'lucide-react'
+import { AlertTriangle, Users, FileText, Calendar, RefreshCw, Download } from 'lucide-react'
 
 interface HealthMetric {
   provider_id?: string

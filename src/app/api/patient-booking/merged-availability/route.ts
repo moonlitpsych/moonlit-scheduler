@@ -13,6 +13,9 @@ interface AvailableSlot {
     providerName: string
     duration: number
     isAvailable: boolean
+    // NEW: Service instance identifier for booking
+    serviceInstanceId?: string
+    serviceId?: string
     provider: {
         id: string
         first_name: string
@@ -25,6 +28,80 @@ interface AvailableSlot {
     attendingProviderId?: string
     attendingName?: string
     supervisionLevel?: 'sign_off_only' | 'first_visit_in_person' | 'co_visit_required'
+}
+
+// Helper function to lookup serviceInstanceId for a provider+payer combination
+async function lookupServiceInstanceId(providerId: string, payerId: string): Promise<string | null> {
+    try {
+        // Step A: Find all service_ids for the provider from provider_services
+        const { data: providerServices, error: servicesError } = await supabaseAdmin
+            .from('provider_services')
+            .select('service_id')
+            .eq('provider_id', providerId)
+
+        if (servicesError) {
+            console.error('❌ Error fetching provider services:', servicesError)
+            return null
+        }
+
+        if (!providerServices || providerServices.length === 0) {
+            console.log(`⚠️ No services configured for provider ${providerId}`)
+            return null
+        }
+
+        const serviceIds = providerServices.map(ps => ps.service_id)
+
+        // Step B: Find service_instances for these services
+        const { data: serviceInstances, error: instancesError } = await supabaseAdmin
+            .from('service_instances')
+            .select('id, service_id, payer_id, effective_date, created_at')
+            .in('service_id', serviceIds)
+
+        if (instancesError) {
+            console.error('❌ Error fetching service instances:', instancesError)
+            return null
+        }
+
+        if (!serviceInstances || serviceInstances.length === 0) {
+            console.log(`⚠️ No service instances found for provider ${providerId} services`)
+            return null
+        }
+
+        // Step C: Apply preference logic
+        // 1. Prefer instances where payer_id matches the selected payer
+        const payerSpecific = serviceInstances.filter(si => si.payer_id === payerId)
+
+        // 2. If none, fall back to global instances (payer_id IS NULL)
+        const candidates = payerSpecific.length > 0
+            ? payerSpecific
+            : serviceInstances.filter(si => si.payer_id === null)
+
+        if (candidates.length === 0) {
+            console.log(`⚠️ No suitable service instances for provider ${providerId} with payer ${payerId}`)
+            return null
+        }
+
+        // Step D: Pick most recent by effective_date DESC, then created_at DESC
+        const chosen = candidates.sort((a, b) => {
+            // Sort by effective_date DESC first
+            if (a.effective_date && b.effective_date) {
+                const dateA = new Date(a.effective_date)
+                const dateB = new Date(b.effective_date)
+                if (dateA.getTime() !== dateB.getTime()) {
+                    return dateB.getTime() - dateA.getTime()
+                }
+            }
+            // Then by created_at DESC
+            const createdA = new Date(a.created_at || 0)
+            const createdB = new Date(b.created_at || 0)
+            return createdB.getTime() - createdA.getTime()
+        })[0]
+
+        return chosen.id
+    } catch (error) {
+        console.error('❌ Error in serviceInstanceId lookup:', error)
+        return null
+    }
 }
 
 export async function POST(request: NextRequest) {
@@ -106,8 +183,30 @@ export async function POST(request: NextRequest) {
         }
 
         const providerIds = bookableProviders.map(bp => bp.provider_id)
-        console.log(`👥 NEW: Found ${bookableProviders.length} BOOKABLE providers from fallback logic:`, 
+        console.log(`👥 NEW: Found ${bookableProviders.length} BOOKABLE providers from fallback logic:`,
             bookableProviders.map(bp => `${bp.first_name} ${bp.last_name} (via: ${bp.via}, co-visit: ${bp.requires_co_visit})`))
+
+        // Cache for serviceInstanceId lookups (per request)
+        const serviceInstanceCache = new Map<string, string | null>()
+        const getServiceInstanceId = async (providerId: string): Promise<string | null> => {
+            const cacheKey = `${providerId}:${payer_id}`
+            if (serviceInstanceCache.has(cacheKey)) {
+                return serviceInstanceCache.get(cacheKey)!
+            }
+            const result = await lookupServiceInstanceId(providerId, payer_id)
+            serviceInstanceCache.set(cacheKey, result)
+
+            // DEV log once per unique provider+payer combination
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[DEV] serviceInstance lookup sample', {
+                    providerId,
+                    payerId: payer_id,
+                    chosen: result
+                })
+            }
+
+            return result
+        }
 
         // Separate providers that need co-visit from regular providers
         const coVisitProviders = bookableProviders.filter(bp => bp.requires_co_visit)
@@ -198,13 +297,14 @@ export async function POST(request: NextRequest) {
 
             console.log(`⏰ Regular provider ${provider.first_name} ${provider.last_name}: ${avail.start_time} - ${avail.end_time}`)
             
+            const providerServiceInstanceId = await getServiceInstanceId(provider.provider_id)
             const slots = generateTimeSlotsFromAvailability(avail, requestDate, {
                 id: provider.provider_id,
                 first_name: provider.first_name || '',
                 last_name: provider.last_name || '',
                 title: provider.title || 'MD',
                 role: provider.role || 'physician'
-            }, appointmentDuration)
+            }, appointmentDuration, providerServiceInstanceId)
             allSlots.push(...slots)
         }
 
@@ -225,6 +325,10 @@ export async function POST(request: NextRequest) {
                     appointmentDuration
                 )
 
+                // Get serviceInstanceId for co-visit provider
+                const coVisitServiceInstanceId = await getServiceInstanceId(coVisitProvider.provider_id)
+                const devFallbackId = process.env.NEXT_PUBLIC_APP_ENV === 'dev' ? '12191f44-a09c-426f-8e22-0c5b8e57b3b7' : undefined
+
                 // Convert co-visit slots to AvailableSlot format
                 const convertedSlots = coVisitSlots.map(cvSlot => ({
                     date: requestDate,
@@ -233,6 +337,7 @@ export async function POST(request: NextRequest) {
                     providerName: `${coVisitProvider.first_name} ${coVisitProvider.last_name} (with ${cvSlot.attending_name})`,
                     duration: appointmentDuration,
                     isAvailable: true,
+                    serviceInstanceId: coVisitServiceInstanceId || devFallbackId,
                     provider: {
                         id: coVisitProvider.provider_id,
                         first_name: coVisitProvider.first_name || '',
@@ -256,6 +361,17 @@ export async function POST(request: NextRequest) {
 
         allSlots.sort((a, b) => a.time.localeCompare(b.time))
         console.log(`✅ Generated ${allSlots.length} total time slots from bookable providers`)
+
+        // DEV: Log serviceInstanceId presence for debugging
+        if (process.env.NODE_ENV === 'development' && allSlots.length > 0) {
+            const sampleSlot = allSlots[0]
+            console.log('🔧 DEV: Sample slot with serviceInstanceId:', {
+                time: sampleSlot.time,
+                provider: sampleSlot.providerName,
+                serviceInstanceId: sampleSlot.serviceInstanceId,
+                hasServiceId: !!sampleSlot.serviceInstanceId
+            })
+        }
 
         // Step 6: Filter out IntakeQ conflicts
         const finalSlots = await filterConflictingAppointments(allSlots, requestDate)
@@ -322,10 +438,11 @@ export async function POST(request: NextRequest) {
 
 // Utility functions (same as original)
 function generateTimeSlotsFromAvailability(
-    availability: any, 
-    date: string, 
-    provider: any, 
-    appointmentDuration: number
+    availability: any,
+    date: string,
+    provider: any,
+    appointmentDuration: number,
+    serviceInstanceId: string | null
 ): AvailableSlot[] {
     const slots: AvailableSlot[] = []
     
@@ -347,6 +464,8 @@ function generateTimeSlotsFromAvailability(
             const slotEndTime = new Date(currentTime.getTime() + appointmentDuration * 60 * 1000)
             
             if (slotEndTime <= endDateTime) {
+                const devFallbackId = process.env.NEXT_PUBLIC_APP_ENV === 'dev' ? '12191f44-a09c-426f-8e22-0c5b8e57b3b7' : undefined
+
                 slots.push({
                     date: date,
                     time: formatTime(currentTime),
@@ -354,6 +473,7 @@ function generateTimeSlotsFromAvailability(
                     providerName: `${provider.first_name} ${provider.last_name}`,
                     duration: appointmentDuration,
                     isAvailable: true,
+                    serviceInstanceId: serviceInstanceId || devFallbackId,
                     provider: {
                         id: provider.id,
                         first_name: provider.first_name,

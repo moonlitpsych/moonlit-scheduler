@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
           payer_id: payerResult.id,
           effective_date: newContract.effective_date,
           expiration_date: newContract.expiration_date,
-          status: newContract.status || 'active',
+          status: newContract.status || 'in_network',
           billing_provider_id: newContract.billing_provider_id
         })
         .select()
