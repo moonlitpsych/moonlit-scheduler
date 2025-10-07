@@ -49,8 +49,6 @@ interface IntakeBookingResponse {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<IntakeBookingResponse>> {
-    let transaction: any = null
-
     try {
         const body = await request.json() as IntakeBookingRequest
         const { patientId, providerId, payerId, start, locationType, notes } = body
@@ -105,225 +103,191 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000)
         console.log(`⏰ Appointment duration: ${durationMinutes} minutes (${startDate.toISOString()} → ${endDate.toISOString()})`)
 
-        // Step 2: Begin database transaction
-        console.log('🔄 Starting database transaction...')
-        const { data: transactionResult, error: transactionError } = await supabaseAdmin
-            .rpc('begin_transaction')
+        // Step 2: Conflict check (no explicit transaction needed)
+        console.log('🔒 Checking for appointment conflicts...')
+        const { data: conflicts, error: conflictError } = await supabaseAdmin
+            .from('appointments')
+            .select('id, start_time, end_time')
+            .eq('provider_id', providerId)
+            .eq('status', 'scheduled')
+            .gte('end_time', startDate.toISOString())
+            .lte('start_time', endDate.toISOString())
 
-        if (transactionError) {
-            console.error('❌ Failed to begin transaction:', transactionError)
-            throw new Error(`Database transaction error: ${transactionError.message}`)
+        if (conflictError) {
+            console.error('❌ Error checking conflicts:', conflictError)
+            throw new Error(`Conflict check failed: ${conflictError.message}`)
         }
+
+        if (conflicts && conflicts.length > 0) {
+            console.error('❌ Appointment slot conflict detected:', conflicts[0])
+            return NextResponse.json({
+                success: false,
+                error: 'The selected time slot is no longer available',
+                code: 'SLOT_TAKEN'
+            }, { status: 409 })
+        }
+
+        // Step 3: Get active policy with snapshots
+        console.log('📋 Getting active insurance policy...')
+        let policyResult
+        try {
+            policyResult = await getActivePolicy(patientId, startDate)
+        } catch (error: any) {
+            console.error('❌ Failed to get active policy:', error)
+            return NextResponse.json({
+                success: false,
+                error: error.message,
+                code: error.code || 'NO_ACTIVE_POLICY'
+            }, { status: error.status || 422 })
+        }
+
+        // Step 4: Insert appointment with status='pending_sync'
+        console.log('💾 Creating appointment record...')
+        const { data: appointmentData, error: appointmentError } = await supabaseAdmin
+            .from('appointments')
+            .insert({
+                patient_id: patientId,
+                provider_id: providerId,
+                service_instance_id: serviceInstanceId,
+                start_time: startDate.toISOString(),
+                end_time: endDate.toISOString(),
+                location_type: locationType,
+                notes: notes || '',
+                status: 'pending_sync',
+                insurance_policy_id: policyResult.policyId,
+                payer_snapshot: policyResult.payerSnapshot,
+                member_snapshot: policyResult.memberSnapshot,
+                duration_minutes: durationMinutes,
+                created_at: new Date().toISOString()
+            })
+            .select('id')
+            .single()
+
+        if (appointmentError) {
+            console.error('❌ Error creating appointment:', appointmentError)
+            throw new Error(`Failed to create appointment: ${appointmentError.message}`)
+        }
+
+        const appointmentId = appointmentData.id
+        console.log(`✅ Created appointment record: ${appointmentId}`)
+
+        // Step 5: Resolve IntakeQ mappings
+        console.log('🔍 Resolving IntakeQ mappings...')
+
+        let intakeqClientId: string
+        let practitionerExternalId: string
+        let serviceExternalId: string
 
         try {
-            // Step 3: Conflict check with FOR UPDATE lock
-            console.log('🔒 Checking for appointment conflicts...')
-            const { data: conflicts, error: conflictError } = await supabaseAdmin
-                .from('appointments')
-                .select('id, start_time, end_time')
-                .eq('provider_id', providerId)
-                .in('status', ['scheduled'])
-                .overlaps('time_range', `[${startDate.toISOString()},${endDate.toISOString()}]`)
+            // Get/create IntakeQ client
+            intakeqClientId = await ensureClient(patientId)
 
-            if (conflictError) {
-                console.error('❌ Error checking conflicts:', conflictError)
-                throw new Error(`Conflict check failed: ${conflictError.message}`)
-            }
+            // Get provider mapping
+            practitionerExternalId = await getIntakeqPractitionerId(providerId)
 
-            if (conflicts && conflicts.length > 0) {
-                console.error('❌ Appointment slot conflict detected:', conflicts[0])
-                await supabaseAdmin.rpc('rollback_transaction')
-                return NextResponse.json({
-                    success: false,
-                    error: 'The selected time slot is no longer available',
-                    code: 'SLOT_TAKEN'
-                }, { status: 409 })
-            }
+            // Get service mapping
+            serviceExternalId = await getIntakeqServiceId(serviceInstanceId)
 
-            // Step 4: Get active policy with snapshots
-            console.log('📋 Getting active insurance policy...')
-            let policyResult
-            try {
-                policyResult = await getActivePolicy(patientId, startDate)
-            } catch (error: any) {
-                console.error('❌ Failed to get active policy:', error)
-                await supabaseAdmin.rpc('rollback_transaction')
-                return NextResponse.json({
-                    success: false,
-                    error: error.message,
-                    code: error.code || 'NO_ACTIVE_POLICY'
-                }, { status: error.status || 422 })
-            }
+        } catch (error: any) {
+            console.error('❌ Failed to resolve IntakeQ mappings:', error)
+            return NextResponse.json({
+                success: false,
+                error: error.message,
+                code: error.code || 'MAPPING_ERROR'
+            }, { status: error.status || 422 })
+        }
 
-            // Step 5: Insert appointment with status='pending_sync'
-            console.log('💾 Creating appointment record...')
-            const { data: appointmentData, error: appointmentError } = await supabaseAdmin
-                .from('appointments')
-                .insert({
-                    patient_id: patientId,
-                    provider_id: providerId,
-                    service_instance_id: serviceInstanceId,
-                    start_time: startDate.toISOString(),
-                    end_time: endDate.toISOString(),
-                    location_type: locationType,
-                    notes: notes || '',
-                    status: 'pending_sync',
-                    insurance_policy_id: policyResult.policyId,
-                    payer_snapshot: policyResult.payerSnapshot,
-                    member_snapshot: policyResult.memberSnapshot,
-                    duration_minutes: durationMinutes,
-                    created_at: new Date().toISOString()
-                })
-                .select('id')
-                .single()
+        // Step 6: Sync client insurance to IntakeQ
+        console.log('🔄 Syncing client insurance to IntakeQ...')
+        try {
+            await syncClientInsurance(intakeqClientId, {
+                payer_id: policyResult.payerSnapshot.id,
+                payer_name: policyResult.payerSnapshot.name,
+                member_id: policyResult.memberSnapshot.member_id,
+                group_number: policyResult.memberSnapshot.group_number,
+                policy_holder_name: policyResult.memberSnapshot.policy_holder_name,
+                policy_holder_dob: policyResult.memberSnapshot.policy_holder_dob
+            })
+        } catch (error: any) {
+            console.warn('⚠️ Failed to sync insurance (non-fatal):', error.message)
+            // Continue with booking even if insurance sync fails
+        }
 
-            if (appointmentError) {
-                console.error('❌ Error creating appointment:', appointmentError)
-                await supabaseAdmin.rpc('rollback_transaction')
-                throw new Error(`Failed to create appointment: ${appointmentError.message}`)
-            }
+        // Step 7: Create IntakeQ appointment
+        console.log('📅 Creating IntakeQ appointment...')
+        let pqAppointmentId: string
+        try {
+            const appointmentResult = await createAppointment({
+                intakeqClientId,
+                practitionerExternalId,
+                serviceExternalId,
+                start: startDate,
+                end: endDate,
+                locationType,
+                notes: notes || `Booked via Moonlit Scheduler - Appointment ID: ${appointmentId}`
+            })
+            pqAppointmentId = appointmentResult.pqAppointmentId
 
-            const appointmentId = appointmentData.id
-            console.log(`✅ Created appointment record: ${appointmentId}`)
+        } catch (error: any) {
+            console.error('❌ IntakeQ appointment creation failed:', error)
+            return NextResponse.json({
+                success: false,
+                error: `Failed to create appointment in IntakeQ: ${error.message}`,
+                code: 'EHR_WRITE_FAILED'
+            }, { status: 502 })
+        }
 
-            // Step 6: Resolve IntakeQ mappings
-            console.log('🔍 Resolving IntakeQ mappings...')
+        // Step 8: Update appointment with PQ ID and set status to 'scheduled'
+        console.log('✅ Updating appointment with IntakeQ ID...')
+        const { error: updateError } = await supabaseAdmin
+            .from('appointments')
+            .update({
+                pq_appointment_id: pqAppointmentId,
+                status: 'scheduled',
+                synced_at: new Date().toISOString()
+            })
+            .eq('id', appointmentId)
 
-            let intakeqClientId: string
-            let practitionerExternalId: string
-            let serviceExternalId: string
+        if (updateError) {
+            console.error('❌ Error updating appointment with PQ ID:', updateError)
+            throw new Error(`Failed to update appointment: ${updateError.message}`)
+        }
 
-            try {
-                // Get/create IntakeQ client
-                intakeqClientId = await ensureClient(patientId)
+        // Get provider name for response
+        const { data: providerData } = await supabaseAdmin
+            .from('providers')
+            .select('first_name, last_name')
+            .eq('id', providerId)
+            .single()
 
-                // Get provider mapping
-                practitionerExternalId = await getIntakeqPractitionerId(providerId)
-
-                // Get service mapping
-                serviceExternalId = await getIntakeqServiceId(serviceInstanceId)
-
-            } catch (error: any) {
-                console.error('❌ Failed to resolve IntakeQ mappings:', error)
-                await supabaseAdmin.rpc('rollback_transaction')
-                return NextResponse.json({
-                    success: false,
-                    error: error.message,
-                    code: error.code || 'MAPPING_ERROR'
-                }, { status: error.status || 422 })
-            }
-
-            // Step 7: Sync client insurance to IntakeQ
-            console.log('🔄 Syncing client insurance to IntakeQ...')
-            try {
-                await syncClientInsurance(intakeqClientId, {
-                    payer_id: policyResult.payerSnapshot.id,
-                    payer_name: policyResult.payerSnapshot.name,
-                    member_id: policyResult.memberSnapshot.member_id,
-                    group_number: policyResult.memberSnapshot.group_number,
-                    policy_holder_name: policyResult.memberSnapshot.policy_holder_name,
-                    policy_holder_dob: policyResult.memberSnapshot.policy_holder_dob
-                })
-            } catch (error: any) {
-                console.warn('⚠️ Failed to sync insurance (non-fatal):', error.message)
-                // Continue with booking even if insurance sync fails
-            }
-
-            // Step 8: Create IntakeQ appointment
-            console.log('📅 Creating IntakeQ appointment...')
-            let pqAppointmentId: string
-            try {
-                const appointmentResult = await createAppointment({
-                    intakeqClientId,
-                    practitionerExternalId,
-                    serviceExternalId,
-                    start: startDate,
-                    end: endDate,
-                    locationType,
-                    notes: notes || `Booked via Moonlit Scheduler - Appointment ID: ${appointmentId}`
-                })
-                pqAppointmentId = appointmentResult.pqAppointmentId
-
-            } catch (error: any) {
-                console.error('❌ IntakeQ appointment creation failed:', error)
-                await supabaseAdmin.rpc('rollback_transaction')
-                return NextResponse.json({
-                    success: false,
-                    error: `Failed to create appointment in IntakeQ: ${error.message}`,
-                    code: 'EHR_WRITE_FAILED'
-                }, { status: 502 })
-            }
-
-            // Step 9: Update appointment with PQ ID and set status to 'scheduled'
-            console.log('✅ Updating appointment with IntakeQ ID...')
-            const { error: updateError } = await supabaseAdmin
-                .from('appointments')
-                .update({
-                    pq_appointment_id: pqAppointmentId,
-                    status: 'scheduled',
-                    synced_at: new Date().toISOString()
-                })
-                .eq('id', appointmentId)
-
-            if (updateError) {
-                console.error('❌ Error updating appointment with PQ ID:', updateError)
-                await supabaseAdmin.rpc('rollback_transaction')
-                throw new Error(`Failed to update appointment: ${updateError.message}`)
-            }
-
-            // Step 10: Commit transaction
-            console.log('✅ Committing transaction...')
-            const { error: commitError } = await supabaseAdmin.rpc('commit_transaction')
-            if (commitError) {
-                console.error('❌ Failed to commit transaction:', commitError)
-                throw new Error(`Transaction commit failed: ${commitError.message}`)
-            }
-
-            // Get provider name for response
-            const { data: providerData } = await supabaseAdmin
-                .from('providers')
-                .select('first_name, last_name')
-                .eq('id', providerId)
-                .single()
-
-            const response: IntakeBookingResponse = {
-                success: true,
-                data: {
-                    appointmentId,
-                    pqAppointmentId,
-                    status: 'scheduled',
-                    start: startDate.toISOString(),
-                    end: endDate.toISOString(),
-                    duration: durationMinutes,
-                    provider: {
-                        id: providerId,
-                        name: providerData ? `${providerData.first_name} ${providerData.last_name}` : 'Provider'
-                    },
-                    service: {
-                        instanceId: serviceInstanceId,
-                        externalId: serviceExternalId,
-                        type: 'intake_telehealth'
-                    },
-                    policy: {
-                        id: policyResult.policyId,
-                        payerName: policyResult.payerSnapshot.name,
-                        memberId: policyResult.memberSnapshot.member_id
-                    }
+        const response: IntakeBookingResponse = {
+            success: true,
+            data: {
+                appointmentId,
+                pqAppointmentId,
+                status: 'scheduled',
+                start: startDate.toISOString(),
+                end: endDate.toISOString(),
+                duration: durationMinutes,
+                provider: {
+                    id: providerId,
+                    name: providerData ? `${providerData.first_name} ${providerData.last_name}` : 'Provider'
+                },
+                service: {
+                    instanceId: serviceInstanceId,
+                    externalId: serviceExternalId,
+                    type: 'intake_telehealth'
+                },
+                policy: {
+                    id: policyResult.policyId,
+                    payerName: policyResult.payerSnapshot.name,
+                    memberId: policyResult.memberSnapshot.member_id
                 }
             }
-
-            console.log(`🎉 Intake-only booking completed successfully: ${appointmentId} → ${pqAppointmentId} (service: ${serviceInstanceId})`)
-            return NextResponse.json(response)
-
-        } catch (error) {
-            // Rollback transaction on any error
-            try {
-                await supabaseAdmin.rpc('rollback_transaction')
-            } catch (rollbackError) {
-                console.error('❌ Failed to rollback transaction:', rollbackError)
-            }
-            throw error
         }
+
+        console.log(`🎉 Intake-only booking completed successfully: ${appointmentId} → ${pqAppointmentId} (service: ${serviceInstanceId})`)
+        return NextResponse.json(response)
 
     } catch (error: any) {
         console.error('💥 Intake booking failed:', error)
