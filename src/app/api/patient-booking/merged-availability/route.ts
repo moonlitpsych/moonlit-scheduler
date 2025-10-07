@@ -38,6 +38,10 @@ export async function POST(request: NextRequest) {
         const requestDate = date || startDate
         const requestEndDate = endDate || date
 
+        // Dev-only: allow bypassing conflict filter for debugging
+        const { searchParams } = new URL(request.url)
+        const debugBypassConflicts = process.env.NODE_ENV !== 'production' && searchParams.get('debug_bypass_conflicts') === '1'
+
         if (!payer_id) {
             return NextResponse.json(
                 { error: 'payer_id is required', code: 'PAYER_REQUIRED', success: false },
@@ -284,13 +288,30 @@ export async function POST(request: NextRequest) {
         }
 
         // Step 6: Filter out appointment conflicts (both local and IntakeQ)
-        const finalSlots = await filterIntakeConflictingAppointments(
-            allSlots,
-            requestDate,
-            serviceInstanceId,
-            durationMinutes
-        )
-        
+        let finalSlots = allSlots
+        let conflictStats = { removedByLocal: 0, removedByPQ: 0, kept: allSlots.length }
+
+        if (debugBypassConflicts) {
+            console.log(`⚠️ DEBUG: Bypassing conflict filter (debug_bypass_conflicts=1)`)
+            // Still compute stats but don't filter
+            const { slots: filteredSlots, stats } = await filterIntakeConflictingAppointmentsWithStats(
+                allSlots,
+                requestDate,
+                serviceInstanceId,
+                durationMinutes
+            )
+            conflictStats = stats
+        } else {
+            const { slots: filteredSlots, stats } = await filterIntakeConflictingAppointmentsWithStats(
+                allSlots,
+                requestDate,
+                serviceInstanceId,
+                durationMinutes
+            )
+            finalSlots = filteredSlots
+            conflictStats = stats
+        }
+
         console.log(`🔍 Final result: ${finalSlots.length} available slots (removed ${allSlots.length - finalSlots.length} conflicts)`)
 
         const slotsByDate = finalSlots.reduce((acc, slot) => {
@@ -327,14 +348,35 @@ export async function POST(request: NextRequest) {
                     dayOfWeek,
                     intake_only: true,
                     single_service_instance_resolved: true,
-                    bookable_providers_found: bookableProviders.length,
-                    regular_providers: regularProviders.length,
-                    co_visit_providers: coVisitProviders.length,
-                    base_availability_records: availability?.length || 0,
-                    exceptions_found: exceptions?.length || 0,
-                    filtered_availability_records: filteredAvailability.length,
-                    slots_generated: allSlots.length,
-                    final_slots: finalSlots.length,
+                    bookableProviderCount: bookableProviders.length,
+                    cache: {
+                        ensured: cacheResult.success,
+                        strategy: cacheResult.recordsCreated > 0 ? 'auto-populated' : 'already-exists',
+                        range: { start: requestDate, end: requestEndDate },
+                        recordsCreated: cacheResult.recordsCreated
+                    },
+                    availabilityRecords: {
+                        total: availability?.length || 0,
+                        byProvider: (availability || []).reduce((acc, avail) => {
+                            const pid = avail.provider_id
+                            acc[pid] = (acc[pid] || 0) + 1
+                            return acc
+                        }, {} as Record<string, number>)
+                    },
+                    slotGen: {
+                        generated: allSlots.length,
+                        keptBeforeConflictFilter: allSlots.length
+                    },
+                    conflictFilter: {
+                        removedByLocal: conflictStats.removedByLocal,
+                        removedByPQ: conflictStats.removedByPQ,
+                        kept: conflictStats.kept,
+                        bypassed: debugBypassConflicts
+                    },
+                    tz: {
+                        server: process.env.TZ ?? 'unset',
+                        clinic: 'America/Denver'
+                    },
                     resolved_duration_minutes: durationMinutes
                 }
             }
@@ -525,4 +567,112 @@ async function filterIntakeConflictingAppointments(
     }
 
     return filteredSlots
+}
+
+// Enhanced version with stats tracking
+async function filterIntakeConflictingAppointmentsWithStats(
+    slots: IntakeSlot[],
+    date: string,
+    serviceInstanceId: string,
+    durationMinutes: number
+): Promise<{ slots: IntakeSlot[], stats: { removedByLocal: number, removedByPQ: number, kept: number } }> {
+    console.log(`🔍 Intake conflict filter (with stats) for ${date}, sid=${serviceInstanceId}, duration=${durationMinutes}m`)
+
+    const slotsByProvider = slots.reduce((acc, slot) => {
+        const providerId = slot.providerId
+        if (!acc[providerId]) {
+            acc[providerId] = []
+        }
+        acc[providerId].push(slot)
+        return acc
+    }, {} as Record<string, IntakeSlot[]>)
+
+    const filteredSlots: IntakeSlot[] = []
+    let removedByLocal = 0
+    let removedByPQ = 0
+
+    for (const [providerId, providerSlots] of Object.entries(slotsByProvider)) {
+        try {
+            // Check local database conflicts
+            const { data: localConflicts, error: localError } = await supabaseAdmin
+                .from('appointments')
+                .select('start_time, end_time')
+                .eq('provider_id', providerId)
+                .eq('service_instance_id', serviceInstanceId)
+                .eq('status', 'scheduled')
+                .gte('start_time', `${date}T00:00:00Z`)
+                .lt('start_time', `${date}T23:59:59Z`)
+
+            if (localError) {
+                console.error(`❌ Error checking local conflicts for provider ${providerId}:`, localError)
+            }
+
+            const localConflictTimes = localConflicts?.map(appt => ({
+                start: new Date(appt.start_time),
+                end: new Date(appt.end_time)
+            })) || []
+
+            // Check IntakeQ conflicts
+            const { data: provider, error } = await supabaseAdmin
+                .from('providers')
+                .select('intakeq_practitioner_id')
+                .eq('id', providerId)
+                .single()
+
+            let intakeqConflictTimes: Array<{start: Date, end: Date}> = []
+            if (!error && provider?.intakeq_practitioner_id) {
+                try {
+                    const existingAppointments = await intakeQService.getAppointmentsForDate(
+                        provider.intakeq_practitioner_id,
+                        date
+                    )
+
+                    intakeqConflictTimes = existingAppointments.map(appointment => ({
+                        start: new Date(appointment.StartDate),
+                        end: new Date(appointment.EndDate || (appointment.StartDate + durationMinutes * 60 * 1000))
+                    }))
+                } catch (intakeqError: any) {
+                    console.warn(`⚠️ Failed to check IntakeQ conflicts for provider ${providerId}:`, intakeqError.message)
+                }
+            }
+
+            // Filter slots and track removals
+            const availableSlots = providerSlots.filter(slot => {
+                const slotStart = new Date(`${slot.date}T${slot.time}:00`)
+                const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60 * 1000)
+
+                const hasLocalConflict = localConflictTimes.some(conflict =>
+                    slotStart < conflict.end && slotEnd > conflict.start
+                )
+
+                const hasIntakeqConflict = intakeqConflictTimes.some(conflict =>
+                    slotStart < conflict.end && slotEnd > conflict.start
+                )
+
+                if (hasLocalConflict) {
+                    removedByLocal++
+                }
+                if (hasIntakeqConflict) {
+                    removedByPQ++
+                }
+
+                return !hasLocalConflict && !hasIntakeqConflict
+            })
+
+            filteredSlots.push(...availableSlots)
+
+        } catch (error: any) {
+            console.error(`❌ Error checking conflicts for provider ${providerId}:`, error.message)
+            filteredSlots.push(...providerSlots)
+        }
+    }
+
+    return {
+        slots: filteredSlots,
+        stats: {
+            removedByLocal,
+            removedByPQ,
+            kept: filteredSlots.length
+        }
+    }
 }
