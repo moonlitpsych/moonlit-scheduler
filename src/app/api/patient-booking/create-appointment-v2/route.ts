@@ -68,6 +68,8 @@ export async function POST(request: NextRequest) {
       isTest
     })
 
+    console.log('📋 V2 API - Full incoming payload:', JSON.stringify(data, null, 2))
+
     // Validate required fields
     if (!providerId || !serviceInstanceId || !payerId || !date || !time ||
         !patient?.firstName || !patient?.lastName || !patient?.phone) {
@@ -227,11 +229,16 @@ export async function POST(request: NextRequest) {
 
     if (insertError || !appointment?.id) {
       console.error('❌ V2 - Supabase insert failed:', insertError)
+      console.error('❌ V2 - Full error details:', JSON.stringify(insertError, null, 2))
+      console.error('❌ V2 - Attempted payload:', JSON.stringify(appointmentData, null, 2))
       return NextResponse.json(
         {
           success: false,
           error: 'DB_INSERT_FAILED',
-          details: insertError?.message || 'Failed to create appointment in database'
+          details: insertError?.message || 'Failed to create appointment in database',
+          errorCode: insertError?.code,
+          errorHint: insertError?.hint,
+          errorDetails: insertError?.details
         },
         { status: 500 }
       )

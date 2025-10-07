@@ -1,5 +1,7 @@
 // src/app/api/patient-booking/providers-for-payer/route.ts
 // CANONICAL: Uses v_bookable_provider_payer view exclusively (no fallbacks)
+export const maxDuration = 60; // Increase timeout to 60 seconds
+
 import { supabaseAdmin } from '@/lib/supabase'
 import { BookableProviderPayer } from '@/types/database'
 import { NextRequest, NextResponse } from 'next/server'

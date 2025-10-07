@@ -324,6 +324,16 @@ export default function BookingFlow({
 
             console.log('📋 BOOKING DEBUG - Appointment payload:', payload)
             console.log('📤 CREATE-APPT payload (client)', payload)
+            console.log('📤 CREATE-APPT payload (JSON):', JSON.stringify(payload, null, 2))
+
+            // ⚠️ CRITICAL DEBUG: Check if serviceInstanceId is present
+            if (!payload.serviceInstanceId) {
+                console.error('🚨 CRITICAL: serviceInstanceId is MISSING from payload!', {
+                    acceptance: state.acceptance,
+                    selectedTimeSlot: state.selectedTimeSlot,
+                    payload
+                })
+            }
 
             const response = await fetch('/api/patient-booking/create-appointment-v2', {
                 method: 'POST',

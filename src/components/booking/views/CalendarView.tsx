@@ -951,7 +951,9 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 providerId: selectedSlot.provider_id,
                 sid,
                 hasAcceptanceMap: Object.keys(acceptanceMap).length > 0,
-                acceptanceMapKeys: Object.keys(acceptanceMap)
+                acceptanceMapKeys: Object.keys(acceptanceMap),
+                selectedSlotData: selectedSlot,
+                acceptanceMapForThisProvider: acceptanceMap[selectedSlot.provider_id]
             })
 
             // Add acceptance data to the slot for BookingFlow
@@ -964,7 +966,17 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 }
             }
 
-            console.log('🔐 ENRICHED SLOT:', enrichedSlot)
+            console.log('🔐 ENRICHED SLOT (will be passed to BookingFlow):', JSON.stringify(enrichedSlot, null, 2))
+
+            // ⚠️ CRITICAL DEBUG: Check if sid is undefined
+            if (!sid) {
+                console.error('🚨 CRITICAL: service_instance_id is UNDEFINED!', {
+                    providerId: selectedSlot.provider_id,
+                    acceptanceMap,
+                    selectedSlot
+                })
+            }
+
             onTimeSlotSelected(enrichedSlot)
         }
     }
