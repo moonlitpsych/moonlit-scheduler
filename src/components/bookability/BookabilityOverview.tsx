@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Filter, RefreshCw, Info, Download, Edit, Shield } from 'lucide-react'
+import { Search, Filter, RefreshCw, Info, Download, Edit, Shield, Plus } from 'lucide-react'
 import BookabilityTable from '@/app/admin/bookability/BookabilityTable'
 import BookabilityFilters from '@/app/admin/bookability/BookabilityFilters'
 import { BookabilityRow, FilterState } from '@/app/admin/bookability/page'
 import { getRenderingProviderId } from '@/lib/bookability/mapRenderingProvider'
 import PayerEditForm from '@/components/admin/PayerEditForm'
+import ContractCreateForm from '@/components/admin/ContractCreateForm'
 import { useToast, ToastProvider } from '@/contexts/ToastContext'
 
 interface BookabilityOverviewProps {
@@ -34,6 +35,7 @@ function BookabilityOverviewInner({ isReadOnly = false }: BookabilityOverviewPro
 
   // Write-enabled state
   const [editingPayer, setEditingPayer] = useState<any>(null)
+  const [creatingContract, setCreatingContract] = useState(false)
   const toast = useToast()
 
   // Fetch bookability data using API endpoint
@@ -179,6 +181,17 @@ function BookabilityOverviewInner({ isReadOnly = false }: BookabilityOverviewPro
     toast.error('Update Failed', error)
   }
 
+  const handleContractCreate = (newContract: any) => {
+    toast.success('Contract Created', `New contract created for ${newContract.provider_name} with ${newContract.payer_name}. The bookability system will reflect this change immediately.`)
+
+    // Refresh the data to show the new contract
+    fetchBookabilityData()
+  }
+
+  const handleContractCreateError = (error: string) => {
+    toast.error('Contract Creation Failed', error)
+  }
+
   // Export all bookability data to CSV
   const exportAllBookabilityData = () => {
     if (bookabilityRows.length === 0) return
@@ -253,6 +266,13 @@ function BookabilityOverviewInner({ isReadOnly = false }: BookabilityOverviewPro
             {!isReadOnly && (
               <div className="flex items-center gap-2 mr-4">
                 <span className="text-sm font-medium text-[#091747]">Quick Actions:</span>
+                <button
+                  onClick={() => setCreatingContract(true)}
+                  className="flex items-center space-x-1 px-3 py-1 bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-white text-sm rounded-lg transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>New Contract</span>
+                </button>
                 <select
                   onChange={(e) => {
                     if (e.target.value) {
@@ -401,6 +421,16 @@ function BookabilityOverviewInner({ isReadOnly = false }: BookabilityOverviewPro
           onClose={() => setEditingPayer(null)}
           onUpdate={handlePayerUpdate}
           onError={handlePayerEditError}
+        />
+      )}
+
+      {/* Contract Create Form Modal */}
+      {creatingContract && (
+        <ContractCreateForm
+          isOpen={creatingContract}
+          onClose={() => setCreatingContract(false)}
+          onCreate={handleContractCreate}
+          onError={handleContractCreateError}
         />
       )}
     </div>

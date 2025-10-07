@@ -275,8 +275,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             start_time: startDate.toISOString(),
             end_time: endDate.toISOString(),
             timezone: 'America/Denver',
-            status: 'pending_sync',
-            appointment_type: 'intake',
+            status: 'scheduled',  // Only 'scheduled' or 'confirmed' allowed by appointments_status_check
+            appointment_type: locationType === 'telehealth' ? 'telehealth' : null,  // Only 'telehealth' or NULL allowed
             location_type: locationType,  // telehealth | in_person
             patient_info: {
                 patient_id: patientId  // Also store in jsonb for compatibility
@@ -314,8 +314,36 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             payer_id: payerId
         })
 
-        // Step 5: Resolve IntakeQ mappings
-        console.log('🔍 Resolving IntakeQ mappings...')
+        // Step 5: Resolve IntakeQ mappings (TEMPORARILY DISABLED for testing)
+        console.log('⚠️ SKIPPING IntakeQ sync (API key issue) - testing database booking only')
+
+        // TODO: Re-enable IntakeQ sync after fixing API key
+        const SKIP_INTAKEQ_SYNC = true
+
+        if (SKIP_INTAKEQ_SYNC) {
+            // Mark as successfully scheduled without IntakeQ
+            const { error: finalUpdateError } = await supabaseAdmin
+                .from('appointments')
+                .update({
+                    status: 'scheduled',
+                    notes: (notes || '') + '\n\n[IntakeQ sync skipped - API key issue]'
+                })
+                .eq('id', appointmentId)
+
+            if (finalUpdateError) {
+                console.error('❌ Error updating appointment:', finalUpdateError)
+            }
+
+            // Send notifications
+            await sendNotifications({ appointmentId, patientId, providerId })
+
+            return NextResponse.json({
+                success: true,
+                appointmentId,
+                message: 'Appointment created successfully (IntakeQ sync skipped)',
+                warning: 'IntakeQ sync is temporarily disabled. Appointment created in database only.'
+            })
+        }
 
         let intakeqClientId: string
         let practitionerExternalId: string
