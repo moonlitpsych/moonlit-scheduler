@@ -153,13 +153,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             provider_id: providerId,
             service_instance_id: serviceInstanceId,
             payer_id: payerId,
+            patient_id: patientId,  // Direct FK to patients table
             start_time: startDate.toISOString(),
             end_time: endDate.toISOString(),
             timezone: 'America/Denver',
             status: 'pending_sync',
             appointment_type: 'intake',
+            location_type: locationType,  // telehealth | in_person
             patient_info: {
-                patient_id: patientId  // Store patient ID reference
+                patient_id: patientId  // Also store in jsonb for compatibility
             },
             insurance_info: {
                 payer_id: payerId,
