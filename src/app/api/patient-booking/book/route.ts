@@ -10,10 +10,19 @@ import { getIntakeqServiceId } from '@/lib/integrations/serviceInstanceMap'
 import { ensureClient, syncClientInsurance, createAppointment } from '@/lib/intakeq/client'
 
 // Intake-only booking request interface (no client serviceInstanceId)
+// Supports BOTH new patient creation and existing patient booking
 interface IntakeBookingRequest {
-    patientId: string
+    // Either patientId (existing) OR patientInfo (new patient) - not both
+    patientId?: string
+    patientInfo?: {
+        firstName: string
+        lastName: string
+        email: string
+        phone: string
+        dateOfBirth?: string
+    }
     providerId: string
-    payerId: string // NEW: Required for server-side service instance resolution
+    payerId: string // Required for server-side service instance resolution
     start: string // ISO timestamp
     locationType: 'telehealth' | 'in_person'
     notes?: string
@@ -50,13 +59,86 @@ interface IntakeBookingResponse {
 export async function POST(request: NextRequest): Promise<NextResponse<IntakeBookingResponse>> {
     try {
         const body = await request.json() as IntakeBookingRequest
-        const { patientId, providerId, payerId, start, locationType, notes } = body
+        const { providerId, payerId, start, locationType, notes } = body
 
-        // Validate required fields (no serviceInstanceId from client)
-        if (!patientId || !providerId || !payerId || !start || !locationType) {
+        // Validate required fields
+        if ((!body.patientId && !body.patientInfo) || !providerId || !payerId || !start || !locationType) {
             return NextResponse.json({
                 success: false,
-                error: 'Missing required fields: patientId, providerId, payerId, start, locationType',
+                error: 'Missing required fields: (patientId OR patientInfo), providerId, payerId, start, locationType',
+                code: 'INVALID_REQUEST'
+            }, { status: 400 })
+        }
+
+        // Additional validation for patientInfo if provided
+        if (body.patientInfo && (!body.patientInfo.firstName || !body.patientInfo.lastName ||
+            !body.patientInfo.email || !body.patientInfo.phone)) {
+            return NextResponse.json({
+                success: false,
+                error: 'patientInfo must include: firstName, lastName, email, phone',
+                code: 'INVALID_REQUEST'
+            }, { status: 400 })
+        }
+
+        // Step 0: Resolve or create patient
+        let patientId: string
+
+        if (body.patientId) {
+            // Existing patient - validate exists
+            patientId = body.patientId
+            console.log(`✅ Using existing patient: ${patientId}`)
+
+            // Verify patient exists
+            const { data: existingPatient, error: patientError } = await supabaseAdmin
+                .from('patients')
+                .select('id')
+                .eq('id', patientId)
+                .single()
+
+            if (patientError || !existingPatient) {
+                return NextResponse.json({
+                    success: false,
+                    error: `Patient not found: ${patientId}`,
+                    code: 'PATIENT_NOT_FOUND'
+                }, { status: 404 })
+            }
+        } else if (body.patientInfo) {
+            // New patient - create record
+            console.log('🆕 Creating new patient record...', {
+                name: `${body.patientInfo.firstName} ${body.patientInfo.lastName}`,
+                email: body.patientInfo.email
+            })
+
+            const { data: newPatient, error: createError } = await supabaseAdmin
+                .from('patients')
+                .insert({
+                    first_name: body.patientInfo.firstName,
+                    last_name: body.patientInfo.lastName,
+                    email: body.patientInfo.email,
+                    phone: body.patientInfo.phone,
+                    date_of_birth: body.patientInfo.dateOfBirth || null,
+                    status: 'pending',
+                    created_at: new Date().toISOString()
+                })
+                .select('id')
+                .single()
+
+            if (createError) {
+                console.error('❌ Failed to create patient:', createError)
+                return NextResponse.json({
+                    success: false,
+                    error: `Failed to create patient: ${createError.message}`,
+                    code: 'PATIENT_CREATE_FAILED'
+                }, { status: 500 })
+            }
+
+            patientId = newPatient.id
+            console.log(`✅ Created new patient: ${patientId}`)
+        } else {
+            // Should never reach here due to validation
+            return NextResponse.json({
+                success: false,
+                error: 'Must provide either patientId or patientInfo',
                 code: 'INVALID_REQUEST'
             }, { status: 400 })
         }
