@@ -1,3 +1,5 @@
+// AUDIT: Book-dev entry point - passes intent to BookingFlow
+// service_instance_id: Not determined here, delegated to BookingFlow component
 'use client'
 
 import BookingFlow from '@/components/booking/BookingFlow'

@@ -1,21 +1,20 @@
-// IMPROVED VERSION: Uses v_bookable_provider_payer view and co-visit logic
+// INTAKE-ONLY VERSION: Resolves single Intake Telehealth service instance for payer upfront
+// service_instance_id: Single serviceInstanceId resolved from payer, not per-slot
+// New behavior: Returns one serviceInstanceId at response root, slots contain only time info
+// Fixed: Eliminated per-provider service instance variation for Intake bookings
 import { supabaseAdmin } from '@/lib/supabase'
 import { intakeQService } from '@/lib/services/intakeQService'
-import { coVisitService } from '@/lib/services/coVisitService'
 import { ensureCacheExists } from '@/lib/services/availabilityCacheService'
+import { resolveIntakeServiceInstance } from '@/lib/services/intakeResolver'
 import { BookableProviderPayer } from '@/types/database'
 import { NextRequest, NextResponse } from 'next/server'
 
-interface AvailableSlot {
+// Simplified slot interface for Intake-only (no per-slot service instance)
+interface IntakeSlot {
     date: string
     time: string
     providerId: string
     providerName: string
-    duration: number
-    isAvailable: boolean
-    // NEW: Service instance identifier for booking
-    serviceInstanceId?: string
-    serviceId?: string
     provider: {
         id: string
         first_name: string
@@ -23,104 +22,71 @@ interface AvailableSlot {
         title: string
         role: string
     }
-    // NEW: Co-visit support
+    // Co-visit support (if needed for Intake)
     isCoVisit?: boolean
     attendingProviderId?: string
     attendingName?: string
     supervisionLevel?: 'sign_off_only' | 'first_visit_in_person' | 'co_visit_required'
 }
 
-// Helper function to lookup serviceInstanceId for a provider+payer combination
-async function lookupServiceInstanceId(providerId: string, payerId: string): Promise<string | null> {
-    try {
-        // Step A: Find all service_ids for the provider from provider_services
-        const { data: providerServices, error: servicesError } = await supabaseAdmin
-            .from('provider_services')
-            .select('service_id')
-            .eq('provider_id', providerId)
-
-        if (servicesError) {
-            console.error('❌ Error fetching provider services:', servicesError)
-            return null
-        }
-
-        if (!providerServices || providerServices.length === 0) {
-            console.log(`⚠️ No services configured for provider ${providerId}`)
-            return null
-        }
-
-        const serviceIds = providerServices.map(ps => ps.service_id)
-
-        // Step B: Find service_instances for these services
-        const { data: serviceInstances, error: instancesError } = await supabaseAdmin
-            .from('service_instances')
-            .select('id, service_id, payer_id, effective_date, created_at')
-            .in('service_id', serviceIds)
-
-        if (instancesError) {
-            console.error('❌ Error fetching service instances:', instancesError)
-            return null
-        }
-
-        if (!serviceInstances || serviceInstances.length === 0) {
-            console.log(`⚠️ No service instances found for provider ${providerId} services`)
-            return null
-        }
-
-        // Step C: Apply preference logic
-        // 1. Prefer instances where payer_id matches the selected payer
-        const payerSpecific = serviceInstances.filter(si => si.payer_id === payerId)
-
-        // 2. If none, fall back to global instances (payer_id IS NULL)
-        const candidates = payerSpecific.length > 0
-            ? payerSpecific
-            : serviceInstances.filter(si => si.payer_id === null)
-
-        if (candidates.length === 0) {
-            console.log(`⚠️ No suitable service instances for provider ${providerId} with payer ${payerId}`)
-            return null
-        }
-
-        // Step D: Pick most recent by effective_date DESC, then created_at DESC
-        const chosen = candidates.sort((a, b) => {
-            // Sort by effective_date DESC first
-            if (a.effective_date && b.effective_date) {
-                const dateA = new Date(a.effective_date)
-                const dateB = new Date(b.effective_date)
-                if (dateA.getTime() !== dateB.getTime()) {
-                    return dateB.getTime() - dateA.getTime()
-                }
-            }
-            // Then by created_at DESC
-            const createdA = new Date(a.created_at || 0)
-            const createdB = new Date(b.created_at || 0)
-            return createdB.getTime() - createdA.getTime()
-        })[0]
-
-        return chosen.id
-    } catch (error) {
-        console.error('❌ Error in serviceInstanceId lookup:', error)
-        return null
-    }
-}
+// Legacy function removed - now using getPrimaryServiceInstance with gating
 
 export async function POST(request: NextRequest) {
     try {
-        const { payer_id, date, startDate, endDate, appointmentDuration = 60, provider_id } = await request.json()
+        const { payer_id, date, startDate, endDate, provider_id } = await request.json()
 
         const requestDate = date || startDate
         const requestEndDate = endDate || date
 
-        if (!payer_id || !requestDate) {
+        if (!payer_id) {
             return NextResponse.json(
-                { error: 'payer_id and date are required', success: false },
+                { error: 'payer_id is required', code: 'PAYER_REQUIRED', success: false },
+                { status: 422 }
+            )
+        }
+
+        if (!requestDate) {
+            return NextResponse.json(
+                { error: 'date is required', success: false },
                 { status: 400 }
             )
         }
 
-        console.log(`🔍 Getting ${provider_id ? 'provider-specific' : 'merged'} availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
+        // UUID validation for payer_id
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (!uuidRegex.test(payer_id)) {
+            console.log(`❌ Invalid payer_id format: ${payer_id}`)
+            return NextResponse.json(
+                { error: `Invalid payer_id format: ${payer_id}`, code: 'INVALID_PAYER_ID', success: false },
+                { status: 422 }
+            )
+        }
 
-        // Step 0: Auto-populate cache if needed (Option A implementation)
+        console.log(`🔍 Getting Intake-only availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
+
+        // Step 1: Resolve single Intake Telehealth service instance for payer (single DB call)
+        let serviceInstanceId: string
+        let durationMinutes: number
+
+        try {
+            const intakeInstance = await resolveIntakeServiceInstance(payer_id)
+            serviceInstanceId = intakeInstance.serviceInstanceId
+            durationMinutes = intakeInstance.durationMinutes
+            console.log(`✅ Resolved Intake service instance: ${serviceInstanceId} (${durationMinutes}min)`)
+        } catch (error: any) {
+            console.error('❌ Failed to resolve Intake service instance:', error)
+            return NextResponse.json(
+                {
+                    error: error.message,
+                    code: error.code || 'NO_INTAKE_INSTANCE_FOR_PAYER',
+                    payerId: error.payerId || payer_id,
+                    success: false
+                },
+                { status: error.status || 422 }
+            )
+        }
+
+        // Step 2: Auto-populate cache if needed
         console.log(`🔄 Ensuring cache exists for date range ${requestDate} to ${requestEndDate}...`)
         const cacheResult = await ensureCacheExists(requestDate, requestEndDate)
         if (!cacheResult.success) {
@@ -131,7 +97,7 @@ export async function POST(request: NextRequest) {
             console.log(`✅ Cache already exists for requested date range`)
         }
 
-        // Step 1: Get BOOKABLE providers using canonical view (consistent with providers-for-payer API)
+        // Step 3: Get BOOKABLE providers using canonical view (consistent with providers-for-payer API)
         const { data: bookableRelationships, error: networkError } = await supabaseAdmin
             .from('v_bookable_provider_payer')
             .select('*')
@@ -186,27 +152,7 @@ export async function POST(request: NextRequest) {
         console.log(`👥 NEW: Found ${bookableProviders.length} BOOKABLE providers from fallback logic:`,
             bookableProviders.map(bp => `${bp.first_name} ${bp.last_name} (via: ${bp.via}, co-visit: ${bp.requires_co_visit})`))
 
-        // Cache for serviceInstanceId lookups (per request)
-        const serviceInstanceCache = new Map<string, string | null>()
-        const getServiceInstanceId = async (providerId: string): Promise<string | null> => {
-            const cacheKey = `${providerId}:${payer_id}`
-            if (serviceInstanceCache.has(cacheKey)) {
-                return serviceInstanceCache.get(cacheKey)!
-            }
-            const result = await lookupServiceInstanceId(providerId, payer_id)
-            serviceInstanceCache.set(cacheKey, result)
-
-            // DEV log once per unique provider+payer combination
-            if (process.env.NODE_ENV === 'development') {
-                console.log('[DEV] serviceInstance lookup sample', {
-                    providerId,
-                    payerId: payer_id,
-                    chosen: result
-                })
-            }
-
-            return result
-        }
+        // Service instance lookups now handled by getPrimaryServiceInstance with gating
 
         // Separate providers that need co-visit from regular providers
         const coVisitProviders = bookableProviders.filter(bp => bp.requires_co_visit)
@@ -290,25 +236,65 @@ export async function POST(request: NextRequest) {
         // Step 5: Generate time slots (regular + co-visit)
         const allSlots: AvailableSlot[] = []
         
-        // Process regular providers
+        // Process regular providers with duration-based slot generation
         for (const avail of filteredAvailability || []) {
             const provider = regularProviders.find(bp => bp.provider_id === avail.provider_id)
             if (!provider) continue
 
             console.log(`⏰ Regular provider ${provider.first_name} ${provider.last_name}: ${avail.start_time} - ${avail.end_time}`)
-            
-            const providerServiceInstanceId = await getServiceInstanceId(provider.provider_id)
-            const slots = generateTimeSlotsFromAvailability(avail, requestDate, {
-                id: provider.provider_id,
-                first_name: provider.first_name || '',
-                last_name: provider.last_name || '',
-                title: provider.title || 'MD',
-                role: provider.role || 'physician'
-            }, appointmentDuration, providerServiceInstanceId)
-            allSlots.push(...slots)
+
+            try {
+                // Get primary service instance with gating
+                const serviceInstance = await getPrimaryServiceInstance(
+                    provider.provider_id,
+                    payer_id,
+                    bypassGating
+                )
+
+                if (!serviceInstance) {
+                    console.log(`⚠️ No valid service instance for provider ${provider.first_name} ${provider.last_name}, skipping`)
+                    continue
+                }
+
+                // Check if service instance has live PQ mapping (unless bypassing gating)
+                if (!bypassGating) {
+                    const hasMapping = await hasLiveMapping(serviceInstance.id)
+                    if (!hasMapping) {
+                        console.log(`⚠️ Service instance ${serviceInstance.id} has no live PQ mapping for provider ${provider.first_name} ${provider.last_name}, skipping`)
+                        continue
+                    }
+                }
+
+                // Get effective duration for this service instance
+                const duration = await getEffectiveDurationMinutes(serviceInstance.id)
+
+                const slots = generateTimeSlotsFromAvailability(avail, requestDate, {
+                    id: provider.provider_id,
+                    first_name: provider.first_name || '',
+                    last_name: provider.last_name || '',
+                    title: provider.title || 'MD',
+                    role: provider.role || 'physician'
+                }, duration, serviceInstance.id)
+
+                allSlots.push(...slots)
+                console.log(`✅ Generated ${slots.length} slots for ${provider.first_name} ${provider.last_name} (${duration}min duration)`)
+
+            } catch (error: any) {
+                console.error(`❌ Error processing provider ${provider.first_name} ${provider.last_name}:`, error.message)
+
+                // Return specific error codes for missing mappings/durations
+                if (error.code === 'MISSING_DURATION') {
+                    return NextResponse.json(
+                        { error: error.message, code: 'MISSING_DURATION', success: false },
+                        { status: 422 }
+                    )
+                }
+                // Continue with other providers on other errors
+                continue
+            }
         }
 
-        // Process co-visit providers
+        // Process co-visit providers with duration-based slots
         for (const coVisitProvider of coVisitProviders) {
             if (!coVisitProvider.attending_provider_id) {
                 console.warn(`⚠️ Co-visit provider ${coVisitProvider.first_name} ${coVisitProvider.last_name} missing attending_provider_id`)
@@ -316,28 +302,49 @@ export async function POST(request: NextRequest) {
             }
 
             console.log(`🤝 Processing co-visit for resident ${coVisitProvider.first_name} ${coVisitProvider.last_name} with attending ${coVisitProvider.attending_provider_id}`)
-            
+
             try {
+                // Get primary service instance for co-visit provider
+                const coVisitServiceInstance = await getPrimaryServiceInstance(
+                    coVisitProvider.provider_id,
+                    payer_id,
+                    bypassGating
+                )
+
+                if (!coVisitServiceInstance) {
+                    console.log(`⚠️ No valid service instance for co-visit provider ${coVisitProvider.first_name} ${coVisitProvider.last_name}, skipping`)
+                    continue
+                }
+
+                // Check if co-visit service instance has live PQ mapping (unless bypassing gating)
+                if (!bypassGating) {
+                    const hasMapping = await hasLiveMapping(coVisitServiceInstance.id)
+                    if (!hasMapping) {
+                        console.log(`⚠️ Co-visit service instance ${coVisitServiceInstance.id} has no live PQ mapping for provider ${coVisitProvider.first_name} ${coVisitProvider.last_name}, skipping`)
+                        continue
+                    }
+                }
+
+                // Get effective duration for co-visit
+                const coVisitDuration = await getEffectiveDurationMinutes(coVisitServiceInstance.id)
+
                 const coVisitSlots = await coVisitService.getCoVisitAvailability(
                     coVisitProvider.provider_id,
                     coVisitProvider.attending_provider_id,
                     requestDate,
-                    appointmentDuration
+                    coVisitDuration
                 )
-
-                // Get serviceInstanceId for co-visit provider
-                const coVisitServiceInstanceId = await getServiceInstanceId(coVisitProvider.provider_id)
                 const devFallbackId = process.env.NEXT_PUBLIC_APP_ENV === 'dev' ? '12191f44-a09c-426f-8e22-0c5b8e57b3b7' : undefined
 
-                // Convert co-visit slots to AvailableSlot format
+                // Convert co-visit slots to AvailableSlot format with correct duration
                 const convertedSlots = coVisitSlots.map(cvSlot => ({
                     date: requestDate,
                     time: new Date(cvSlot.start_time).toTimeString().slice(0, 5),
                     providerId: cvSlot.resident_provider_id,
                     providerName: `${coVisitProvider.first_name} ${coVisitProvider.last_name} (with ${cvSlot.attending_name})`,
-                    duration: appointmentDuration,
+                    duration: coVisitDuration,
                     isAvailable: true,
-                    serviceInstanceId: coVisitServiceInstanceId || devFallbackId,
+                    serviceInstanceId: coVisitServiceInstance.id,
                     provider: {
                         id: coVisitProvider.provider_id,
                         first_name: coVisitProvider.first_name || '',
@@ -353,9 +360,20 @@ export async function POST(request: NextRequest) {
                 }))
 
                 allSlots.push(...convertedSlots)
-                console.log(`✅ Added ${convertedSlots.length} co-visit slots for ${coVisitProvider.first_name} ${coVisitProvider.last_name}`)
-            } catch (error) {
-                console.error(`❌ Error processing co-visit for ${coVisitProvider.first_name} ${coVisitProvider.last_name}:`, error)
+                console.log(`✅ Added ${convertedSlots.length} co-visit slots for ${coVisitProvider.first_name} ${coVisitProvider.last_name} (${coVisitDuration}min duration)`)
+
+            } catch (error: any) {
+                console.error(`❌ Error processing co-visit for ${coVisitProvider.first_name} ${coVisitProvider.last_name}:`, error.message)
+
+                // Return specific error codes for missing mappings/durations
+                if (error.code === 'MISSING_DURATION') {
+                    return NextResponse.json(
+                        { error: error.message, code: 'MISSING_DURATION', success: false },
+                        { status: 422 }
+                    )
+                }
+                // Continue with other providers on other errors
+                continue
             }
         }
 
@@ -373,8 +391,13 @@ export async function POST(request: NextRequest) {
             })
         }
 
-        // Step 6: Filter out IntakeQ conflicts
-        const finalSlots = await filterConflictingAppointments(allSlots, requestDate)
+        // Step 6: Filter out appointment conflicts (both local and IntakeQ)
+        const finalSlots = await filterIntakeConflictingAppointments(
+            allSlots,
+            requestDate,
+            serviceInstanceId,
+            durationMinutes
+        )
         
         console.log(`🔍 Final result: ${finalSlots.length} available slots (removed ${allSlots.length - finalSlots.length} conflicts)`)
 
@@ -389,10 +412,12 @@ export async function POST(request: NextRequest) {
         const response = {
             success: true,
             data: {
+                // Intake-only contract: single service instance resolved from payer
+                serviceInstanceId,
+                durationMinutes,
                 totalSlots: finalSlots.length,
-                dateRange: { startDate: requestDate, endDate: requestEndDate },
-                slotsByDate,
-                availableSlots: finalSlots.slice(0, 50),
+                slots: finalSlots, // Primary slots array
+                availableSlots: finalSlots, // Compatibility alias
                 providers: bookableProviders.map(bp => ({
                     id: bp.provider_id,
                     name: `${bp.first_name} ${bp.last_name}`,
@@ -408,6 +433,8 @@ export async function POST(request: NextRequest) {
                     payer_id,
                     date: requestDate,
                     dayOfWeek,
+                    intake_only: true,
+                    single_service_instance_resolved: true,
                     bookable_providers_found: bookableProviders.length,
                     regular_providers: regularProviders.length,
                     co_visit_providers: coVisitProviders.length,
@@ -415,9 +442,9 @@ export async function POST(request: NextRequest) {
                     exceptions_found: exceptions?.length || 0,
                     filtered_availability_records: filteredAvailability.length,
                     slots_generated: allSlots.length,
-                    final_slots: finalSlots.length
-                },
-                message: `Found ${finalSlots.length} available appointment slots from ${bookableProviders.length} bookable providers (${regularProviders.length} regular + ${coVisitProviders.length} co-visit)`
+                    final_slots: finalSlots.length,
+                    resolved_duration_minutes: durationMinutes
+                }
             }
         }
 
@@ -436,44 +463,40 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// Utility functions (same as original)
-function generateTimeSlotsFromAvailability(
+// Intake-only utility functions
+function generateIntakeTimeSlotsFromAvailability(
     availability: any,
     date: string,
     provider: any,
-    appointmentDuration: number,
-    serviceInstanceId: string | null
-): AvailableSlot[] {
-    const slots: AvailableSlot[] = []
-    
+    appointmentDuration: number
+): IntakeSlot[] {
+    const slots: IntakeSlot[] = []
+
     try {
         const startTime = availability.start_time
         const endTime = availability.end_time
-        
+
         const [startHour, startMin] = startTime.split(':').map(Number)
         const [endHour, endMin] = endTime.split(':').map(Number)
-        
+
         const baseDate = new Date(date)
         let currentTime = new Date(baseDate)
         currentTime.setHours(startHour, startMin, 0, 0)
-        
+
         const endDateTime = new Date(baseDate)
         endDateTime.setHours(endHour, endMin, 0, 0)
-        
+
+        console.log(`🕒 Generating slots from ${formatTime(currentTime)} to ${formatTime(endDateTime)} with ${appointmentDuration}min duration`)
+
         while (currentTime < endDateTime) {
             const slotEndTime = new Date(currentTime.getTime() + appointmentDuration * 60 * 1000)
-            
-            if (slotEndTime <= endDateTime) {
-                const devFallbackId = process.env.NEXT_PUBLIC_APP_ENV === 'dev' ? '12191f44-a09c-426f-8e22-0c5b8e57b3b7' : undefined
 
+            if (slotEndTime <= endDateTime) {
                 slots.push({
                     date: date,
                     time: formatTime(currentTime),
                     providerId: availability.provider_id,
                     providerName: `${provider.first_name} ${provider.last_name}`,
-                    duration: appointmentDuration,
-                    isAvailable: true,
-                    serviceInstanceId: serviceInstanceId || devFallbackId,
                     provider: {
                         id: provider.id,
                         first_name: provider.first_name,
@@ -482,15 +505,19 @@ function generateTimeSlotsFromAvailability(
                         role: provider.role || ''
                     }
                 })
+            } else {
+                console.log(`⏰ Skipping partial slot ${formatTime(currentTime)}-${formatTime(slotEndTime)} (exceeds availability window)`)
             }
-            
+
             currentTime = new Date(currentTime.getTime() + appointmentDuration * 60 * 1000)
         }
-        
+
+        console.log(`✅ Generated ${slots.length} slots for ${provider.first_name} ${provider.last_name}`)
+
     } catch (error) {
         console.error('❌ Error generating time slots:', error)
     }
-    
+
     return slots
 }
 
@@ -498,9 +525,15 @@ function formatTime(date: Date): string {
     return date.toTimeString().slice(0, 5)
 }
 
-async function filterConflictingAppointments(slots: AvailableSlot[], date: string): Promise<AvailableSlot[]> {
-    console.log(`🔍 Checking for appointment conflicts on ${date}...`)
-    
+// Intake-specific conflict checking for single service instance
+async function filterIntakeConflictingAppointments(
+    slots: IntakeSlot[],
+    date: string,
+    serviceInstanceId: string,
+    durationMinutes: number
+): Promise<IntakeSlot[]> {
+    console.log(`🔍 Intake conflict filter for ${date}, sid=${serviceInstanceId}, duration=${durationMinutes}m`)
+
     const slotsByProvider = slots.reduce((acc, slot) => {
         const providerId = slot.providerId
         if (!acc[providerId]) {
@@ -508,59 +541,96 @@ async function filterConflictingAppointments(slots: AvailableSlot[], date: strin
         }
         acc[providerId].push(slot)
         return acc
-    }, {} as Record<string, AvailableSlot[]>)
+    }, {} as Record<string, IntakeSlot[]>)
 
-    const filteredSlots: AvailableSlot[] = []
-    
+    const filteredSlots: IntakeSlot[] = []
+
     for (const [providerId, providerSlots] of Object.entries(slotsByProvider)) {
         try {
+            // Check local database conflicts for Intake service instance (status='scheduled')
+            const { data: localConflicts, error: localError } = await supabaseAdmin
+                .from('appointments')
+                .select('start_time, end_time')
+                .eq('provider_id', providerId)
+                .eq('service_instance_id', serviceInstanceId)
+                .eq('status', 'scheduled')
+                .gte('start_time', `${date}T00:00:00Z`)
+                .lt('start_time', `${date}T23:59:59Z`)
+
+            if (localError) {
+                console.error(`❌ Error checking local conflicts for provider ${providerId}:`, localError)
+                // Continue with IntakeQ check
+            }
+
+            const localConflictTimes = localConflicts?.map(appt => ({
+                start: new Date(appt.start_time),
+                end: new Date(appt.end_time)
+            })) || []
+
+            console.log(`📅 Provider ${providerId} has ${localConflictTimes.length} local scheduled appointments`)
+
+            // Check IntakeQ conflicts
             const { data: provider, error } = await supabaseAdmin
                 .from('providers')
                 .select('intakeq_practitioner_id')
                 .eq('id', providerId)
                 .single()
 
-            if (error || !provider?.intakeq_practitioner_id) {
-                console.log(`⚠️ No IntakeQ practitioner ID for provider ${providerId}, skipping conflict check`)
-                filteredSlots.push(...providerSlots)
-                continue
+            let intakeqConflictTimes: Array<{start: Date, end: Date}> = []
+            if (!error && provider?.intakeq_practitioner_id) {
+                try {
+                    const existingAppointments = await intakeQService.getAppointmentsForDate(
+                        provider.intakeq_practitioner_id,
+                        date
+                    )
+
+                    intakeqConflictTimes = existingAppointments.map(appointment => ({
+                        start: new Date(appointment.StartDate),
+                        end: new Date(appointment.EndDate || (appointment.StartDate + durationMinutes * 60 * 1000))
+                    }))
+
+                    console.log(`📅 Provider ${providerId} has ${intakeqConflictTimes.length} IntakeQ appointments`)
+                } catch (intakeqError: any) {
+                    console.warn(`⚠️ Failed to check IntakeQ conflicts for provider ${providerId}:`, intakeqError.message)
+                }
+            } else {
+                console.log(`⚠️ No IntakeQ practitioner ID for provider ${providerId}, skipping IntakeQ conflict check`)
             }
 
-            const existingAppointments = await intakeQService.getAppointmentsForDate(
-                provider.intakeq_practitioner_id, 
-                date
-            )
-
-            console.log(`📅 Provider ${providerId} has ${existingAppointments.length} existing appointments`)
-
+            // Filter slots against all conflicts (using resolved Intake duration)
             const availableSlots = providerSlots.filter(slot => {
-                const slotStartTime = new Date(`${slot.date}T${slot.time}:00`).getTime()
-                
-                const hasConflict = existingAppointments.some(appointment => {
-                    const appointmentStart = new Date(appointment.StartDate)
-                    const appointmentEnd = new Date(appointment.EndDate || (appointment.StartDate + 60 * 60 * 1000))
-                    
-                    const slotStart = new Date(slotStartTime)
-                    const slotEnd = new Date(slotStartTime + 60 * 60 * 1000)
-                    
-                    return (slotStart < appointmentEnd && slotEnd > appointmentStart)
-                })
-                
-                if (hasConflict) {
-                    console.log(`⚠️ Slot ${slot.time} conflicts with existing appointment, removing`)
+                const slotStart = new Date(`${slot.date}T${slot.time}:00`)
+                const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60 * 1000)
+
+                // Check local conflicts
+                const hasLocalConflict = localConflictTimes.some(conflict =>
+                    slotStart < conflict.end && slotEnd > conflict.start
+                )
+
+                // Check IntakeQ conflicts
+                const hasIntakeqConflict = intakeqConflictTimes.some(conflict =>
+                    slotStart < conflict.end && slotEnd > conflict.start
+                )
+
+                if (hasLocalConflict) {
+                    console.log(`⚠️ Slot ${slot.time} conflicts with local appointment, removing`)
                 }
-                
-                return !hasConflict
+                if (hasIntakeqConflict) {
+                    console.log(`⚠️ Slot ${slot.time} conflicts with IntakeQ appointment, removing`)
+                }
+
+                return !hasLocalConflict && !hasIntakeqConflict
             })
 
             filteredSlots.push(...availableSlots)
-            console.log(`✅ Provider ${providerId}: ${availableSlots.length}/${providerSlots.length} slots available`)
+            console.log(`✅ Provider ${providerId}: ${availableSlots.length}/${providerSlots.length} slots available after conflict check`)
 
         } catch (error: any) {
             console.error(`❌ Error checking conflicts for provider ${providerId}:`, error.message)
+            // In case of error, include slots but log the issue
             filteredSlots.push(...providerSlots)
         }
     }
-    
+
     return filteredSlots
 }

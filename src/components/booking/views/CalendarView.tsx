@@ -1,3 +1,7 @@
+// AUDIT: CalendarView fetches availability without explicit serviceInstanceId
+// service_instance_id: Retrieved from acceptanceMap[provider_id] and added to slot on click
+// Current behavior: Slot payload gets enriched with service_instance_id from provider mapping
+// Current issue: Multiple service instances per provider, resolved at click-time
 // src/components/booking/views/CalendarView.tsx
 'use client'
 
@@ -94,6 +98,9 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const [consolidatedSlots, setConsolidatedSlots] = useState<ConsolidatedTimeSlot[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string>('')
+    // NEW: Single service instance for Intake-only bookings
+    const [serviceInstanceId, setServiceInstanceId] = useState<string | null>(null)
+    const [durationMinutes, setDurationMinutes] = useState<number>(60)
     // Removed showInsuranceBanner state - redundant with subheader
     const [viewMode, setViewMode] = useState<'by_availability' | 'by_provider'>(propsSelectedProvider ? 'by_provider' : 'by_availability')
     const [providers, setProviders] = useState<any[]>([])
@@ -611,7 +618,14 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         return
                     }
 
-                    console.log('✅ Strategy 1 SUCCESS:', data1)
+                    console.log('✅ Strategy 1 SUCCESS (Intake-only):', data1)
+
+                    // NEW: Extract single service instance from Intake-only response
+                    if (data1.success && data1.data) {
+                        setServiceInstanceId(data1.data.serviceInstanceId || null)
+                        setDurationMinutes(data1.data.durationMinutes || 60)
+                        console.log('🔗 Set Intake service instance:', data1.data.serviceInstanceId, `(${data1.data.durationMinutes}min)`)
+                    }
                     
                     // Validate API response structure
                     const responseValidation = validateApiResponse(data1, { success: true, data: {} })
@@ -620,8 +634,8 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     }
                     
                     if (data1.success) {
-                        const rawSlots = data1.data?.availableSlots || []
-                        console.log('🔍 DEBUG: Raw API slots before mapping:', JSON.stringify(rawSlots.slice(0, 3), null, 2))
+                        const rawSlots = data1.data?.slots || [] // NEW: Intake-only uses 'slots' not 'availableSlots'
+                        console.log('🔍 DEBUG: Raw Intake slots before mapping:', JSON.stringify(rawSlots.slice(0, 3), null, 2))
                         // Map slot data using direct field mapping (NO VALIDATION - see dataValidation.ts comments)
                         apiSlots = process.env.NODE_ENV === 'development'
                             ? rawSlots.filter(slot => slot && typeof slot === 'object').map(mapApiSlotToTimeSlot)
@@ -944,27 +958,22 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
     const handleNext = () => {
         if (selectedSlot) {
-            // ✅ B) Capture serviceInstanceId when slot is selected
-            console.log('🔐 FULL ACCEPTANCE MAP:', acceptanceMap)
-            const sid = acceptanceMap[selectedSlot.provider_id]?.serviceInstanceId
-            console.log('🔐 CAPTURE serviceInstanceId', {
-                providerId: selectedSlot.provider_id,
-                sid,
-                hasAcceptanceMap: Object.keys(acceptanceMap).length > 0,
-                acceptanceMapKeys: Object.keys(acceptanceMap)
-            })
+            // NEW: Use single resolved service instance for Intake-only
+            console.log('🔗 INTAKE-ONLY: Using resolved service instance:', serviceInstanceId)
 
-            // Add acceptance data to the slot for BookingFlow
+            // Simplified slot enrichment with single service instance
             const enrichedSlot = {
                 ...selectedSlot,
                 acceptance: {
-                    service_instance_id: sid,
-                    verified: !!sid,
-                    status: sid ? 'accepted' : 'pending'
+                    service_instance_id: serviceInstanceId,
+                    verified: !!serviceInstanceId,
+                    status: serviceInstanceId ? 'accepted' : 'pending',
+                    intake_only: true,
+                    duration_minutes: durationMinutes
                 }
             }
 
-            console.log('🔐 ENRICHED SLOT:', enrichedSlot)
+            console.log('🔗 INTAKE ENRICHED SLOT:', enrichedSlot)
             onTimeSlotSelected(enrichedSlot)
         }
     }
