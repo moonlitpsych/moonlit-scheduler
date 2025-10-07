@@ -86,6 +86,93 @@ async function testAvailability(payerName: string, payerId: string, date: string
     }
 }
 
+async function testBooking(payerName: string, payerId: string, date: string): Promise<TestResult> {
+    const testName = `Booking for ${payerName} on ${date}`;
+
+    try {
+        // Step 1: Get availability
+        const availResponse = await fetch(`${BASE_URL}/api/patient-booking/merged-availability`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payer_id: payerId, date })
+        });
+
+        const availData = await availResponse.json();
+        if (!availData.success || !availData.data?.slots?.length) {
+            return {
+                name: testName,
+                passed: false,
+                error: 'No available slots found',
+                details: availData
+            };
+        }
+
+        // Get first available slot
+        const slot = availData.data.slots[0];
+        const startTime = new Date(`${slot.date}T${slot.time}:00.000-06:00`).toISOString();
+
+        // Step 2: Book appointment (using test patient ID)
+        const bookResponse = await fetch(`${BASE_URL}/api/patient-booking/book`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                patientId: 'test-patient-id-001', // Test patient
+                providerId: slot.providerId,
+                payerId,
+                start: startTime,
+                locationType: 'telehealth',
+                notes: 'Smoke test booking'
+            })
+        });
+
+        const bookData = await bookResponse.json();
+
+        if (!bookResponse.ok) {
+            return {
+                name: testName,
+                passed: false,
+                error: `HTTP ${bookResponse.status}: ${bookData.error || bookData.code}`,
+                details: bookData
+            };
+        }
+
+        if (!bookData.success) {
+            return {
+                name: testName,
+                passed: false,
+                error: `Booking failed: ${bookData.error}`,
+                details: bookData
+            };
+        }
+
+        if (!bookData.data?.pqAppointmentId) {
+            return {
+                name: testName,
+                passed: false,
+                error: 'No pqAppointmentId in response',
+                details: bookData
+            };
+        }
+
+        return {
+            name: testName,
+            passed: true,
+            details: {
+                appointmentId: bookData.data.appointmentId,
+                pqAppointmentId: bookData.data.pqAppointmentId,
+                provider: bookData.data.provider.name,
+                start: bookData.data.start
+            }
+        };
+    } catch (error: any) {
+        return {
+            name: testName,
+            passed: false,
+            error: error.message
+        };
+    }
+}
+
 async function runTests() {
     console.log('\n🧪 Starting Intake-only smoke tests...\n');
 
@@ -105,6 +192,12 @@ async function runTests() {
     const test2 = await testAvailability('Molina', TEST_PAYERS.molina, tomorrowStr);
     results.push(test2);
     console.log(test2.passed ? '✅ PASS' : '❌ FAIL', test2.passed ? test2.details : test2.error);
+
+    // Test 3: End-to-end booking (Molina)
+    console.log('\n🔍 Test 3: End-to-end booking flow...');
+    const test3 = await testBooking('Molina', TEST_PAYERS.molina, tomorrowStr);
+    results.push(test3);
+    console.log(test3.passed ? '✅ PASS' : '❌ FAIL', test3.passed ? test3.details : test3.error);
 
     // Print summary
     console.log('\n📊 Test Summary:\n');
