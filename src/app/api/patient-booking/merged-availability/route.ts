@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
                     error: error.message,
                     code: error.code || 'NO_INTAKE_INSTANCE_FOR_PAYER',
                     payerId: error.payerId || payer_id,
-                    success: false
+                    success: false,
+                    debug: error.debug ?? undefined
                 },
                 { status: error.status || 422 }
             )
