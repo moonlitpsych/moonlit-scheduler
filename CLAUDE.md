@@ -23,9 +23,47 @@ Before adding columns or modifying tables:
 
 This prevents duplicate columns, schema conflicts, and maintains data integrity.
 
+## ✅ COMPLETED: Bookability Trigger Migration (Oct 7, 2025)
+
+**STATUS:** ✅ Fixed "Not bookable for this payer" errors
+
+### What Was Fixed:
+
+**Problem:** Booking trigger used incomplete `bookable_provider_payers_v2` table instead of canonical view, causing "Not bookable for this payer on the selected date" errors for valid supervised appointments.
+
+**Solution:**
+- Updated `enforce_bookable_provider_payer()` trigger to use `v_bookable_provider_payer` (canonical view)
+- Fixed `appointment_type` and `status` constraint errors in booking flow
+- Removed deprecated v2 and v3 bookability tables/views
+- Updated IntakeQ API key (rotated Oct 7)
+
+**Result:** ✅ Supervised provider bookings now work (e.g., Dr. Sweeney under Dr. Privratsky's supervision with Molina)
+
+### Migration Files:
+- `database-migrations/CONSOLIDATED-bookability-fix.sql` - Trigger update migration
+- `database-migrations/005-cleanup-deprecated-bookability-tables.sql` - Cleanup migration
+- `BOOKABILITY_MIGRATION_MASTER_PLAN.md` - Complete migration strategy
+- `BOOKABILITY_TABLE_AUDIT.md` - Table inventory and analysis
+
+### Supervision Model (Healthcare Billing Context):
+
+**Field Naming Clarification:**
+- `billing_provider_id` in database = Actually the **supervising attending** (confusing name)
+- For CMS-1500 forms: **Billing Provider** = Moonlit (practice entity), **Rendering Provider** = Attending supervisor
+
+**How Supervised Appointments Work:**
+- `provider_id` = Provider patient sees (e.g., Dr. Sweeney - resident)
+- `billing_provider_id` = Supervising attending (e.g., Dr. Privratsky)
+- `rendering_provider_id` = Also Dr. Privratsky (for insurance claims)
+- `network_status` = 'supervised' (vs 'in_network' for direct contracts)
+
+**Example:** Patient books Dr. Sweeney (resident) with Molina → Dr. Privratsky supervises and appears as rendering provider on insurance claim → Moonlit bills as practice entity.
+
+---
+
 ## ✅ COMPLETED: IntakeQ Full Automation Integration (Oct 4-5, 2025)
 
-**STATUS:** ✅ Production-ready. All automations working!
+**STATUS:** ⚠️ Partially working (database booking works, IntakeQ sync has bugs)
 
 ### What's Now Live:
 

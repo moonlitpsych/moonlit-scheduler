@@ -60,15 +60,17 @@ export async function ensureClient(patientId: string): Promise<string> {
             FirstName: patient.first_name || '',
             LastName: patient.last_name || '',
             Email: patient.email || '',
-            CellPhone: patient.phone || '',
+            Phone: patient.phone || '',
             DateOfBirth: patient.date_of_birth || null
         }
 
-        const intakeqClientId = await intakeQService.createClient(clientData)
+        const clientResponse = await intakeQService.createClient(clientData)
 
-        if (!intakeqClientId) {
+        if (!clientResponse?.Id) {
             throw new Error('Failed to create IntakeQ client - no client ID returned')
         }
+
+        const intakeqClientId = clientResponse.Id
 
         // Persist the IntakeQ client ID to our database
         const { error: updateError } = await supabaseAdmin
@@ -121,22 +123,22 @@ export async function createAppointment(request: IntakeQAppointmentRequest): Pro
     const maxRetries = 3
     let lastError: any
 
+    // Default location ID for telehealth (from CLAUDE.md: "4" for Insurance - UT)
+    const INTAKEQ_LOCATION_ID = '4'
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             console.log(`🔄 Creating IntakeQ appointment (attempt ${attempt}/${maxRetries})...`)
 
-            const appointmentData = {
-                ClientId: request.intakeqClientId,
-                PractitionerId: request.practitionerExternalId,
-                ServiceId: request.serviceExternalId,
-                StartDate: request.start.toISOString(),
-                EndDate: request.end.toISOString(),
-                LocationType: request.locationType === 'telehealth' ? 'Virtual' : 'In Person',
-                Notes: request.notes || '',
-                Status: 'Scheduled'
-            }
-
-            const pqAppointmentId = await intakeQService.createAppointment(appointmentData)
+            const pqAppointmentId = await intakeQService.createAppointmentWithClient({
+                clientId: request.intakeqClientId,
+                practitionerId: request.practitionerExternalId,
+                serviceId: request.serviceExternalId,
+                locationId: INTAKEQ_LOCATION_ID,
+                dateTime: request.start,
+                status: 'Confirmed',
+                sendEmailNotification: true
+            })
 
             if (!pqAppointmentId) {
                 throw new Error('Failed to create IntakeQ appointment - no appointment ID returned')

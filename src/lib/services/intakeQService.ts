@@ -104,6 +104,60 @@ class IntakeQService {
     }
   }
 
+  /**
+   * Create appointment with existing client ID
+   */
+  async createAppointmentWithClient(appointmentData: {
+    clientId: string
+    practitionerId: string
+    serviceId: string
+    locationId: string
+    dateTime: Date
+    status?: 'Confirmed' | 'WaitingConfirmation'
+    sendEmailNotification?: boolean
+  }): Promise<string> {
+    console.log('📅 Creating IntakeQ appointment with existing client...')
+
+    try {
+      // IntakeQ requires timestamps in milliseconds and times must be on 5-minute boundaries
+      const appointmentDateTime = new Date(appointmentData.dateTime)
+      const minutes = appointmentDateTime.getMinutes()
+      const roundedMinutes = Math.round(minutes / 5) * 5
+      appointmentDateTime.setMinutes(roundedMinutes, 0, 0) // Round to 5-min interval, zero seconds/ms
+
+      const utcTimestamp = appointmentDateTime.getTime()
+
+      console.log(`🕐 Appointment DateTime: ${appointmentData.dateTime.toISOString()}`)
+      console.log(`🕐 UTC Timestamp: ${utcTimestamp}`)
+
+      const appointmentPayload: IntakeQAppointment = {
+        PractitionerId: appointmentData.practitionerId,
+        ClientId: appointmentData.clientId,
+        ServiceId: appointmentData.serviceId,
+        LocationId: appointmentData.locationId,
+        Status: appointmentData.status || 'Confirmed',
+        UtcDateTime: utcTimestamp,
+        SendClientEmailNotification: appointmentData.sendEmailNotification ?? true,
+      }
+
+      console.log('📋 IntakeQ appointment payload:')
+      console.log(JSON.stringify(appointmentPayload, null, 2))
+
+      const response = await this.makeRequest<IntakeQAppointmentResponse>('/appointments', {
+        method: 'POST',
+        body: JSON.stringify(appointmentPayload),
+      })
+
+      const appointmentId = response.Id.toString()
+      console.log(`✅ IntakeQ appointment created: ${appointmentId}`)
+
+      return appointmentId
+    } catch (error: any) {
+      console.error('❌ Failed to create IntakeQ appointment:', error.message)
+      throw error
+    }
+  }
+
   async createAppointment(appointmentData: {
     practitionerId: string
     clientFirstName: string
@@ -130,7 +184,7 @@ class IntakeQService {
       }
 
       let clientId: string
-      
+
       try {
         const clientResponse = await this.createClient(clientData)
         clientId = clientResponse.Id
@@ -141,40 +195,16 @@ class IntakeQService {
         throw new Error('Failed to create/find client in IntakeQ')
       }
 
-      // Step 2: Create appointment  
-      // IntakeQ requires timestamps in milliseconds and times must be on 5-minute boundaries
-      const appointmentDateTime = new Date(appointmentData.dateTime)
-      const minutes = appointmentDateTime.getMinutes()
-      const roundedMinutes = Math.round(minutes / 5) * 5
-      appointmentDateTime.setMinutes(roundedMinutes, 0, 0) // Round to 5-min interval, zero seconds/ms
-      
-      const utcTimestamp = appointmentDateTime.getTime()
-      
-      console.log(`🕐 Appointment DateTime: ${appointmentData.dateTime.toISOString()}`)
-      console.log(`🕐 UTC Timestamp: ${utcTimestamp}`)
-      
-      const appointmentPayload: IntakeQAppointment = {
-        PractitionerId: appointmentData.practitionerId,
-        ClientId: clientId,
-        ServiceId: appointmentData.serviceId,
-        LocationId: appointmentData.locationId,
-        Status: appointmentData.status || 'Confirmed',
-        UtcDateTime: utcTimestamp,
-        SendClientEmailNotification: appointmentData.sendEmailNotification ?? true,
-      }
-      
-      console.log('📋 IntakeQ appointment payload:')
-      console.log(JSON.stringify(appointmentPayload, null, 2))
-
-      const response = await this.makeRequest<IntakeQAppointmentResponse>('/appointments', {
-        method: 'POST',
-        body: JSON.stringify(appointmentPayload),
+      // Step 2: Create appointment using the new method
+      return this.createAppointmentWithClient({
+        clientId,
+        practitionerId: appointmentData.practitionerId,
+        serviceId: appointmentData.serviceId,
+        locationId: appointmentData.locationId,
+        dateTime: appointmentData.dateTime,
+        status: appointmentData.status,
+        sendEmailNotification: appointmentData.sendEmailNotification
       })
-
-      const appointmentId = response.Id.toString()
-      console.log(`✅ IntakeQ appointment created: ${appointmentId}`)
-      
-      return appointmentId
     } catch (error: any) {
       console.error('❌ Failed to create IntakeQ appointment:', error.message)
       throw error
@@ -355,16 +385,38 @@ class IntakeQService {
 
   async updateAppointmentStatus(appointmentId: string, status: 'Confirmed' | 'Cancelled' | 'NoShow'): Promise<void> {
     console.log(`🔄 Updating IntakeQ appointment ${appointmentId} status to: ${status}`)
-    
+
     try {
       await this.makeRequest(`/appointments/${appointmentId}`, {
         method: 'PUT',
         body: JSON.stringify({ Status: status }),
       })
-      
+
       console.log(`✅ IntakeQ appointment ${appointmentId} status updated`)
     } catch (error: any) {
       console.error('❌ Failed to update IntakeQ appointment status:', error.message)
+      throw error
+    }
+  }
+
+  async updateClientInsurance(clientId: string, insuranceData: {
+    PrimaryInsuranceName: string
+    PrimaryMemberID: string
+    PrimaryGroupNumber?: string
+    PrimaryPolicyHolderName?: string
+    PrimaryPolicyHolderDOB?: string
+  }): Promise<void> {
+    console.log(`🔄 Updating insurance for IntakeQ client ${clientId}...`)
+
+    try {
+      await this.makeRequest(`/clients/${clientId}`, {
+        method: 'PUT',
+        body: JSON.stringify(insuranceData),
+      })
+
+      console.log(`✅ IntakeQ client ${clientId} insurance updated`)
+    } catch (error: any) {
+      console.error('❌ Failed to update IntakeQ client insurance:', error.message)
       throw error
     }
   }

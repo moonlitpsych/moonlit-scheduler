@@ -340,21 +340,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             }, { status: error.status || 422 })
         }
 
-        // Step 6: Sync client insurance to IntakeQ (using real payer data)
-        console.log('🔄 Syncing client insurance to IntakeQ...')
-        try {
-            await syncClientInsurance(intakeqClientId, {
-                payer_id: payer.id,
-                payer_name: payer.name,
-                member_id: patientId,  // Using patient ID as member ID for now
-                group_number: undefined,
-                policy_holder_name: undefined,
-                policy_holder_dob: undefined
-            })
-        } catch (error: any) {
-            console.warn('⚠️ Failed to sync insurance (non-fatal):', error.message)
-            // Continue with booking even if insurance sync fails
-        }
+        // Step 6: Sync client insurance to IntakeQ (SKIPPED - endpoint doesn't exist in IntakeQ API)
+        // Insurance information is collected during intake questionnaire instead
+        console.log('ℹ️ Skipping insurance sync to IntakeQ (handled via questionnaire)')
 
         // Step 7: Create IntakeQ appointment
         console.log('📅 Creating IntakeQ appointment...')
@@ -387,8 +375,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             .from('appointments')
             .update({
                 pq_appointment_id: pqAppointmentId,
-                status: 'scheduled',
-                synced_at: new Date().toISOString()
+                status: 'scheduled'
             })
             .eq('id', appointmentId)
 
