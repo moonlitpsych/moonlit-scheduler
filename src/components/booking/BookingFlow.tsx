@@ -196,8 +196,20 @@ export default function BookingFlow({
             const startDateTime = `${slot?.date}T${slot?.time}:00`
 
             // Intake-only payload (server resolves serviceInstanceId)
+            // Send EITHER patientId (if exists) OR patient object (for new patients)
             const payload = {
-                patientId: patient?.id || 'temp-patient-id', // TODO: Get real patient ID after patient creation
+                ...(patient?.id
+                    ? { patientId: patient.id }
+                    : {
+                        patient: {
+                            firstName: patient?.firstName || '',
+                            lastName: patient?.lastName || '',
+                            email: patient?.email || '',
+                            phone: patient?.phone,
+                            dateOfBirth: patient?.dateOfBirth
+                        }
+                    }
+                ),
                 providerId: slot?.provider_id,
                 payerId: state.selectedPayer?.id,
                 start: startDateTime,

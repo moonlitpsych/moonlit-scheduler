@@ -12,13 +12,13 @@ import { ensureClient, syncClientInsurance, createAppointment } from '@/lib/inta
 // Intake-only booking request interface (no client serviceInstanceId)
 // Supports BOTH new patient creation and existing patient booking
 interface IntakeBookingRequest {
-    // Either patientId (existing) OR patientInfo (new patient) - not both
+    // Either patientId (existing) OR patient (new patient) - not both
     patientId?: string
-    patientInfo?: {
+    patient?: {
         firstName: string
         lastName: string
         email: string
-        phone: string
+        phone?: string
         dateOfBirth?: string
     }
     providerId: string
@@ -56,91 +56,125 @@ interface IntakeBookingResponse {
     code?: string
 }
 
+/**
+ * Ensures a patient exists, either by validating existing ID or creating new patient.
+ * Implements idempotent upsert by email to prevent duplicates.
+ */
+async function ensurePatient(input: {
+    patientId?: string
+    patient?: {
+        firstName: string
+        lastName: string
+        email: string
+        phone?: string
+        dateOfBirth?: string
+    }
+}): Promise<{ patientId: string; created: boolean }> {
+    // Path 1: Existing patient ID provided
+    if (input.patientId) {
+        console.log(`[ENSURE_PATIENT] Validating existing patient: ${input.patientId}`)
+
+        const { data: existingPatient, error } = await supabaseAdmin
+            .from('patients')
+            .select('id')
+            .eq('id', input.patientId)
+            .single()
+
+        if (error || !existingPatient) {
+            throw new Error(`Patient not found: ${input.patientId}`)
+        }
+
+        console.log(`[ENSURE_PATIENT] ✅ Reused existing patient: ${input.patientId}`)
+        return { patientId: input.patientId, created: false }
+    }
+
+    // Path 2: New patient data provided
+    if (input.patient) {
+        const { firstName, lastName, email, phone, dateOfBirth } = input.patient
+
+        // Normalize email for idempotent lookup
+        const normalizedEmail = email.trim().toLowerCase()
+
+        console.log(`[ENSURE_PATIENT] Creating/finding patient by email: ${normalizedEmail}`)
+
+        // Check if patient already exists by email (idempotent)
+        const { data: existing } = await supabaseAdmin
+            .from('patients')
+            .select('id')
+            .eq('email', normalizedEmail)
+            .maybeSingle()
+
+        if (existing) {
+            console.log(`[ENSURE_PATIENT] ✅ Reused existing patient by email: ${existing.id}`)
+            return { patientId: existing.id, created: false }
+        }
+
+        // Create new patient
+        const { data: newPatient, error: createError } = await supabaseAdmin
+            .from('patients')
+            .insert({
+                first_name: firstName,
+                last_name: lastName,
+                email: normalizedEmail,
+                phone: phone || null,
+                date_of_birth: dateOfBirth || null,
+                status: 'pending',
+                created_at: new Date().toISOString()
+            })
+            .select('id')
+            .single()
+
+        if (createError || !newPatient) {
+            console.error('[ENSURE_PATIENT] ❌ Failed to create patient:', createError)
+            throw new Error(`Failed to create patient: ${createError?.message || 'Unknown error'}`)
+        }
+
+        console.log(`[ENSURE_PATIENT] ✅ Created new patient: ${newPatient.id}`)
+        return { patientId: newPatient.id, created: true }
+    }
+
+    // Neither provided
+    throw new Error('Must provide either patientId or patient data')
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse<IntakeBookingResponse>> {
     try {
         const body = await request.json() as IntakeBookingRequest
         const { providerId, payerId, start, locationType, notes } = body
 
         // Validate required fields
-        if ((!body.patientId && !body.patientInfo) || !providerId || !payerId || !start || !locationType) {
+        if ((!body.patientId && !body.patient) || !providerId || !payerId || !start || !locationType) {
             return NextResponse.json({
                 success: false,
-                error: 'Missing required fields: (patientId OR patientInfo), providerId, payerId, start, locationType',
+                error: 'Missing required fields: (patientId OR patient), providerId, payerId, start, locationType',
                 code: 'INVALID_REQUEST'
             }, { status: 400 })
         }
 
-        // Additional validation for patientInfo if provided
-        if (body.patientInfo && (!body.patientInfo.firstName || !body.patientInfo.lastName ||
-            !body.patientInfo.email || !body.patientInfo.phone)) {
+        // Additional validation for patient data if provided
+        if (body.patient && (!body.patient.firstName || !body.patient.lastName || !body.patient.email)) {
             return NextResponse.json({
                 success: false,
-                error: 'patientInfo must include: firstName, lastName, email, phone',
-                code: 'INVALID_REQUEST'
-            }, { status: 400 })
+                error: 'patient must include: firstName, lastName, email',
+                code: 'INVALID_PATIENT_INPUT'
+            }, { status: 422 })
         }
 
-        // Step 0: Resolve or create patient
+        // Step 0: Ensure patient exists (validate or create)
         let patientId: string
-
-        if (body.patientId) {
-            // Existing patient - validate exists
-            patientId = body.patientId
-            console.log(`✅ Using existing patient: ${patientId}`)
-
-            // Verify patient exists
-            const { data: existingPatient, error: patientError } = await supabaseAdmin
-                .from('patients')
-                .select('id')
-                .eq('id', patientId)
-                .single()
-
-            if (patientError || !existingPatient) {
-                return NextResponse.json({
-                    success: false,
-                    error: `Patient not found: ${patientId}`,
-                    code: 'PATIENT_NOT_FOUND'
-                }, { status: 404 })
-            }
-        } else if (body.patientInfo) {
-            // New patient - create record
-            console.log('🆕 Creating new patient record...', {
-                name: `${body.patientInfo.firstName} ${body.patientInfo.lastName}`,
-                email: body.patientInfo.email
+        try {
+            const result = await ensurePatient({
+                patientId: body.patientId,
+                patient: body.patient
             })
-
-            const { data: newPatient, error: createError } = await supabaseAdmin
-                .from('patients')
-                .insert({
-                    first_name: body.patientInfo.firstName,
-                    last_name: body.patientInfo.lastName,
-                    email: body.patientInfo.email,
-                    phone: body.patientInfo.phone,
-                    date_of_birth: body.patientInfo.dateOfBirth || null,
-                    status: 'pending',
-                    created_at: new Date().toISOString()
-                })
-                .select('id')
-                .single()
-
-            if (createError) {
-                console.error('❌ Failed to create patient:', createError)
-                return NextResponse.json({
-                    success: false,
-                    error: `Failed to create patient: ${createError.message}`,
-                    code: 'PATIENT_CREATE_FAILED'
-                }, { status: 500 })
-            }
-
-            patientId = newPatient.id
-            console.log(`✅ Created new patient: ${patientId}`)
-        } else {
-            // Should never reach here due to validation
+            patientId = result.patientId
+        } catch (error: any) {
+            console.error('❌ ensurePatient failed:', error)
             return NextResponse.json({
                 success: false,
-                error: 'Must provide either patientId or patientInfo',
-                code: 'INVALID_REQUEST'
-            }, { status: 400 })
+                error: error.message,
+                code: 'PATIENT_RESOLUTION_FAILED'
+            }, { status: error.message.includes('not found') ? 404 : 500 })
         }
 
         console.log(`🚀 Starting Intake-only booking process:`, {
