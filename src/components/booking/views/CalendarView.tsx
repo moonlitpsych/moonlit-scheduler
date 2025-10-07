@@ -600,6 +600,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     },
                     body: JSON.stringify({
                         payer_id: payerId,
+                        payerId: payerId, // compat
                         date: dateString,
                         provider_id: mode === 'by_provider' && providerId ? providerId : undefined,
                         language: selectedLanguage
@@ -622,19 +623,21 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
 
                     // NEW: Extract single service instance from Intake-only response
                     if (data1.success && data1.data) {
-                        setServiceInstanceId(data1.data.serviceInstanceId || null)
-                        setDurationMinutes(data1.data.durationMinutes || 60)
-                        console.log('🔗 Set Intake service instance:', data1.data.serviceInstanceId, `(${data1.data.durationMinutes}min)`)
+                        const sid = data1.data.serviceInstanceId ?? data1.data.service_instance_id ?? null
+                        const dur = data1.data.durationMinutes ?? data1.data.duration_minutes ?? 60
+                        setServiceInstanceId(sid)
+                        setDurationMinutes(dur)
+                        console.log('🔗 Set Intake service instance:', sid, `(${dur}min)`)
                     }
-                    
+
                     // Validate API response structure
                     const responseValidation = validateApiResponse(data1, { success: true, data: {} })
                     if (!responseValidation.isValid) {
                         console.error('🚨 API Response validation failed:', responseValidation.errors)
                     }
-                    
+
                     if (data1.success) {
-                        const rawSlots = data1.data?.slots || [] // NEW: Intake-only uses 'slots' not 'availableSlots'
+                        const rawSlots = data1.data?.slots ?? data1.data?.availableSlots ?? [] // Accept both shapes
                         console.log('🔍 DEBUG: Raw Intake slots before mapping:', JSON.stringify(rawSlots.slice(0, 3), null, 2))
                         // Map slot data using direct field mapping (NO VALIDATION - see dataValidation.ts comments)
                         apiSlots = process.env.NODE_ENV === 'development'

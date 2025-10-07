@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getIntakeServiceInstanceForPayer, getIntakeDurationForPayer } from '@/lib/services/intakeResolver'
 
 export async function GET(request: NextRequest) {
+    // Disable in production
+    if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ success: false, error: 'Disabled in production' }, { status: 404 });
+    }
+
     try {
         const { searchParams } = new URL(request.url)
         const testMode = searchParams.get('mode') || 'overview'

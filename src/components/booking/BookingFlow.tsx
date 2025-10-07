@@ -188,144 +188,33 @@ export default function BookingFlow({
     const handleAppointmentConfirmed = async () => {
         // Create appointment with enhanced error handling
         try {
-            // Map normalized slot → booking payload with exact API structure
+            // Map normalized slot → Intake-only booking payload
             const slot = state.selectedTimeSlot
             const patient = state.insuranceInfo
-            const acceptance = state.acceptance || (state as any).acceptance
 
-            // Build payload with exact keys our API expects (camelCase)
+            // Build ISO timestamp from slot date + time
+            const startDateTime = `${slot?.date}T${slot?.time}:00`
+
+            // Intake-only payload (server resolves serviceInstanceId)
             const payload = {
+                patientId: patient?.id || 'temp-patient-id', // TODO: Get real patient ID after patient creation
                 providerId: slot?.provider_id,
-                serviceInstanceId: acceptance?.service_instance_id || acceptance?.serviceInstanceId,
                 payerId: state.selectedPayer?.id,
-                date: slot?.date,
-                time: slot?.time,
-                durationMinutes: slot?.duration_minutes ?? 60,
-                patient: {
-                    firstName: patient?.first_name || patient?.firstName,
-                    lastName: patient?.last_name || patient?.lastName,
-                    phone: patient?.phone,
-                    email: patient?.email,
-                    dob: patient?.dob
-                }
+                start: startDateTime,
+                locationType: 'telehealth' as const,
+                notes: patient?.notes || undefined
             }
 
-            // ✅ UUID validation helper
-            const isUuid = (v?: string) => !!v && /^[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}$/.test(v)
-
-            // ---- DEV DEBUG START (ok to remove later) ----
-            console.log('[BOOKING] Selected IDs', {
-                selectedProviderId: slot?.provider_id,
-                selectedPayerId: state.selectedPayer?.id,
-            });
-            console.log('[BOOKING] Latest availability (first 3)', (typeof latestAvailability !== 'undefined' ? latestAvailability : []).slice(0, 3));
-            console.log('[BOOKING] Selected slot', slot);
-
-            // If you have an acceptance/eligibility map in state or props, log the node for this provider+payer
-            // (Use whatever object you're already using in this component; if not available, skip gracefully.)
-            const acceptanceNode =
-              (typeof acceptanceMap !== 'undefined')
-                ? acceptanceMap?.[slot?.provider_id]?.payers?.[state.selectedPayer?.id]
-                : undefined;
-            console.log('[BOOKING] Acceptance node', acceptanceNode);
-            console.log('[BOOKING] Gates', {
-              directInNetwork: acceptanceNode?.directInNetwork,
-              supervisedAllowed: acceptanceNode?.supervisedAllowed,
-              telehealthConfigured: acceptanceNode?.telehealthConfigured,
-              requiresIndividualContract: acceptanceNode?.requiresIndividualContract,
-              supervision: acceptanceNode?.supervision,
-            });
-            // ---- DEV DEBUG END ----
-
-            // Fill serviceInstanceId if missing, pulling from selectedSlot or acceptance data
-            if (!payload.serviceInstanceId) {
-              const fromSelected =
-                slot?.serviceInstanceId ??
-                slot?.service?.id ??
-                slot?.serviceId ?? // try common naming
-                null;
-
-              const fromAcceptance =
-                acceptanceNode?.serviceInstanceId ??
-                acceptanceNode?.serviceId ??
-                null;
-
-              payload.serviceInstanceId = fromSelected ?? fromAcceptance ?? null;
-            }
-
-            // Optional: allow dev fallback so we can continue testing even if the upstream isn't wiring it yet
-            if (process.env.NEXT_PUBLIC_APP_ENV === 'dev' && !payload.serviceInstanceId) {
-              const firstFromAvail =
-                (typeof latestAvailability !== 'undefined' && latestAvailability && latestAvailability.length > 0)
-                  ? (latestAvailability[0].serviceInstanceId ??
-                     latestAvailability[0].service?.id ??
-                     latestAvailability[0].serviceId ??
-                     null)
-                  : null;
-
-              if (firstFromAvail) {
-                console.warn('[BOOKING][DEV] serviceInstanceId was missing; using first from availability:', firstFromAvail);
-                payload.serviceInstanceId = firstFromAvail;
-              }
-            }
-
-            // For visibility, log the payload right before validation
-            console.log('[BOOKING] Payload before required-fields check', payload);
-            console.log('[BOOKING] serviceInstanceId present?', !!payload.serviceInstanceId);
-
-            // ✅ DEV-ONLY GUARD: Surface mistakes immediately
-            if (process.env.NODE_ENV === 'development') {
-                const required = [
-                    'providerId', 'serviceInstanceId', 'payerId', 'date', 'time',
-                    'patient.firstName', 'patient.lastName', 'patient.phone'
-                ]
-                const missing = required.filter(k => !k.split('.').reduce((o, p) => o?.[p], payload))
-                if (missing.length) {
-                    console.error('Missing fields', { missing, payload })
-                    alert('Dev: Missing ' + missing.join(', '))
-                    return
-                }
-
-                // Dev guard: ensure valid UUID and correct service
-                if (!isUuid(payload.serviceInstanceId)) {
-                    console.error('Invalid serviceInstanceId', payload.serviceInstanceId)
-                    alert('Dev: serviceInstanceId missing/invalid')
-                    return
-                }
-
-                // Additional check for expected seeded UUIDs
-                const expectedUUIDs = [
-                    '12191f44-a09c-426f-8e22-0c5b8e57b3b7', // Housed
-                    '1a659f8e-249a-4690-86e7-359c6c381bc0'  // Unhoused
-                ]
-                if (!expectedUUIDs.includes(payload.serviceInstanceId)) {
-                    console.warn('⚠️ Dev: Unexpected serviceInstanceId (not in seeded list):', payload.serviceInstanceId)
-                }
-            }
-
-            // ✅ USER-SAFE BLOCK: If we can't resolve the SID, show friendly message and stop
-            if (!payload.serviceInstanceId) {
-                alert('This clinician is not yet configured for Telehealth Intake with your insurance. Please pick another clinician or contact support.')
-                return
-            }
-
-            // Enhanced frontend logging
-            console.log('🚀 BOOKING DEBUG - Starting appointment creation:', {
+            // Log payload for debugging
+            console.log('🚀 INTAKE BOOKING - Starting appointment creation:', {
                 hasTimeSlot: !!slot,
                 hasProvider: !!slot?.provider_id,
                 hasPayer: !!state.selectedPayer?.id,
                 hasPatientInfo: !!patient,
-                hasServiceInstanceId: !!payload.serviceInstanceId,
-                patientName: `${payload.patient.firstName} ${payload.patient.lastName}`,
-                selectedDate: slot?.date,
-                selectedTime: slot?.time,
                 payload
             })
 
-            console.log('📋 BOOKING DEBUG - Appointment payload:', payload)
-            console.log('📤 CREATE-APPT payload (client)', payload)
-
-            const response = await fetch('/api/patient-booking/create-appointment-v2', {
+            const response = await fetch('/api/patient-booking/book', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -339,28 +228,38 @@ export default function BookingFlow({
                 throw new Error('Invalid response from server')
             }
 
-            console.log('📨 BOOKING DEBUG - API Response:', {
+            console.log('📨 INTAKE BOOKING - API Response:', {
                 status: response.status,
                 ok: response.ok,
                 success: result?.success,
-                hasAppointmentId: !!result?.data?.appointment?.id,
-                error: result?.error
+                hasPqAppointmentId: !!result?.data?.pqAppointmentId,
+                error: result?.error,
+                code: result?.code
             })
 
-            // Only proceed to confirmation if API returned success with appointment ID
-            if (!response.ok || !result?.success || !result?.data?.appointment?.id) {
-                console.error('❌ BOOKING DEBUG - Appointment creation failed:', { 
-                    status: response.status, 
-                    result 
+            // Only proceed to confirmation if API returned success with PQ appointment ID
+            if (!response.ok || !result?.success || !result?.data?.pqAppointmentId) {
+                console.error('❌ INTAKE BOOKING - Appointment creation failed:', {
+                    status: response.status,
+                    result
                 })
-                alert(`Appointment failed: ${result?.error ?? response.statusText ?? 'Unknown error'}`)
+                // Map error codes to user-friendly messages
+                const errorMessage = result?.code === 'NO_INTAKE_INSTANCE_FOR_PAYER'
+                    ? "This insurance isn't configured for new patient visits yet."
+                    : result?.code === 'MISSING_PROVIDER_MAPPING'
+                    ? "That provider isn't ready to book yet."
+                    : result?.code === 'SLOT_TAKEN'
+                    ? "That time was just taken. Please pick another slot."
+                    : result?.error ?? response.statusText ?? 'Unknown error'
+
+                alert(`Appointment failed: ${errorMessage}`)
                 return // STOP — do not go to confirmation
             }
 
-            // Success case
-            console.log('✅ BOOKING DEBUG - Appointment created successfully:', result.data.appointment.id)
-            updateState({ 
-                appointmentId: result.data.appointment.id,
+            // Success case - store PQ appointment ID
+            console.log('✅ INTAKE BOOKING - Appointment created successfully:', result.data.pqAppointmentId)
+            updateState({
+                appointmentId: result.data.pqAppointmentId,
                 roiContacts: state.roiContacts
             })
             goToStep('confirmation') // Only on success

@@ -4,6 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(req: NextRequest) {
+  // Disable in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: false, error: 'Disabled in production' }, { status: 404 });
+  }
+
   const { searchParams } = new URL(req.url);
   const payerId = searchParams.get('payer_id');
 
