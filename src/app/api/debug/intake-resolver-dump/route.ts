@@ -21,12 +21,11 @@ export async function GET(req: NextRequest) {
   console.log(`\n📦 [intake-resolver-dump] Starting staged diagnostics for payer_id=${payerId}`);
 
   try {
-    // S1: base_intake
-    console.log('📦 S1: Querying base_intake (Intake% + Telehealth + POS 10)...');
-    const { data: s1Data, error: s1Error } = await supabase
+    // S1: base_intake (fetch all Telehealth + POS 10, filter name in code)
+    console.log('📦 S1: Querying base_intake (Telehealth + POS 10, will filter by name in code)...');
+    const { data: s1AllData, error: s1Error } = await supabase
       .from('service_instances')
       .select('id, payer_id, location, pos_code, services!inner(name, duration_minutes)')
-      .ilike('services.name', 'Intake%')
       .eq('location', 'Telehealth')
       .eq('pos_code', '10');
 
@@ -38,8 +37,21 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const s1Rows = s1Data || [];
-    console.log(`📦 S1 base_intake: ${s1Rows.length} rows`);
+    // Filter by service name in code (resilient to whitespace and variations)
+    const s1Rows = (s1AllData || []).filter(r => {
+      const name = ((r.services as any)?.name || '').toLowerCase();
+      return name.includes('intake') || name.includes('new patient');
+    });
+
+    console.log(`📦 S1 base_intake: ${s1Rows.length} rows (from ${s1AllData?.length || 0} total Telehealth POS 10)`);
+
+    // Compute service name frequency map
+    const nameCounts: Record<string, number> = {};
+    for (const r of s1Rows) {
+      const n = ((r.services as any)?.name || '').trim().toLowerCase();
+      nameCounts[n] = (nameCounts[n] || 0) + 1;
+    }
+    console.log(`📦 S1 service_name_counts:`, nameCounts);
 
     // S2: payer_scoped (filter in code)
     console.log('📦 S2: Filtering for payer-specific OR global (null)...');
@@ -114,7 +126,8 @@ export async function GET(req: NextRequest) {
           payer_specific: payerSpecific.slice(0, 10).map(formatRow),
           global_null: globalNull.slice(0, 10).map(formatRow)
         },
-        with_mapping: s3Rows.slice(0, 10).map(formatRow)
+        with_mapping: s3Rows.slice(0, 10).map(formatRow),
+        service_name_counts: nameCounts
       },
       picked
     });

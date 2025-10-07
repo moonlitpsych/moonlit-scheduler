@@ -36,8 +36,8 @@ export async function resolveIntakeServiceInstance(payerId: string): Promise<Int
             throw invalidPayerError
         }
 
-        // S1: Query base Intake Telehealth service instances
-        const { data: s1Data, error: s1Error } = await supabaseAdmin
+        // S1: Query base Intake Telehealth service instances (filter name in code for resilience)
+        const { data: s1AllData, error: s1Error } = await supabaseAdmin
             .from('service_instances')
             .select(`
                 id,
@@ -51,14 +51,18 @@ export async function resolveIntakeServiceInstance(payerId: string): Promise<Int
             `)
             .eq('location', 'Telehealth')
             .eq('pos_code', '10')
-            .ilike('services.name', 'Intake%')
 
         if (s1Error) {
             console.error('❌ S1 query error:', s1Error)
             throw new Error(`Database error in S1: ${s1Error.message}`)
         }
 
-        const s1Rows = s1Data || []
+        // Filter by service name in code (resilient to whitespace and variations)
+        const s1Rows = (s1AllData || []).filter(r => {
+            const name = (r.services?.name || '').toLowerCase()
+            return name.includes('intake') || name.includes('new patient')
+        })
+
         console.log(`📦 resolveIntake S1 base_intake: ${s1Rows.length} rows`)
 
         // S2: Filter for payer-specific OR global (null) in code
@@ -83,7 +87,7 @@ export async function resolveIntakeServiceInstance(payerId: string): Promise<Int
         const mappedIds = new Set((integrationsData || []).map(i => i.service_instance_id))
         const s3Rows = s2Rows.filter(r => mappedIds.has(r.id))
 
-        console.log(`📦 resolveIntake S3 with_mapping: ${s3Rows.length} rows (from ${mappedIds.size} total mapped IDs)`)
+        console.log(`📦 resolveIntake results { base: ${s1Rows.length}, payerScoped: ${s2Rows.length}, mapped: ${s3Rows.length} }`)
 
         // S4: Pick candidate (prefer payer-specific over global)
         if (s3Rows.length === 0) {
@@ -113,10 +117,7 @@ export async function resolveIntakeServiceInstance(payerId: string): Promise<Int
             throw missingDurationError
         }
 
-        console.log('📦 resolveIntake picked', {
-            id: candidate.id,
-            durationMinutes: candidate.services.duration_minutes
-        })
+        console.log(`📦 resolveIntake picked { id: ${candidate.id}, durationMinutes: ${candidate.services.duration_minutes} }`)
 
         return {
             serviceInstanceId: candidate.id,
