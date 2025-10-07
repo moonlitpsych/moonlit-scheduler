@@ -26,26 +26,48 @@ export interface ActivePolicyResult {
 
 /**
  * Gets the active insurance policy for a patient at a specific time.
- * Calls the public.get_active_policy function and formats the result.
+ * Queries patient_insurance_policies table directly (no RPC needed).
  */
 export async function getActivePolicy(patientId: string, at?: Date): Promise<ActivePolicyResult> {
     try {
         const atTimestamp = at ? at.toISOString() : new Date().toISOString()
         console.log(`🔍 Getting active policy for patient ${patientId} at ${atTimestamp}`)
 
-        // Call the database function
-        const { data, error } = await supabaseAdmin
-            .rpc('get_active_policy', {
-                patient_id: patientId,
-                at_timestamp: atTimestamp
-            })
+        // Query patient_insurance_policies with payer join
+        const { data: policies, error } = await supabaseAdmin
+            .from('patient_insurance_policies')
+            .select(`
+                id,
+                payer_id,
+                member_id,
+                group_number,
+                policy_holder_name,
+                policy_holder_dob,
+                relationship_to_insured,
+                coverage_type,
+                effective_date,
+                termination_date,
+                is_active,
+                payers (
+                    id,
+                    name,
+                    payer_type,
+                    state
+                )
+            `)
+            .eq('patient_id', patientId)
+            .eq('is_active', true)
+            .lte('effective_date', atTimestamp)
+            .or(`termination_date.is.null,termination_date.gte.${atTimestamp}`)
+            .order('effective_date', { ascending: false })
+            .limit(1)
 
         if (error) {
-            console.error('❌ Error calling get_active_policy function:', error)
+            console.error('❌ Error querying patient_insurance_policies:', error)
             throw new Error(`Database error: ${error.message}`)
         }
 
-        if (!data || data.length === 0) {
+        if (!policies || policies.length === 0) {
             console.error(`❌ No active policy found for patient ${patientId} at ${atTimestamp}`)
             const noPolicyError = new Error(`No active insurance policy found for patient ${patientId}`)
             ;(noPolicyError as any).status = 404
@@ -53,39 +75,40 @@ export async function getActivePolicy(patientId: string, at?: Date): Promise<Act
             throw noPolicyError
         }
 
-        const policyData = data[0]
+        const policy = policies[0]
+        const payer = policy.payers as any
 
         // Validate required fields
-        if (!policyData.policy_id) {
-            throw new Error('Policy data missing policy_id')
+        if (!policy.id) {
+            throw new Error('Policy data missing id')
         }
 
-        if (!policyData.payer_id || !policyData.payer_name) {
+        if (!policy.payer_id || !payer?.name) {
             throw new Error('Policy data missing payer information')
         }
 
-        if (!policyData.member_id) {
+        if (!policy.member_id) {
             throw new Error('Policy data missing member_id')
         }
 
         // Format the result
         const result: ActivePolicyResult = {
-            policyId: policyData.policy_id,
+            policyId: policy.id,
             payerSnapshot: {
-                id: policyData.payer_id,
-                name: policyData.payer_name,
-                type: policyData.payer_type || 'unknown',
-                network_status: policyData.network_status,
-                effective_date: policyData.payer_effective_date,
-                termination_date: policyData.payer_termination_date
+                id: policy.payer_id,
+                name: payer.name,
+                type: payer.payer_type || 'unknown',
+                network_status: undefined, // Not in patient_insurance_policies
+                effective_date: policy.effective_date,
+                termination_date: policy.termination_date
             },
             memberSnapshot: {
-                member_id: policyData.member_id,
-                group_number: policyData.group_number,
-                policy_holder_name: policyData.policy_holder_name,
-                policy_holder_dob: policyData.policy_holder_dob,
-                relationship_to_insured: policyData.relationship_to_insured,
-                coverage_type: policyData.coverage_type
+                member_id: policy.member_id,
+                group_number: policy.group_number,
+                policy_holder_name: policy.policy_holder_name,
+                policy_holder_dob: policy.policy_holder_dob,
+                relationship_to_insured: policy.relationship_to_insured,
+                coverage_type: policy.coverage_type
             }
         }
 
