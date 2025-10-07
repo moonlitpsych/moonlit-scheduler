@@ -26,93 +26,59 @@ export interface ActivePolicyResult {
 
 /**
  * Gets the active insurance policy for a patient at a specific time.
- * Queries patient_insurance_policies table directly (no RPC needed).
+ * DEV-ONLY: Creates a synthetic policy from payer data until we have a real policy table.
  */
-export async function getActivePolicy(patientId: string, at?: Date): Promise<ActivePolicyResult> {
+export async function getActivePolicy(patientId: string, at?: Date, payerId?: string): Promise<ActivePolicyResult> {
     try {
         const atTimestamp = at ? at.toISOString() : new Date().toISOString()
         console.log(`🔍 Getting active policy for patient ${patientId} at ${atTimestamp}`)
 
-        // Query patient_insurance_policies with payer join
-        const { data: policies, error } = await supabaseAdmin
-            .from('patient_insurance_policies')
-            .select(`
-                id,
-                payer_id,
-                member_id,
-                group_number,
-                policy_holder_name,
-                policy_holder_dob,
-                relationship_to_insured,
-                coverage_type,
-                effective_date,
-                termination_date,
-                is_active,
-                payers (
-                    id,
-                    name,
-                    payer_type,
-                    state
-                )
-            `)
-            .eq('patient_id', patientId)
-            .eq('is_active', true)
-            .lte('effective_date', atTimestamp)
-            .or(`termination_date.is.null,termination_date.gte.${atTimestamp}`)
-            .order('effective_date', { ascending: false })
-            .limit(1)
-
-        if (error) {
-            console.error('❌ Error querying patient_insurance_policies:', error)
-            throw new Error(`Database error: ${error.message}`)
-        }
-
-        if (!policies || policies.length === 0) {
-            console.error(`❌ No active policy found for patient ${patientId} at ${atTimestamp}`)
+        // DEV-ONLY: Create synthetic policy from payer
+        if (!payerId) {
+            console.error(`❌ No payerId provided (policy table doesn't exist yet)`)
             const noPolicyError = new Error(`No active insurance policy found for patient ${patientId}`)
             ;(noPolicyError as any).status = 404
-            ;(noPolicyError as any).code = 'NO_ACTIVE_POLICY'
+            ;(noPolicyError as any).code = 'NO_ACTIVE_POLICY_FOR_PAYER'
             throw noPolicyError
         }
 
-        const policy = policies[0]
-        const payer = policy.payers as any
+        // Query payer details
+        const { data: payer, error: payerError } = await supabaseAdmin
+            .from('payers')
+            .select('id, name, payer_type, state')
+            .eq('id', payerId)
+            .single()
 
-        // Validate required fields
-        if (!policy.id) {
-            throw new Error('Policy data missing id')
+        if (payerError || !payer) {
+            console.error('❌ Error querying payer:', payerError)
+            const noPolicyError = new Error(`No active insurance policy found for patient ${patientId}`)
+            ;(noPolicyError as any).status = 404
+            ;(noPolicyError as any).code = 'NO_ACTIVE_POLICY_FOR_PAYER'
+            throw noPolicyError
         }
 
-        if (!policy.payer_id || !payer?.name) {
-            throw new Error('Policy data missing payer information')
-        }
-
-        if (!policy.member_id) {
-            throw new Error('Policy data missing member_id')
-        }
-
-        // Format the result
+        // Create synthetic policy
         const result: ActivePolicyResult = {
-            policyId: policy.id,
+            policyId: `synthetic-${patientId}-${payerId}`,
             payerSnapshot: {
-                id: policy.payer_id,
+                id: payer.id,
                 name: payer.name,
                 type: payer.payer_type || 'unknown',
-                network_status: undefined, // Not in patient_insurance_policies
-                effective_date: policy.effective_date,
-                termination_date: policy.termination_date
+                network_status: undefined,
+                effective_date: atTimestamp,
+                termination_date: undefined
             },
             memberSnapshot: {
-                member_id: policy.member_id,
-                group_number: policy.group_number,
-                policy_holder_name: policy.policy_holder_name,
-                policy_holder_dob: policy.policy_holder_dob,
-                relationship_to_insured: policy.relationship_to_insured,
-                coverage_type: policy.coverage_type
+                member_id: patientId, // Using patient ID as member ID for dev
+                group_number: undefined,
+                policy_holder_name: undefined,
+                policy_holder_dob: undefined,
+                relationship_to_insured: 'self',
+                coverage_type: undefined
             }
         }
 
-        console.log(`✅ Got active policy for patient ${patientId}:`, {
+        console.log(`✅ Created synthetic policy for patient ${patientId}:`, {
             policyId: result.policyId,
             payerName: result.payerSnapshot.name,
             memberId: result.memberSnapshot.member_id
@@ -130,6 +96,7 @@ export async function getActivePolicy(patientId: string, at?: Date): Promise<Act
         console.error(`❌ Unexpected error in getActivePolicy for patient ${patientId}:`, error)
         const wrappedError = new Error(`Failed to get active policy: ${error.message}`)
         ;(wrappedError as any).status = 500
+        ;(wrappedError as any).code = 'NO_ACTIVE_POLICY_FOR_PAYER'
         throw wrappedError
     }
 }

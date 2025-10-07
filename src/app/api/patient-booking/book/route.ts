@@ -127,17 +127,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             }, { status: 409 })
         }
 
-        // Step 3: Get active policy with snapshots
+        // Step 3: Get active policy with snapshots (pass payerId for synthetic policy)
         console.log('📋 Getting active insurance policy...')
         let policyResult
         try {
-            policyResult = await getActivePolicy(patientId, startDate)
+            policyResult = await getActivePolicy(patientId, startDate, payerId)
         } catch (error: any) {
             console.error('❌ Failed to get active policy:', error)
             return NextResponse.json({
                 success: false,
                 error: error.message,
-                code: error.code || 'NO_ACTIVE_POLICY'
+                code: error.code || 'NO_ACTIVE_POLICY_FOR_PAYER'
             }, { status: error.status || 422 })
         }
 
