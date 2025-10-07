@@ -10,7 +10,7 @@ export async function getIntakeqServiceId(serviceInstanceId: string): Promise<st
 
         const { data, error } = await supabaseAdmin
             .from('service_instance_integrations')
-            .select('external_id, system, go_live_date')
+            .select('external_id, system')  // Removed go_live_date - column doesn't exist in schema
             .eq('service_instance_id', serviceInstanceId)
             .in('system', ['intakeq', 'practiceq'])
             .single()
@@ -41,16 +41,8 @@ export async function getIntakeqServiceId(serviceInstanceId: string): Promise<st
             throw missingMappingError
         }
 
-        // Check if the mapping has gone live
-        if (data.go_live_date && new Date(data.go_live_date) > new Date()) {
-            console.error(`❌ IntakeQ/PracticeQ mapping for service instance ${serviceInstanceId} is not yet live (go-live: ${data.go_live_date})`)
-            const notLiveError = new Error(
-                `Service instance ${serviceInstanceId} mapping is not yet live (go-live date: ${data.go_live_date})`
-            )
-            ;(notLiveError as any).status = 422
-            ;(notLiveError as any).code = 'MAPPING_NOT_LIVE'
-            throw notLiveError
-        }
+        // Skip go_live_date check - column doesn't exist in current schema
+        // If needed in future, add migration to create the column first
 
         if (!data.external_id) {
             console.error(`❌ Missing external_id in mapping for service instance: ${serviceInstanceId}`)
@@ -98,7 +90,7 @@ export async function getIntakeqServiceIdsBatch(serviceInstanceIds: string[]): P
     try {
         const { data, error } = await supabaseAdmin
             .from('service_instance_integrations')
-            .select('service_instance_id, external_id, system, go_live_date')
+            .select('service_instance_id, external_id, system')  // Removed go_live_date - column doesn't exist
             .in('service_instance_id', serviceInstanceIds)
             .in('system', ['intakeq', 'practiceq'])
 
@@ -109,7 +101,6 @@ export async function getIntakeqServiceIdsBatch(serviceInstanceIds: string[]): P
 
         const mappings: Record<string, string> = {}
         const missingMappings: string[] = []
-        const notLiveMappings: string[] = []
 
         for (const serviceInstanceId of serviceInstanceIds) {
             const mapping = data?.find(row => row.service_instance_id === serviceInstanceId)
@@ -119,12 +110,7 @@ export async function getIntakeqServiceIdsBatch(serviceInstanceIds: string[]): P
                 continue
             }
 
-            // Check if the mapping has gone live
-            if (mapping.go_live_date && new Date(mapping.go_live_date) > new Date()) {
-                notLiveMappings.push(`${serviceInstanceId} (go-live: ${mapping.go_live_date})`)
-                continue
-            }
-
+            // Skip go_live_date check - column doesn't exist in current schema
             mappings[serviceInstanceId] = mapping.external_id
         }
 
@@ -135,15 +121,6 @@ export async function getIntakeqServiceIdsBatch(serviceInstanceIds: string[]): P
             ;(missingMappingError as any).status = 422
             ;(missingMappingError as any).code = 'MISSING_SERVICE_MAPPING'
             throw missingMappingError
-        }
-
-        if (notLiveMappings.length > 0) {
-            const notLiveError = new Error(
-                `Service instance mappings not yet live: ${notLiveMappings.join(', ')}`
-            )
-            ;(notLiveError as any).status = 422
-            ;(notLiveError as any).code = 'MAPPING_NOT_LIVE'
-            throw notLiveError
         }
 
         console.log(`✅ Got IntakeQ/PracticeQ service IDs for ${Object.keys(mappings).length} service instances`)

@@ -314,11 +314,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             payer_id: payerId
         })
 
-        // Step 5: Resolve IntakeQ mappings (TEMPORARILY DISABLED for testing)
-        console.log('⚠️ SKIPPING IntakeQ sync (API key issue) - testing database booking only')
+        // Step 5: Resolve IntakeQ mappings
+        console.log('🔍 Resolving IntakeQ mappings...')
 
-        // TODO: Re-enable IntakeQ sync after fixing API key
-        const SKIP_INTAKEQ_SYNC = true
+        // IntakeQ sync re-enabled with new API key (updated Oct 7, 2025)
+        const SKIP_INTAKEQ_SYNC = false
 
         if (SKIP_INTAKEQ_SYNC) {
             // Mark as successfully scheduled without IntakeQ

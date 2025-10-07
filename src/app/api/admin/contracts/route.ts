@@ -174,14 +174,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert new contract
-    const { data: newContract, error: insertError } = await supabaseAdmin
+    const { data: newContract, error: insertError} = await supabaseAdmin
       .from('provider_payer_networks')
       .insert({
         provider_id,
         payer_id,
         effective_date,
         expiration_date: expiration_date || null,
-        status: status || 'active',
+        status: status || null,  // Allow null - database will handle defaults
         notes: notes || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()

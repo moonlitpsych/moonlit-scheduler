@@ -1,47 +1,69 @@
+// Admin API endpoint for fetching ALL providers (not just bookable ones)
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/types/database'
+import { supabaseAdmin } from '@/lib/supabase'
+import { isAdminEmail } from '@/lib/admin-auth'
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
-const supabase = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+async function verifyAdminAccess() {
+  try {
+    const cookieStore = await cookies()
+    const supabase = createServerComponentClient({ cookies: () => cookieStore })
+    const { data: { user }, error } = await supabase.auth.getUser()
+
+    if (error || !user || !isAdminEmail(user.email || '')) {
+      return { authorized: false, user: null }
+    }
+
+    return { authorized: true, user }
+  } catch (error) {
+    console.error('Admin verification error:', error)
+    return { authorized: false, user: null }
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 Fetching providers for selection...')
-
-    // Get all providers for dropdown selection
-    const { data: providers, error: providersError } = await supabase
-      .from('providers')
-      .select('id, first_name, last_name')
-      .order('last_name', { ascending: true })
-
-    if (providersError) {
-      console.error('❌ Error fetching providers:', providersError)
+    const { authorized } = await verifyAdminAccess()
+    if (!authorized) {
       return NextResponse.json(
-        { error: 'Failed to fetch providers' },
+        { success: false, error: 'Admin access required' },
+        { status: 403 }
+      )
+    }
+
+    console.log('🔍 Admin fetching ALL providers...')
+
+    // Fetch ALL providers (no filters) for admin use
+    const { data: providers, error } = await supabaseAdmin
+      .from('providers')
+      .select('id, first_name, last_name, email, is_active, is_bookable, role, title')
+      .order('last_name')
+
+    if (error) {
+      console.error('❌ Error fetching providers:', error)
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch providers', details: error },
         { status: 500 }
       )
     }
 
-    // Transform the data to include full names
-    const transformedProviders = providers?.map(provider => ({
-      id: provider.id,
-      name: `${provider.first_name} ${provider.last_name}`.trim()
-    })) || []
-
-    console.log(`✅ Found ${transformedProviders.length} providers`)
+    console.log(`✅ Found ${providers?.length || 0} providers`)
 
     return NextResponse.json({
       success: true,
-      data: transformedProviders
+      data: providers || [],
+      total: providers?.length || 0
     })
 
-  } catch (error) {
-    console.error('❌ Providers API error:', error)
+  } catch (error: any) {
+    console.error('❌ Error in admin providers API:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        success: false,
+        error: 'Failed to fetch providers',
+        details: error.message
+      },
       { status: 500 }
     )
   }

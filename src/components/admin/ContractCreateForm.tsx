@@ -40,7 +40,7 @@ export default function ContractCreateForm({
   const [payerId, setPayerId] = useState('')
   const [effectiveDate, setEffectiveDate] = useState('')
   const [expirationDate, setExpirationDate] = useState('')
-  const [status, setStatus] = useState('active')
+  const [status, setStatus] = useState('')  // Empty = let database use default
   const [notes, setNotes] = useState('')
   const [auditNote, setAuditNote] = useState('')
 
@@ -55,8 +55,8 @@ export default function ContractCreateForm({
     try {
       setLoadingData(true)
 
-      // Fetch providers
-      const providersRes = await fetch('/api/providers')
+      // Fetch ALL providers (use admin endpoint to get all providers, not just bookable ones)
+      const providersRes = await fetch('/api/admin/providers')
       if (providersRes.ok) {
         const providersData = await providersRes.json()
         setProviders(providersData.data || [])
@@ -138,7 +138,7 @@ export default function ContractCreateForm({
     setPayerId('')
     setEffectiveDate('')
     setExpirationDate('')
-    setStatus('active')
+    setStatus('')
     setNotes('')
     setAuditNote('')
     onClose()
@@ -262,11 +262,11 @@ export default function ContractCreateForm({
                 </p>
               </div>
 
-              {/* Status */}
+              {/* Status - Optional field */}
               <div>
                 <label className="flex items-center space-x-2 text-sm font-medium text-[#091747] mb-2">
                   <Check className="h-4 w-4" />
-                  <span>Status</span>
+                  <span>Status (Optional)</span>
                 </label>
                 <select
                   value={status}
@@ -274,10 +274,14 @@ export default function ContractCreateForm({
                   disabled={submitting}
                   className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73] disabled:opacity-50"
                 >
+                  <option value="">Default (let database decide)</option>
                   <option value="active">Active</option>
                   <option value="pending">Pending</option>
                   <option value="inactive">Inactive</option>
                 </select>
+                <p className="text-xs text-[#091747]/60 mt-1">
+                  Leave as default unless you need a specific status
+                </p>
               </div>
 
               {/* Notes */}
@@ -320,9 +324,17 @@ export default function ContractCreateForm({
                 <div className="flex items-start space-x-2">
                   <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-red-800">
-                    <strong>Important:</strong> This will create a new provider-payer contract in the database.
-                    This affects bookability and patient scheduling. Please verify all information is correct
-                    before submitting. The system will check for date overlaps with existing contracts.
+                    <strong>What this creates:</strong>
+                    <ul className="list-disc ml-5 mt-2 space-y-1">
+                      <li><strong>One new row</strong> in the <code>provider_payer_networks</code> table</li>
+                      <li>This establishes a <strong>direct contract</strong> between the provider and payer</li>
+                      <li><strong>Bookability is automatically updated</strong> through the <code>v_bookable_provider_payer</code> view</li>
+                      <li><strong>No supervision relationships</strong> are created - use the Supervision page for that</li>
+                    </ul>
+                    <p className="mt-3">
+                      <strong>Impact:</strong> This immediately affects which providers patients can book with this payer.
+                      The system will check for date overlaps with existing contracts.
+                    </p>
                   </div>
                 </div>
               </div>
