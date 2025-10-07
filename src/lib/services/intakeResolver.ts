@@ -36,21 +36,17 @@ export async function resolveIntakeServiceInstance(payerId: string): Promise<Int
             throw invalidPayerError
         }
 
-        // S1: Query base Intake Telehealth service instances (filter name in code for resilience)
+        // S1: Query base Intake service instances (filter by service name)
         const { data: s1AllData, error: s1Error } = await supabaseAdmin
             .from('service_instances')
             .select(`
                 id,
                 payer_id,
-                location,
-                pos_code,
                 services!inner(
                     name,
                     duration_minutes
                 )
             `)
-            .eq('location', 'Telehealth')
-            .eq('pos_code', '10')
 
         if (s1Error) {
             console.error('❌ S1 query error:', s1Error)

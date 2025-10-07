@@ -76,6 +76,71 @@ export async function POST(request: NextRequest) {
       note: body.note
     })
 
+    // Auto-create service instances for new payer
+    console.log('📦 Auto-creating service instances for new payer...')
+    const defaultServices = [
+      {
+        name: 'Intake',
+        serviceId: 'f0a05d4c-188a-4f1b-9600-54d6c27a3f62',
+        intakeqId: '137bcec9-6d59-4cd8-910f-a1d9c0616319'
+      },
+      {
+        name: 'Follow-up (Short)',
+        serviceId: '4b6e81ed-e30e-4127-ba71-21aa9fac8cd1',
+        intakeqId: '436ebccd-7e5b-402d-9f13-4c5733e3af8c'
+      },
+      {
+        name: 'Follow-up (Extended)',
+        serviceId: 'a6cdf789-41f7-484d-a948-272547eb566e',
+        intakeqId: 'f0490d0a-992f-4f14-836f-0e41e11be14d'
+      }
+    ]
+
+    for (const service of defaultServices) {
+      // Create service_instance
+      const { data: instance, error: instanceError } = await supabase
+        .from('service_instances')
+        .insert({
+          service_id: service.serviceId,
+          payer_id: newPayer.id
+        })
+        .select()
+        .single()
+
+      if (instanceError) {
+        console.error(`❌ Failed to create ${service.name} instance:`, instanceError)
+        continue
+      }
+
+      console.log(`✅ Created ${service.name} service instance: ${instance.id}`)
+
+      // Create IntakeQ integration mapping
+      const { error: integrationError } = await supabase
+        .from('service_instance_integrations')
+        .insert({
+          service_instance_id: instance.id,
+          system: 'intakeq',
+          external_id: service.intakeqId
+        })
+
+      if (integrationError) {
+        console.error(`❌ Failed to create IntakeQ mapping for ${service.name}:`, integrationError)
+      } else {
+        console.log(`✅ Created IntakeQ mapping for ${service.name}`)
+      }
+
+      // Log to audit trail
+      auditEntries.push({
+        actorUserId: mockUserId,
+        action: 'create_service_instance' as any,
+        entity: 'service_instances' as any,
+        entityId: instance.id,
+        before: null,
+        after: instance,
+        note: `Auto-created ${service.name} service instance for new payer`
+      })
+    }
+
     // Handle new contracts
     for (const newContract of body.newContracts) {
       if (!newContract.provider_id) {
