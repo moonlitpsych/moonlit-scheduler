@@ -110,7 +110,7 @@ async function ensurePatient(input: {
         }
 
         // Create new patient
-        const { data: newPatient, error: createError } = await supabaseAdmin
+        const { data: newPatient, error: createError} = await supabaseAdmin
             .from('patients')
             .insert({
                 first_name: firstName,
@@ -118,11 +118,13 @@ async function ensurePatient(input: {
                 email: normalizedEmail,
                 phone: phone || null,
                 date_of_birth: dateOfBirth || null,
-                status: 'pending',
+                status: 'active',  // Only 'active' allowed by patients_status_check constraint
                 created_at: new Date().toISOString()
             })
             .select('id')
             .single()
+
+        console.log('[ENSURE_PATIENT] Allowed patient status values: active (constraint: patients_status_check)')
 
         if (createError || !newPatient) {
             console.error('[ENSURE_PATIENT] ❌ Failed to create patient:', createError)
