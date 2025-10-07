@@ -234,146 +234,37 @@ export async function POST(request: NextRequest) {
 
         console.log(`📊 After applying exceptions: ${filteredAvailability.length} availability records`)
 
-        // Step 5: Generate time slots (regular + co-visit)
-        const allSlots: AvailableSlot[] = []
-        
-        // Process regular providers with duration-based slot generation
+        // Step 5: Generate time slots using resolved Intake serviceInstanceId and durationMinutes
+        const allSlots: IntakeSlot[] = []
+
+        // Process all bookable providers using the single resolved Intake service instance
         for (const avail of filteredAvailability || []) {
-            const provider = regularProviders.find(bp => bp.provider_id === avail.provider_id)
+            const provider = bookableProviders.find(bp => bp.provider_id === avail.provider_id)
             if (!provider) continue
 
-            console.log(`⏰ Regular provider ${provider.first_name} ${provider.last_name}: ${avail.start_time} - ${avail.end_time}`)
+            console.log(`⏰ Provider ${provider.first_name} ${provider.last_name}: ${avail.start_time} - ${avail.end_time}`)
 
             try {
-                // Get primary service instance with gating
-                const serviceInstance = await getPrimaryServiceInstance(
-                    provider.provider_id,
-                    payer_id,
-                    bypassGating
+                // Use the already-resolved Intake service instance and duration
+                const slots = generateIntakeTimeSlotsFromAvailability(
+                    avail,
+                    requestDate,
+                    {
+                        id: provider.provider_id,
+                        first_name: provider.first_name || '',
+                        last_name: provider.last_name || '',
+                        title: provider.title || 'MD',
+                        role: provider.role || 'physician'
+                    },
+                    durationMinutes
                 )
 
-                if (!serviceInstance) {
-                    console.log(`⚠️ No valid service instance for provider ${provider.first_name} ${provider.last_name}, skipping`)
-                    continue
-                }
-
-                // Check if service instance has live PQ mapping (unless bypassing gating)
-                if (!bypassGating) {
-                    const hasMapping = await hasLiveMapping(serviceInstance.id)
-                    if (!hasMapping) {
-                        console.log(`⚠️ Service instance ${serviceInstance.id} has no live PQ mapping for provider ${provider.first_name} ${provider.last_name}, skipping`)
-                        continue
-                    }
-                }
-
-                // Get effective duration for this service instance
-                const duration = await getEffectiveDurationMinutes(serviceInstance.id)
-
-                const slots = generateTimeSlotsFromAvailability(avail, requestDate, {
-                    id: provider.provider_id,
-                    first_name: provider.first_name || '',
-                    last_name: provider.last_name || '',
-                    title: provider.title || 'MD',
-                    role: provider.role || 'physician'
-                }, duration, serviceInstance.id)
-
                 allSlots.push(...slots)
-                console.log(`✅ Generated ${slots.length} slots for ${provider.first_name} ${provider.last_name} (${duration}min duration)`)
+                console.log(`✅ Generated ${slots.length} Intake slots for ${provider.first_name} ${provider.last_name} (${durationMinutes}min duration)`)
 
             } catch (error: any) {
                 console.error(`❌ Error processing provider ${provider.first_name} ${provider.last_name}:`, error.message)
-
-                // Return specific error codes for missing mappings/durations
-                if (error.code === 'MISSING_DURATION') {
-                    return NextResponse.json(
-                        { error: error.message, code: 'MISSING_DURATION', success: false },
-                        { status: 422 }
-                    )
-                }
-                // Continue with other providers on other errors
-                continue
-            }
-        }
-
-        // Process co-visit providers with duration-based slots
-        for (const coVisitProvider of coVisitProviders) {
-            if (!coVisitProvider.attending_provider_id) {
-                console.warn(`⚠️ Co-visit provider ${coVisitProvider.first_name} ${coVisitProvider.last_name} missing attending_provider_id`)
-                continue
-            }
-
-            console.log(`🤝 Processing co-visit for resident ${coVisitProvider.first_name} ${coVisitProvider.last_name} with attending ${coVisitProvider.attending_provider_id}`)
-
-            try {
-                // Get primary service instance for co-visit provider
-                const coVisitServiceInstance = await getPrimaryServiceInstance(
-                    coVisitProvider.provider_id,
-                    payer_id,
-                    bypassGating
-                )
-
-                if (!coVisitServiceInstance) {
-                    console.log(`⚠️ No valid service instance for co-visit provider ${coVisitProvider.first_name} ${coVisitProvider.last_name}, skipping`)
-                    continue
-                }
-
-                // Check if co-visit service instance has live PQ mapping (unless bypassing gating)
-                if (!bypassGating) {
-                    const hasMapping = await hasLiveMapping(coVisitServiceInstance.id)
-                    if (!hasMapping) {
-                        console.log(`⚠️ Co-visit service instance ${coVisitServiceInstance.id} has no live PQ mapping for provider ${coVisitProvider.first_name} ${coVisitProvider.last_name}, skipping`)
-                        continue
-                    }
-                }
-
-                // Get effective duration for co-visit
-                const coVisitDuration = await getEffectiveDurationMinutes(coVisitServiceInstance.id)
-
-                const coVisitSlots = await coVisitService.getCoVisitAvailability(
-                    coVisitProvider.provider_id,
-                    coVisitProvider.attending_provider_id,
-                    requestDate,
-                    coVisitDuration
-                )
-                const devFallbackId = process.env.NEXT_PUBLIC_APP_ENV === 'dev' ? '12191f44-a09c-426f-8e22-0c5b8e57b3b7' : undefined
-
-                // Convert co-visit slots to AvailableSlot format with correct duration
-                const convertedSlots = coVisitSlots.map(cvSlot => ({
-                    date: requestDate,
-                    time: new Date(cvSlot.start_time).toTimeString().slice(0, 5),
-                    providerId: cvSlot.resident_provider_id,
-                    providerName: `${coVisitProvider.first_name} ${coVisitProvider.last_name} (with ${cvSlot.attending_name})`,
-                    duration: coVisitDuration,
-                    isAvailable: true,
-                    serviceInstanceId: coVisitServiceInstance.id,
-                    provider: {
-                        id: coVisitProvider.provider_id,
-                        first_name: coVisitProvider.first_name || '',
-                        last_name: coVisitProvider.last_name || '',
-                        title: coVisitProvider.title || 'MD',
-                        role: coVisitProvider.role || 'physician'
-                    },
-                    // NEW: Co-visit specific metadata
-                    isCoVisit: true,
-                    attendingProviderId: cvSlot.attending_provider_id,
-                    attendingName: cvSlot.attending_name,
-                    supervisionLevel: coVisitProvider.supervision_level
-                }))
-
-                allSlots.push(...convertedSlots)
-                console.log(`✅ Added ${convertedSlots.length} co-visit slots for ${coVisitProvider.first_name} ${coVisitProvider.last_name} (${coVisitDuration}min duration)`)
-
-            } catch (error: any) {
-                console.error(`❌ Error processing co-visit for ${coVisitProvider.first_name} ${coVisitProvider.last_name}:`, error.message)
-
-                // Return specific error codes for missing mappings/durations
-                if (error.code === 'MISSING_DURATION') {
-                    return NextResponse.json(
-                        { error: error.message, code: 'MISSING_DURATION', success: false },
-                        { status: 422 }
-                    )
-                }
-                // Continue with other providers on other errors
+                // Continue with other providers on error
                 continue
             }
         }
