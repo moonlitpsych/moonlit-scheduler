@@ -1,6 +1,9 @@
 import { supabaseAdmin } from '@/lib/supabase'
 import { intakeQService } from '@/lib/services/intakeQService'
 import { normalizeIntakeqClientId, isValidIntakeqClientId } from './utils'
+import { enrichClientData, type EnrichedClientData } from '@/lib/services/intakeqEnrichment'
+import { logIntakeqSync } from '@/lib/services/intakeqAudit'
+import { featureFlags } from '@/lib/config/featureFlags'
 
 export interface IntakeQAppointmentRequest {
     intakeqClientId: string
@@ -29,8 +32,10 @@ export interface PolicySnapshot {
 
 /**
  * Ensures a patient has an IntakeQ client ID, creating one if missing
+ * V2.0: Supports enrichment when payerId is provided
  */
-export async function ensureClient(patientId: string): Promise<string> {
+export async function ensureClient(patientId: string, payerId?: string | null): Promise<string> {
+    const startTime = Date.now()
     try {
         // First check if patient already has an IntakeQ client ID
         const { data: patient, error: fetchError } = await supabaseAdmin
@@ -66,12 +71,41 @@ export async function ensureClient(patientId: string): Promise<string> {
         // Create new IntakeQ client
         console.log(`🔄 Creating new IntakeQ client for patient ${patientId}...`)
 
-        const clientData = {
-            FirstName: patient.first_name || '',
-            LastName: patient.last_name || '',
-            Email: patient.email || '',
-            Phone: patient.phone || '',
-            DateOfBirth: patient.date_of_birth || null
+        // V2.0: Apply enrichment if enabled and payerId provided
+        let clientData: EnrichedClientData
+        let enrichmentResult: any = null
+
+        if (featureFlags.practiceqEnrich && payerId) {
+            console.log('🔄 V2.0: Applying enrichment to client data...')
+            enrichmentResult = await enrichClientData(patientId, payerId, {
+                FirstName: patient.first_name || '',
+                LastName: patient.last_name || '',
+                Email: patient.email || '',
+                Phone: patient.phone || null,
+                DateOfBirth: patient.date_of_birth || null
+            })
+            clientData = enrichmentResult.enrichedData
+            console.log(`✅ V2.0: Enrichment applied. Fields: ${enrichmentResult.enrichmentFields.join(', ')}`)
+
+            // Log enrichment to audit trail
+            await logIntakeqSync({
+                action: 'enrichment_applied',
+                status: 'success',
+                patientId,
+                enrichmentData: {
+                    fields: enrichmentResult.enrichmentFields,
+                    errors: enrichmentResult.errors
+                }
+            })
+        } else {
+            // No enrichment - use basic data
+            clientData = {
+                FirstName: patient.first_name || '',
+                LastName: patient.last_name || '',
+                Email: patient.email || '',
+                Phone: patient.phone || '',
+                DateOfBirth: patient.date_of_birth || null
+            }
         }
 
         const clientResponse = await intakeQService.createClient(clientData)
@@ -111,10 +145,34 @@ export async function ensureClient(patientId: string): Promise<string> {
         }
 
         console.log(`✅ Created and persisted IntakeQ client ID for patient ${patientId}: ${intakeqClientId}`)
+
+        // V2.0: Log successful client creation to audit trail
+        const duration = Date.now() - startTime
+        await logIntakeqSync({
+            action: 'create_client',
+            status: 'success',
+            patientId,
+            intakeqClientId,
+            payload: clientData,
+            response: clientResponse,
+            durationMs: duration
+        })
+
         return intakeqClientId
 
     } catch (error: any) {
         console.error(`❌ Error ensuring IntakeQ client for patient ${patientId}:`, error)
+
+        // V2.0: Log failed client creation to audit trail
+        const duration = Date.now() - startTime
+        await logIntakeqSync({
+            action: 'create_client',
+            status: 'failed',
+            patientId,
+            error: error.message,
+            durationMs: duration
+        })
+
         throw error
     }
 }

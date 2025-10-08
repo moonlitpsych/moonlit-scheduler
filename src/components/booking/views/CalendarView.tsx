@@ -836,9 +836,13 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     }
 
     const handleDateClick = async (date: Date) => {
-        setSelectedDate(date)
+        // Always clear slots and refetch, even if clicking the same date
+        // This ensures availability refreshes when user clicks same date again
         setSelectedSlot(null)
-        setConsolidatedSlots(prev => prev.map(slot => ({ ...slot, isSelected: false })))
+        setConsolidatedSlots([])
+        setSelectedDate(date)
+
+        // Force refetch even if date hasn't changed
         await fetchAvailabilityForDate(date, { mode: viewMode, providerId: selectedProvider })
     }
 

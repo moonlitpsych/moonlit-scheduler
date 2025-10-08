@@ -49,33 +49,60 @@ COMMENT ON COLUMN payer_external_mappings.system IS 'External system name (intak
 COMMENT ON COLUMN payer_external_mappings.key_name IS 'Type of mapping (insurance_company_name, payer_code, etc.)';
 COMMENT ON COLUMN payer_external_mappings.value IS 'The external system identifier value';
 
--- Example seed data (IntakeQ insurance company names)
--- Note: These are examples - actual values should be verified with IntakeQ API
-INSERT INTO payer_external_mappings (payer_id, system, key_name, value, notes)
-SELECT
-    id,
-    'intakeq',
-    'insurance_company_name',
-    CASE
-        WHEN name ILIKE '%molina%' THEN 'Molina Healthcare'
-        WHEN name ILIKE '%pehp%' THEN 'PEHP'
-        WHEN name ILIKE '%select health%' THEN 'Select Health'
-        WHEN name ILIKE '%university of utah%' THEN 'University of Utah Health Plans'
-        WHEN name ILIKE '%regence%' THEN 'Regence'
-        ELSE name -- Default to payer name if no specific mapping
-    END,
-    'Auto-generated mapping - verify with IntakeQ'
-FROM payers
-WHERE payer_type = 'insurance'
-ON CONFLICT (payer_id, system, key_name) DO NOTHING;
+-- NO AUTO-SEEDING
+-- Mappings must be added manually via admin UI or direct SQL after verifying with PracticeQ/IntakeQ
+--
+-- Example manual insert (replace with actual values):
+-- INSERT INTO payer_external_mappings (payer_id, system, key_name, value, created_by, notes)
+-- VALUES (
+--   '<payer_uuid>',
+--   'intakeq',
+--   'insurance_company_name',
+--   '<exact_intakeq_payer_name>',
+--   'admin@trymoonlit.com',
+--   'Manually mapped on YYYY-MM-DD after verifying in PracticeQ'
+-- );
+--
+-- Based on screenshot of PracticeQ payers (2025-10-08):
+-- Available PracticeQ payers and their IDs:
+-- - 60054: Aetna Health, Inc.
+-- - SX105: Deseret Mutual Benefit Administrators
+-- - 60054: First Health Network (same ID as Aetna)
+-- - 45399: Health Choice of Utah
+-- - SX155: HealthyU Medicaid
+-- - SX155: Huntsman Mental Health Institute Behavioral Health Network (HMHI BHN) (same ID as HealthyU)
+-- - MCDID: Medicaid Idaho
+-- - SKUT0: Medicaid Utah
+-- - SX109: Molina Healthcare of Utah (aka American Family Care)
+-- - U7632: MotivHealth Insurance Company (duplicated in screenshot)
+-- - SX155: University of Utah Health Plans (same ID as HealthyU/HMHI)
+--
+-- Moonlit payers with provider contracts (from database):
+-- - d5bf8ae0-9670-49b8-8a3a-b66b82aa1ba2: Aetna
+-- - 8bd0bedb-226e-4253-bfeb-46ce835ef2a8: DMBA
+-- - 29e7aa03-6afc-48b0-8d80-50a596aa3565: First Health Network
+-- - 62ab291d-b68e-4c71-a093-2d6e380764c3: Health Choice Utah
+-- - d218f12b-f8c4-498e-96c4-a03693c322d2: HealthyU (UUHP)
+-- - 2db7c014-8674-40bb-b918-88160ffde0a6: HMHI BHN
+-- - e66daffe-8444-43e0-908c-c366c5d38ef7: Idaho Medicaid
+-- - 8b48c3e2-f555-4d67-8122-c086466ba97d: Molina Utah
+-- - 1f9c18ec-f4af-4343-9c1f-515abda9c442: MotivHealth
+-- - c9a7e516-4498-4e21-8f7c-b359653d2d69: Optum Commercial Behavioral Health
+-- - c238fcff-dd31-4be8-a0b2-292c0800d9c4: University of Utah Health Plans (UUHP)
+-- - a01d69d6-ae70-4917-afef-49b5ef7e5220: Utah Medicaid Fee-for-Service
+--
+-- TO POPULATE: Review each payer and map to correct PracticeQ ID
+-- Question for Miriam: Which Moonlit payer names should map to which PracticeQ IDs?
 
--- Verification query
+-- Verification query (will show empty until mappings are added)
 SELECT
-    p.name AS payer_name,
+    p.name AS moonlit_payer_name,
+    p.id AS moonlit_payer_id,
     pem.system,
-    pem.key_name,
-    pem.value AS external_value,
-    pem.notes
+    pem.value AS practiceq_id,
+    pem.notes,
+    pem.created_by,
+    pem.created_at
 FROM payer_external_mappings pem
 JOIN payers p ON p.id = pem.payer_id
 ORDER BY p.name;

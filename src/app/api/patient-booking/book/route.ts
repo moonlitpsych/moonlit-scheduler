@@ -233,8 +233,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
 
         if (!SKIP_INTAKEQ_SYNC) {
             try {
-                // Get/create IntakeQ client
-                intakeqClientId = await ensureClient(patientId)
+                // Get/create IntakeQ client (V2.0: pass payerId for enrichment)
+                intakeqClientId = await ensureClient(patientId, payerId)
 
                 // Get provider mapping
                 practitionerExternalId = await getIntakeqPractitionerId(providerId)
