@@ -1,7 +1,5 @@
 import { Metadata } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import Header from '@/components/layout/Header'
-import Footer from '@/components/layout/Footer'
 import PracticeQWidget from '@/components/booking/PracticeQWidget'
 
 export const metadata: Metadata = {
@@ -55,9 +53,7 @@ export default async function SeeAPsychiatristWidget() {
 
   return (
     <>
-      <Header />
-
-      <main className="min-h-screen bg-[#FEF8F1] pt-24 pb-12">
+      <div className="min-h-screen bg-[#FEF8F1] py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Page Header */}
           <div className="text-center mb-12">
@@ -98,9 +94,7 @@ export default async function SeeAPsychiatristWidget() {
             </div>
           )}
         </div>
-      </main>
-
-      <Footer />
+      </div>
 
       {/* Canonical tag */}
       <link
