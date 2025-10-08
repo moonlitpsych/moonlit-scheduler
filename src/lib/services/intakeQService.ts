@@ -1,6 +1,7 @@
 // src/lib/services/intakeQService.ts
 import { intakeQRateLimiter } from './rateLimiter'
 import { intakeQCache } from './intakeQCache'
+import { assertValidIntakeqClientId } from '../intakeq/utils'
 
 interface IntakeQAppointment {
   PractitionerId: string
@@ -119,6 +120,11 @@ class IntakeQService {
     console.log('📅 Creating IntakeQ appointment with existing client...')
 
     try {
+      // CRITICAL: Validate client ID format before API call
+      // This catches malformed IDs like {"Id":"98"} or stringified JSON
+      assertValidIntakeqClientId(appointmentData.clientId)
+      console.log(`✅ IntakeQ ClientId validation passed: "${appointmentData.clientId}" (type: ${typeof appointmentData.clientId})`)
+
       // IntakeQ requires timestamps in milliseconds and times must be on 5-minute boundaries
       const appointmentDateTime = new Date(appointmentData.dateTime)
       const minutes = appointmentDateTime.getMinutes()

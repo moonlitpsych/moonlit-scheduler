@@ -33,7 +33,23 @@ interface IntakeSlot {
 
 export async function POST(request: NextRequest) {
     try {
-        const { payer_id, date, startDate, endDate, provider_id } = await request.json()
+        // Safe JSON parsing - handle empty body, 204 responses, or HTML error pages
+        let body: any = {}
+        try {
+            const text = await request.text()
+            if (text && text.trim().length > 0) {
+                body = JSON.parse(text)
+            }
+        } catch (parseError: any) {
+            console.error('❌ Failed to parse request body:', parseError.message)
+            return NextResponse.json({
+                success: false,
+                error: 'Invalid request body - expected JSON',
+                details: parseError.message
+            }, { status: 400 })
+        }
+
+        const { payer_id, date, startDate, endDate, provider_id } = body
 
         const requestDate = date || startDate
         const requestEndDate = endDate || date
@@ -481,12 +497,12 @@ async function filterIntakeConflictingAppointments(
 
     for (const [providerId, providerSlots] of Object.entries(slotsByProvider)) {
         try {
-            // Check local database conflicts for Intake service instance (status='scheduled')
+            // Check local database conflicts for ALL appointments (any service type)
+            // A provider can only be in one place at a time regardless of payer/service
             const { data: localConflicts, error: localError } = await supabaseAdmin
                 .from('appointments')
                 .select('start_time, end_time')
                 .eq('provider_id', providerId)
-                .eq('service_instance_id', serviceInstanceId)
                 .eq('status', 'scheduled')
                 .gte('start_time', `${date}T00:00:00Z`)
                 .lt('start_time', `${date}T23:59:59Z`)
@@ -587,84 +603,111 @@ async function filterIntakeConflictingAppointmentsWithStats(
         return acc
     }, {} as Record<string, IntakeSlot[]>)
 
+    const providerIds = Object.keys(slotsByProvider)
+    console.log(`⚡ Parallel conflict check for ${providerIds.length} providers`)
+
+    // OPTIMIZATION: Batch all database queries in parallel
+    const [localConflictsResult, providersResult] = await Promise.all([
+        // Single query for ALL providers' local conflicts
+        supabaseAdmin
+            .from('appointments')
+            .select('provider_id, start_time, end_time')
+            .in('provider_id', providerIds)
+            .eq('status', 'scheduled')
+            .gte('start_time', `${date}T00:00:00Z`)
+            .lt('start_time', `${date}T23:59:59Z`),
+
+        // Single query for ALL providers' IntakeQ IDs
+        supabaseAdmin
+            .from('providers')
+            .select('id, intakeq_practitioner_id')
+            .in('id', providerIds)
+    ])
+
+    if (localConflictsResult.error) {
+        console.error(`❌ Error checking local conflicts:`, localConflictsResult.error)
+    }
+
+    if (providersResult.error) {
+        console.error(`❌ Error fetching provider IntakeQ IDs:`, providersResult.error)
+    }
+
+    // Group local conflicts by provider
+    const localConflictsByProvider = (localConflictsResult.data || []).reduce((acc, appt) => {
+        if (!acc[appt.provider_id]) {
+            acc[appt.provider_id] = []
+        }
+        acc[appt.provider_id].push({
+            start: new Date(appt.start_time),
+            end: new Date(appt.end_time)
+        })
+        return acc
+    }, {} as Record<string, Array<{start: Date, end: Date}>>)
+
+    // OPTIMIZATION: Parallelize all IntakeQ API calls
+    const intakeqConflictsPromises = (providersResult.data || []).map(async (provider) => {
+        if (!provider.intakeq_practitioner_id) {
+            return { providerId: provider.id, conflicts: [] }
+        }
+
+        try {
+            const existingAppointments = await intakeQService.getAppointmentsForDate(
+                provider.intakeq_practitioner_id,
+                date
+            )
+
+            const conflicts = existingAppointments.map(appointment => ({
+                start: new Date(appointment.StartDate),
+                end: new Date(appointment.EndDate || (appointment.StartDate + durationMinutes * 60 * 1000))
+            }))
+
+            return { providerId: provider.id, conflicts }
+        } catch (error: any) {
+            console.warn(`⚠️ Failed to check IntakeQ conflicts for provider ${provider.id}:`, error.message)
+            return { providerId: provider.id, conflicts: [] }
+        }
+    })
+
+    const intakeqConflictsResults = await Promise.all(intakeqConflictsPromises)
+    const intakeqConflictsByProvider = intakeqConflictsResults.reduce((acc, result) => {
+        acc[result.providerId] = result.conflicts
+        return acc
+    }, {} as Record<string, Array<{start: Date, end: Date}>>)
+
+    console.log(`✅ Loaded conflicts for ${providerIds.length} providers in parallel`)
+
+    // Filter slots using pre-loaded conflict data
     const filteredSlots: IntakeSlot[] = []
     let removedByLocal = 0
     let removedByPQ = 0
 
     for (const [providerId, providerSlots] of Object.entries(slotsByProvider)) {
-        try {
-            // Check local database conflicts
-            const { data: localConflicts, error: localError } = await supabaseAdmin
-                .from('appointments')
-                .select('start_time, end_time')
-                .eq('provider_id', providerId)
-                .eq('service_instance_id', serviceInstanceId)
-                .eq('status', 'scheduled')
-                .gte('start_time', `${date}T00:00:00Z`)
-                .lt('start_time', `${date}T23:59:59Z`)
+        const localConflictTimes = localConflictsByProvider[providerId] || []
+        const intakeqConflictTimes = intakeqConflictsByProvider[providerId] || []
 
-            if (localError) {
-                console.error(`❌ Error checking local conflicts for provider ${providerId}:`, localError)
+        const availableSlots = providerSlots.filter(slot => {
+            const slotStart = new Date(`${slot.date}T${slot.time}:00`)
+            const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60 * 1000)
+
+            const hasLocalConflict = localConflictTimes.some(conflict =>
+                slotStart < conflict.end && slotEnd > conflict.start
+            )
+
+            const hasIntakeqConflict = intakeqConflictTimes.some(conflict =>
+                slotStart < conflict.end && slotEnd > conflict.start
+            )
+
+            if (hasLocalConflict) {
+                removedByLocal++
+            }
+            if (hasIntakeqConflict) {
+                removedByPQ++
             }
 
-            const localConflictTimes = localConflicts?.map(appt => ({
-                start: new Date(appt.start_time),
-                end: new Date(appt.end_time)
-            })) || []
+            return !hasLocalConflict && !hasIntakeqConflict
+        })
 
-            // Check IntakeQ conflicts
-            const { data: provider, error } = await supabaseAdmin
-                .from('providers')
-                .select('intakeq_practitioner_id')
-                .eq('id', providerId)
-                .single()
-
-            let intakeqConflictTimes: Array<{start: Date, end: Date}> = []
-            if (!error && provider?.intakeq_practitioner_id) {
-                try {
-                    const existingAppointments = await intakeQService.getAppointmentsForDate(
-                        provider.intakeq_practitioner_id,
-                        date
-                    )
-
-                    intakeqConflictTimes = existingAppointments.map(appointment => ({
-                        start: new Date(appointment.StartDate),
-                        end: new Date(appointment.EndDate || (appointment.StartDate + durationMinutes * 60 * 1000))
-                    }))
-                } catch (intakeqError: any) {
-                    console.warn(`⚠️ Failed to check IntakeQ conflicts for provider ${providerId}:`, intakeqError.message)
-                }
-            }
-
-            // Filter slots and track removals
-            const availableSlots = providerSlots.filter(slot => {
-                const slotStart = new Date(`${slot.date}T${slot.time}:00`)
-                const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60 * 1000)
-
-                const hasLocalConflict = localConflictTimes.some(conflict =>
-                    slotStart < conflict.end && slotEnd > conflict.start
-                )
-
-                const hasIntakeqConflict = intakeqConflictTimes.some(conflict =>
-                    slotStart < conflict.end && slotEnd > conflict.start
-                )
-
-                if (hasLocalConflict) {
-                    removedByLocal++
-                }
-                if (hasIntakeqConflict) {
-                    removedByPQ++
-                }
-
-                return !hasLocalConflict && !hasIntakeqConflict
-            })
-
-            filteredSlots.push(...availableSlots)
-
-        } catch (error: any) {
-            console.error(`❌ Error checking conflicts for provider ${providerId}:`, error.message)
-            filteredSlots.push(...providerSlots)
-        }
+        filteredSlots.push(...availableSlots)
     }
 
     return {

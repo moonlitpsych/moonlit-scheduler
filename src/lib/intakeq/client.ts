@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase'
 import { intakeQService } from '@/lib/services/intakeQService'
+import { normalizeIntakeqClientId, isValidIntakeqClientId } from './utils'
 
 export interface IntakeQAppointmentRequest {
     intakeqClientId: string
@@ -47,10 +48,19 @@ export async function ensureClient(patientId: string): Promise<string> {
             throw new Error(`Patient not found: ${patientId}`)
         }
 
-        // If patient already has IntakeQ client ID, return it
+        // If patient already has IntakeQ client ID, normalize and return it
         if (patient.intakeq_client_id) {
-            console.log(`✅ Patient ${patientId} already has IntakeQ client ID: ${patient.intakeq_client_id}`)
-            return patient.intakeq_client_id
+            // Use proper normalization to handle malformed formats: {"Id":"98"}, '{"Id":"98"}', "98"
+            const clientId = normalizeIntakeqClientId(patient.intakeq_client_id)
+
+            // Validate it's in correct format (numeric string)
+            if (clientId && isValidIntakeqClientId(clientId)) {
+                console.log(`✅ Patient ${patientId} already has IntakeQ client ID: ${clientId} (normalized from ${typeof patient.intakeq_client_id})`)
+                return clientId
+            } else {
+                console.warn(`⚠️ Patient ${patientId} has malformed IntakeQ client ID: ${JSON.stringify(patient.intakeq_client_id)}, normalized to: "${clientId}" - will recreate`)
+                // Fall through to create new client
+            }
         }
 
         // Create new IntakeQ client
@@ -70,9 +80,26 @@ export async function ensureClient(patientId: string): Promise<string> {
             throw new Error('Failed to create IntakeQ client - no client ID returned')
         }
 
-        const intakeqClientId = clientResponse.Id
+        // CRITICAL: Normalize the client ID from IntakeQ response
+        // IntakeQ might return {Id: "98"}, {ClientId: 98}, or other formats
+        const rawClientId = clientResponse.Id
+        const intakeqClientId = normalizeIntakeqClientId(rawClientId)
 
-        // Persist the IntakeQ client ID to our database
+        // Validate the normalized ID before saving to database
+        if (!isValidIntakeqClientId(intakeqClientId)) {
+            console.error(`❌ IntakeQ returned invalid client ID format:`, rawClientId)
+            throw new Error(`Invalid client ID format from IntakeQ: ${JSON.stringify(rawClientId)}`)
+        }
+
+        console.log(`✅ Normalized new IntakeQ client ID: "${intakeqClientId}" (from ${typeof rawClientId}: ${JSON.stringify(rawClientId)})`)
+
+        // ✅ FIX: Add delay to ensure IntakeQ has propagated the client
+        // IntakeQ needs time before the client is available for appointments
+        // Testing shows 500ms is insufficient - increasing to 2000ms
+        console.log('⏳ Waiting 2000ms for IntakeQ client propagation...')
+        await new Promise(resolve => setTimeout(resolve, 2000))
+
+        // Persist the NORMALIZED IntakeQ client ID to our database
         const { error: updateError } = await supabaseAdmin
             .from('patients')
             .update({ intakeq_client_id: intakeqClientId })
@@ -151,16 +178,22 @@ export async function createAppointment(request: IntakeQAppointmentRequest): Pro
             lastError = error
             console.error(`❌ IntakeQ appointment creation attempt ${attempt} failed:`, error)
 
-            // Check if this is a retryable error (429 rate limit, 5xx server error)
-            const isRetryable = error.status === 429 || (error.status >= 500 && error.status < 600)
+            // Check if this is a retryable error:
+            // - 429 rate limit
+            // - 5xx server error
+            // - 400 "Client not found" (race condition with client creation)
+            const isClientNotFound = error.status === 400 && error.message?.includes('Client not found')
+            const isRetryable = error.status === 429 ||
+                               (error.status >= 500 && error.status < 600) ||
+                               isClientNotFound
 
             if (!isRetryable || attempt === maxRetries) {
                 break
             }
 
-            // Exponential backoff: 1s, 2s, 4s
-            const delayMs = Math.pow(2, attempt - 1) * 1000
-            console.log(`⏳ Retrying in ${delayMs}ms...`)
+            // Exponential backoff: 2s, 4s, 8s (longer delays for IntakeQ propagation)
+            const delayMs = Math.pow(2, attempt) * 1000
+            console.log(`⏳ Retrying in ${delayMs}ms...${isClientNotFound ? ' (waiting for IntakeQ client propagation)' : ''}`)
             await new Promise(resolve => setTimeout(resolve, delayMs))
         }
     }

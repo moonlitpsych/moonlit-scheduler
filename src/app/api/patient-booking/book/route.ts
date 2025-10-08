@@ -220,15 +220,54 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000)
         console.log(`⏰ Appointment duration: ${durationMinutes} minutes (${startDate.toISOString()} → ${endDate.toISOString()})`)
 
-        // Step 2: Conflict check (no explicit transaction needed)
+        // Step 2: Resolve IntakeQ mappings BEFORE creating appointment
+        // This prevents creating DB records when IntakeQ mapping fails
+        console.log('🔍 Resolving IntakeQ mappings...')
+
+        // IntakeQ sync re-enabled with new API key (updated Oct 7, 2025)
+        const SKIP_INTAKEQ_SYNC = false
+
+        let intakeqClientId: string = ''
+        let practitionerExternalId: string = ''
+        let serviceExternalId: string = ''
+
+        if (!SKIP_INTAKEQ_SYNC) {
+            try {
+                // Get/create IntakeQ client
+                intakeqClientId = await ensureClient(patientId)
+
+                // Get provider mapping
+                practitionerExternalId = await getIntakeqPractitionerId(providerId)
+
+                // Get service mapping
+                serviceExternalId = await getIntakeqServiceId(serviceInstanceId)
+
+                console.log('✅ IntakeQ mappings resolved:', { intakeqClientId, practitionerExternalId, serviceExternalId })
+
+            } catch (error: any) {
+                console.error('❌ Failed to resolve IntakeQ mappings BEFORE appointment creation:', error)
+                return NextResponse.json({
+                    success: false,
+                    error: error.message,
+                    code: error.code || 'MAPPING_ERROR'
+                }, { status: error.status || 422 })
+            }
+        }
+
+        // Step 3: Conflict check - Check ALL appointments for this provider (any service type)
+        // A provider can only be in one place at a time regardless of appointment type
         console.log('🔒 Checking for appointment conflicts...')
+
+        // CRITICAL: Correct overlap detection
+        // Two appointments overlap if: existing.start < new.end AND existing.end > new.start
+        // This catches all overlaps including: adjacent, partial, contained, and surrounding
         const { data: conflicts, error: conflictError } = await supabaseAdmin
             .from('appointments')
-            .select('id, start_time, end_time')
+            .select('id, start_time, end_time, service_instance_id')
             .eq('provider_id', providerId)
             .eq('status', 'scheduled')
-            .gte('end_time', startDate.toISOString())
-            .lte('start_time', endDate.toISOString())
+            .lt('start_time', endDate.toISOString())      // existing starts before new ends
+            .gt('end_time', startDate.toISOString())      // existing ends after new starts
 
         if (conflictError) {
             console.error('❌ Error checking conflicts:', conflictError)
@@ -243,6 +282,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                 code: 'SLOT_TAKEN'
             }, { status: 409 })
         }
+
+        console.log('✅ Conflict check passed, proceeding with appointment creation')
 
         // Step 3: Get payer info for insurance sync (no policy lookup needed)
         console.log('📋 Fetching payer details...')
@@ -314,11 +355,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             payer_id: payerId
         })
 
-        // Step 5: Resolve IntakeQ mappings
-        console.log('🔍 Resolving IntakeQ mappings...')
-
-        // IntakeQ sync re-enabled with new API key (updated Oct 7, 2025)
-        const SKIP_INTAKEQ_SYNC = false
+        // Step 5: IntakeQ mappings already resolved earlier (before appointment creation)
+        // Skip this section - mappings are in intakeqClientId, practitionerExternalId, serviceExternalId
 
         if (SKIP_INTAKEQ_SYNC) {
             // Mark as successfully scheduled without IntakeQ
@@ -334,38 +372,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                 console.error('❌ Error updating appointment:', finalUpdateError)
             }
 
-            // Send notifications
-            await sendNotifications({ appointmentId, patientId, providerId })
-
             return NextResponse.json({
                 success: true,
-                appointmentId,
+                data: {
+                    appointmentId,
+                    status: 'scheduled'
+                },
                 message: 'Appointment created successfully (IntakeQ sync skipped)',
                 warning: 'IntakeQ sync is temporarily disabled. Appointment created in database only.'
             })
-        }
-
-        let intakeqClientId: string
-        let practitionerExternalId: string
-        let serviceExternalId: string
-
-        try {
-            // Get/create IntakeQ client
-            intakeqClientId = await ensureClient(patientId)
-
-            // Get provider mapping
-            practitionerExternalId = await getIntakeqPractitionerId(providerId)
-
-            // Get service mapping
-            serviceExternalId = await getIntakeqServiceId(serviceInstanceId)
-
-        } catch (error: any) {
-            console.error('❌ Failed to resolve IntakeQ mappings:', error)
-            return NextResponse.json({
-                success: false,
-                error: error.message,
-                code: error.code || 'MAPPING_ERROR'
-            }, { status: error.status || 422 })
         }
 
         // Step 6: Sync client insurance to IntakeQ (SKIPPED - endpoint doesn't exist in IntakeQ API)
@@ -389,11 +404,52 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             console.log('[PQ_SYNC] pqAppointmentId:', pqAppointmentId)
 
         } catch (error: any) {
-            console.error('❌ IntakeQ appointment creation failed:', error)
+            // CRITICAL: Rollback database appointment on ANY IntakeQ failure
+            // (network, 4xx, 5xx, timeout, validation, etc.)
+            const errorType = error.status ? `HTTP ${error.status}` : error.code || 'UNKNOWN'
+            console.error(`❌ IntakeQ appointment creation failed (${errorType}):`, {
+                message: error.message,
+                status: error.status,
+                code: error.code,
+                appointmentId
+            })
+
+            // BULLETPROOF ROLLBACK: Always attempt, log result with appointment ID for reconciliation
+            console.log(`🗑️ ROLLBACK: Deleting appointment ${appointmentId} due to IntakeQ failure...`)
+
+            try {
+                const { error: deleteError } = await supabaseAdmin
+                    .from('appointments')
+                    .delete()
+                    .eq('id', appointmentId)
+
+                if (deleteError) {
+                    console.error('❌ CRITICAL ROLLBACK FAILURE:', {
+                        appointmentId,
+                        deleteError: deleteError.message,
+                        originalError: error.message
+                    })
+                    console.error(`⚠️ ORPHANED APPOINTMENT: ${appointmentId} - Manual cleanup required!`)
+                    console.error(`   Provider: ${providerId}, Time: ${startDate.toISOString()} - ${endDate.toISOString()}`)
+                } else {
+                    console.log(`✅ ROLLBACK SUCCESS: Deleted appointment ${appointmentId}`)
+                }
+            } catch (rollbackError: any) {
+                console.error('❌ CRITICAL: Rollback exception:', {
+                    appointmentId,
+                    rollbackError: rollbackError.message,
+                    originalError: error.message
+                })
+            }
+
             return NextResponse.json({
                 success: false,
                 error: `Failed to create appointment in IntakeQ: ${error.message}`,
-                code: 'EHR_WRITE_FAILED'
+                code: 'EHR_WRITE_FAILED',
+                details: {
+                    errorType,
+                    appointmentId // Include for client-side logging/debugging
+                }
             }, { status: 502 })
         }
 

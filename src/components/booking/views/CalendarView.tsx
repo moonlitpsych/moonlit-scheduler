@@ -418,34 +418,41 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     }, [selectedPayer?.id]) // loadAcceptanceMap is defined below, will be available when this runs
 
     // Load providers for provider name lookup
+    // ✅ FIX: Use providers-for-payer API to only show bookable providers for selected payer
     const loadProviders = async () => {
+        if (!selectedPayer?.id) {
+            console.warn('⚠️ No payer selected, cannot load providers')
+            setProviders([])
+            return
+        }
+
         try {
             setLoadingProviders(true)
-            console.log('👥 FRONTEND: Loading providers from API for name mapping... [v2]')
+            console.log('👥 FRONTEND: Loading BOOKABLE providers for payer:', selectedPayer.id)
 
-            const response = await fetch('/api/providers/all')
+            const response = await fetch('/api/patient-booking/providers-for-payer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payer_id: selectedPayer.id,
+                    language: selectedLanguage
+                })
+            })
+
             if (response.ok) {
                 const data = await response.json()
                 if (data.success && data.data?.providers) {
                     setProviders(data.data.providers)
-                    console.log(`✅ FRONTEND: Loaded ${data.data.providers.length} providers for name lookup`)
+                    console.log(`✅ FRONTEND: Loaded ${data.data.providers.length} BOOKABLE providers for payer`)
 
                     // Create and log provider name mapping for debugging
-                    const nameMap = data.data.providers.reduce((map, p) => {
+                    const nameMap = data.data.providers.reduce((map: Record<string, string>, p: any) => {
                         const fullName = `${p.first_name || ''} ${p.last_name || ''}`.trim();
                         map[p.id] = fullName || 'Provider';
                         return map
                     }, {} as Record<string, string>)
                     setProviderMap(nameMap)
-                    console.log('🗺️ PROVIDER NAME MAP:', nameMap)
-
-                    // Specifically check for Dr. Norseth
-                    const norseth = data.data.providers.find(p => p.id === '35ab086b-2894-446d-9ab5-3d41613017ad')
-                    if (norseth) {
-                        console.log('👨‍⚕️ FOUND TRAVIS NORSETH:', norseth.first_name, norseth.last_name, '→', nameMap[norseth.id])
-                    } else {
-                        console.warn('⚠️ Travis Norseth not found in provider list')
-                    }
+                    console.log('🗺️ PROVIDER NAME MAP (bookable only):', nameMap)
 
                     // ✅ INITIAL LOAD of acceptance map (useEffect will reload on payer changes)
                     await loadAcceptanceMap()

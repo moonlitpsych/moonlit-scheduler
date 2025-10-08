@@ -78,70 +78,95 @@ export async function POST(request: NextRequest) {
                 throw providerError
             }
 
-            // Get focus areas for each provider (same as /api/providers/all)
+            // OPTIMIZATION: Batch fetch focus areas for all providers in one query
             const providersWithFocus = []
             if (basicProviders) {
-                for (const provider of basicProviders) {
-                    // Get focus areas for this provider
-                    const { data: focusAreas, error: focusError } = await supabaseAdmin
-                        .from('provider_focus_areas')
-                        .select(`
-                            focus_areas!inner (
-                                id,
-                                name,
-                                slug,
-                                focus_type
-                            ),
-                            priority,
-                            confidence
-                        `)
-                        .eq('provider_id', provider.id)
-                        .eq('focus_areas.is_active', true)
-                        .order('priority', { ascending: true })
+                // Single query for ALL providers' focus areas
+                const { data: allFocusAreas, error: focusError } = await supabaseAdmin
+                    .from('provider_focus_areas')
+                    .select(`
+                        provider_id,
+                        focus_areas!inner (
+                            id,
+                            name,
+                            slug,
+                            focus_type
+                        ),
+                        priority,
+                        confidence
+                    `)
+                    .in('provider_id', providerIds)
+                    .eq('focus_areas.is_active', true)
+                    .order('priority', { ascending: true })
 
-                    const focus_json = focusAreas ? focusAreas.map(fa => ({
+                if (focusError) {
+                    console.error('❌ Error fetching focus areas:', focusError)
+                }
+
+                // Group focus areas by provider
+                const focusAreasByProvider = (allFocusAreas || []).reduce((acc, fa) => {
+                    if (!acc[fa.provider_id]) {
+                        acc[fa.provider_id] = []
+                    }
+                    acc[fa.provider_id].push({
                         id: fa.focus_areas.id,
                         name: fa.focus_areas.name,
                         slug: fa.focus_areas.slug,
                         type: fa.focus_areas.focus_type,
                         priority: fa.priority,
                         confidence: fa.confidence
-                    })) : []
+                    })
+                    return acc
+                }, {} as Record<string, any[]>)
 
+                // Attach focus areas to each provider
+                for (const provider of basicProviders) {
                     providersWithFocus.push({
                         ...provider,
-                        focus_json
+                        focus_json: focusAreasByProvider[provider.id] || []
                     })
                 }
             }
 
-            // ✅ B) Build accepted_services with real seeded service instances
+            // ✅ B) Build accepted_services with real service instances from database
             const providersWithServiceInstances = []
             if (providersWithFocus) {
-                // Known constants from seeded database
-                const PAYER_ID_UTAH_MEDICAID = 'a01d69d6-ae70-4917-afef-49b5ef7e5220'
-                const TELEHEALTH_INTAKE_SERVICE_ID = 'f0a05d4c-188a-4f1b-9600-54d6c27a3f62'
-                const SERVICE_INSTANCE_ID_HOUSED = '12191f44-a09c-426f-8e22-0c5b8e57b3b7'
-                const SERVICE_INSTANCE_ID_UNHOUSED = '1a659f8e-249a-4690-86e7-359c6c381bc0'
+                // Get all service instances for this payer
+                const { data: serviceInstances, error: serviceError } = await supabaseAdmin
+                    .from('service_instances')
+                    .select(`
+                        id,
+                        service_id,
+                        services!inner(
+                            id,
+                            name,
+                            duration_minutes,
+                            service_type
+                        )
+                    `)
+                    .eq('payer_id', payer_id)
+
+                if (serviceError) {
+                    console.error('❌ Error fetching service instances:', serviceError)
+                }
+
+                const instances = serviceInstances || []
+                console.log(`📦 Found ${instances.length} service instances for payer ${payer_id}`)
 
                 for (const provider of providersWithFocus) {
-                    let accepted_services = []
+                    // Map service instances to accepted_services format
+                    const accepted_services = instances.map(instance => ({
+                        service_id: instance.service_id,
+                        service_instance_id: instance.id,
+                        name: `${instance.services.name} (${instance.services.duration_minutes}m)`,
+                        type: instance.services.service_type || 'unknown',
+                        duration_minutes: instance.services.duration_minutes
+                    }))
 
-                    // For Utah Medicaid, add Telehealth Intake service with real instance
-                    if (payer_id === PAYER_ID_UTAH_MEDICAID) {
-                        // Default to Housed instance (can be enhanced later with housing status logic)
-                        const serviceInstanceId = SERVICE_INSTANCE_ID_HOUSED
-
-                        accepted_services.push({
-                            service_id: TELEHEALTH_INTAKE_SERVICE_ID,
-                            service_instance_id: serviceInstanceId,
-                            name: 'Intake (Telehealth, 60m)',
-                            type: 'intake'
-                        })
-
-                        console.log(`✅ Provider ${provider.id}: Telehealth Intake service_instance_id = ${serviceInstanceId}`)
+                    if (accepted_services.length > 0) {
+                        console.log(`✅ Provider ${provider.id}: ${accepted_services.length} service instances available`)
                     } else {
-                        console.warn(`⚠️ Provider ${provider.id}: No service instances configured for payer ${payer_id}`)
+                        console.warn(`⚠️ Provider ${provider.id}: No service instances found for payer ${payer_id}`)
                     }
 
                     providersWithServiceInstances.push({
