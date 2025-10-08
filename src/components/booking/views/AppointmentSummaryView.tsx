@@ -3,6 +3,7 @@
 import { InsuranceInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
 import { useEffect, useState } from 'react'
 import { BookingScenario } from '../BookingFlow'
+import { LEGAL_VERSION } from '@/lib/constants'
 
 interface Provider {
     id: string
@@ -474,11 +475,11 @@ export default function AppointmentSummaryView({
                     <div className="mt-6 text-center">
                         <p className="text-[#091747]/60 text-sm font-['Newsreader']">
                             By confirming this appointment, you agree to our{' '}
-                            <a href="/terms" className="text-[#BF9C73] hover:text-[#091747] underline">
+                            <a href={`/legal/terms?v=${LEGAL_VERSION}`} className="text-[#BF9C73] hover:text-[#091747] underline">
                                 Terms of Service
                             </a>{' '}
                             and{' '}
-                            <a href="/privacy" className="text-[#BF9C73] hover:text-[#091747] underline">
+                            <a href={`/legal/privacy?v=${LEGAL_VERSION}`} className="text-[#BF9C73] hover:text-[#091747] underline">
                                 Privacy Policy
                             </a>
                         </p>

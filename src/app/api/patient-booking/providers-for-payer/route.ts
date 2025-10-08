@@ -3,7 +3,7 @@
 import { supabaseAdmin } from '@/lib/supabase'
 import { BookableProviderPayer } from '@/types/database'
 import { NextRequest, NextResponse } from 'next/server'
-import { 
+import {
     BOOKABLE_PROVIDER_SELECT,
     PROVIDER_DETAILS_SELECT,
     mapViewToLegacyFormat,
@@ -11,8 +11,9 @@ import {
     groupProvidersBySupervision,
     BOOKABILITY_VIEWS,
     type BookableProviderPayerView,
-    type ProviderData 
+    type ProviderData
 } from '@/lib/bookability'
+import { featureFlags } from '@/lib/config/featureFlags'
 
 export async function POST(request: NextRequest) {
     try {
@@ -68,11 +69,20 @@ export async function POST(request: NextRequest) {
             const providerIds = [...new Set(relationships.map(r => r.provider_id))]
             
             // Get provider details separately
-            const { data: basicProviders, error: providerError } = await supabaseAdmin
+            // V2.0: Filter by accepts_new_patients for intake flows when flag enabled
+            let providersQuery = supabaseAdmin
                 .from('providers')
                 .select(PROVIDER_DETAILS_SELECT)
                 .in('id', providerIds)
                 .eq('is_bookable', true)
+
+            // Apply new patient filter if feature flag enabled
+            if (featureFlags.intakeHideNonIntakeProviders) {
+                providersQuery = providersQuery.eq('accepts_new_patients', true)
+                console.log('✅ V2.0: Filtering for accepts_new_patients=true (feature flag enabled)')
+            }
+
+            const { data: basicProviders, error: providerError } = await providersQuery
 
             if (providerError) {
                 throw providerError

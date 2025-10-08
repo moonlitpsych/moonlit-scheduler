@@ -8,6 +8,7 @@ import { ensureCacheExists } from '@/lib/services/availabilityCacheService'
 import { resolveIntakeServiceInstance } from '@/lib/services/intakeResolver'
 import { BookableProviderPayer } from '@/types/database'
 import { NextRequest, NextResponse } from 'next/server'
+import { featureFlags } from '@/lib/config/featureFlags'
 
 // Simplified slot interface for Intake-only (no per-slot service instance)
 interface IntakeSlot {
@@ -187,11 +188,20 @@ export async function POST(request: NextRequest) {
 
         // Step 2: Get base availability for ONLY these bookable providers
         // CRITICAL: Filter by bookable providers to exclude Doug Sirutis and other non-bookable providers
-        const { data: allProviders } = await supabaseAdmin
+        // V2.0: Also filter by accepts_new_patients for intake flows when flag enabled
+        let bookableQuery = supabaseAdmin
             .from('providers')
             .select('id')
             .eq('is_bookable', true)
             .not('intakeq_practitioner_id', 'is', null)
+
+        // Apply new patient filter if feature flag enabled
+        if (featureFlags.intakeHideNonIntakeProviders) {
+            bookableQuery = bookableQuery.eq('accepts_new_patients', true)
+            console.log('✅ V2.0: Filtering availability for accepts_new_patients=true (feature flag enabled)')
+        }
+
+        const { data: allProviders } = await bookableQuery
 
         const bookableProviderIds = allProviders?.map(p => p.id) || []
         const filteredProviderIds = providerIds.filter(id => bookableProviderIds.includes(id))
