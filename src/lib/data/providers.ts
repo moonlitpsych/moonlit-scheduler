@@ -12,12 +12,15 @@ export interface ProviderForCoverage {
 }
 
 export async function loadProvidersForCoverageList(): Promise<ProviderForCoverage[]> {
+  // For Coverage tool: Show ALL active providers who have contracts,
+  // not just those accepting new patients (Travis, Doug, etc. have contracts
+  // but may not be accepting new patients)
   const { data, error } = await supabase
     .from('providers')
     .select('id, first_name, last_name, role')
     .eq('is_active', true)
-    .eq('is_bookable', true)
-    .eq('accepts_new_patients', true)
+    // Removed: .eq('is_bookable', true) - show all providers with contracts
+    // Removed: .eq('accepts_new_patients', true) - show all providers with contracts
     .order('last_name', { ascending: true })
     .order('first_name', { ascending: true })
 
