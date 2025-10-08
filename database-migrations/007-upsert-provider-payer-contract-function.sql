@@ -68,7 +68,8 @@ BEGIN
     ppn.created_at,
     ppn.updated_at;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER
+   SET search_path = public;
 
 -- Grant execute permission to authenticated users (admin API will use service role)
 GRANT EXECUTE ON FUNCTION upsert_provider_payer_contract TO authenticated;
