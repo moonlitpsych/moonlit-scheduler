@@ -153,10 +153,10 @@ export default function ContractCreateForm({
         <div className="flex items-center justify-between p-6 border-b border-stone-200">
           <div>
             <h2 className="text-xl font-semibold text-[#091747] font-['Newsreader']">
-              Create New Payer Contract
+              Save Payer Contract
             </h2>
             <p className="text-sm text-[#091747]/60 mt-1">
-              Add a new provider-payer network relationship
+              Create or update a provider-payer network relationship
             </p>
           </div>
           <button
@@ -311,29 +311,29 @@ export default function ContractCreateForm({
                   required
                   disabled={submitting}
                   rows={2}
-                  placeholder="e.g., 'New contract received from Molina on 10/7/2025, effective 11/1/2025'"
+                  placeholder="e.g., 'New contract received from Molina on 10/7/2025, effective 11/1/2025' or 'Updating effective date per payer notification'"
                   className="w-full px-3 py-2 border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400/20 focus:border-yellow-400 disabled:opacity-50"
                 />
                 <p className="text-xs text-yellow-800 mt-2">
-                  This note will be logged for audit purposes. Include the source and reason for this contract creation.
+                  This note will be logged for audit purposes. Include the source and reason for this change.
                 </p>
               </div>
 
               {/* Warning about data integrity */}
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-start space-x-2">
-                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm text-red-800">
-                    <strong>What this creates:</strong>
+                  <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <strong>What this does:</strong>
                     <ul className="list-disc ml-5 mt-2 space-y-1">
-                      <li><strong>One new row</strong> in the <code>provider_payer_networks</code> table</li>
+                      <li><strong>Creates or updates</strong> one row in the <code>provider_payer_networks</code> table</li>
                       <li>This establishes a <strong>direct contract</strong> between the provider and payer</li>
                       <li><strong>Bookability is automatically updated</strong> through the <code>v_bookable_provider_payer</code> view</li>
                       <li><strong>No supervision relationships</strong> are created - use the Supervision page for that</li>
+                      <li>If a contract already exists for this provider-payer pair, it will be <strong>updated</strong> (not duplicated)</li>
                     </ul>
                     <p className="mt-3">
                       <strong>Impact:</strong> This immediately affects which providers patients can book with this payer.
-                      The system will check for date overlaps with existing contracts.
                     </p>
                   </div>
                 </div>
@@ -359,12 +359,12 @@ export default function ContractCreateForm({
               {submitting ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                  <span>Creating Contract...</span>
+                  <span>Saving Contract...</span>
                 </>
               ) : (
                 <>
                   <Check className="h-4 w-4" />
-                  <span>Create Contract</span>
+                  <span>Save Contract</span>
                 </>
               )}
             </button>
