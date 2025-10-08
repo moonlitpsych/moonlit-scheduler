@@ -11,6 +11,7 @@ import { Check, ChevronLeft, ChevronRight, Clock, Calendar, Users } from 'lucide
 import { useState, useEffect, useRef } from 'react'
 import ProviderCard, { Provider } from '@/components/shared/ProviderCard'
 import { mapApiSlotToTimeSlot, devValidateApiData, validateApiResponse } from '@/lib/utils/dataValidation'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 
 // UNIFIED SLOT NORMALIZER - Fixes providerId vs provider_id mismatch
 type UxSlot = {
@@ -205,6 +206,18 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
             }
         }
     }, [selectedLanguage])
+
+    // V2.0: Auto-refresh availability when filters change
+    useAutoRefresh({
+        onRefresh: () => {
+            if (selectedDate && selectedPayer?.id) {
+                console.log('🔄 V2.0 Auto-refresh: Fetching availability after filter change')
+                fetchAvailabilityForDate(selectedDate, { mode: viewMode, providerId: selectedProvider })
+            }
+        },
+        dependencies: [selectedPayer?.id, selectedDate, selectedProvider, viewMode, selectedLanguage],
+        debounceMs: 300
+    })
 
     // Fetch providers for "Book by Practitioner" mode
     const fetchProviders = async () => {

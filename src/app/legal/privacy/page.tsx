@@ -2,8 +2,8 @@ import { LEGAL_VERSION, PRACTICE_INFO } from '@/lib/constants'
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Privacy Policy | Moonlit Psychiatry',
-  description: 'Privacy Policy for Moonlit Psychiatry'
+  title: 'Privacy Policy | Moonlit',
+  description: 'Privacy Policy for Moonlit, PLLC'
 }
 
 export default function PrivacyPolicy() {

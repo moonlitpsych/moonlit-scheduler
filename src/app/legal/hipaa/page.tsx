@@ -2,8 +2,8 @@ import { LEGAL_VERSION, PRACTICE_INFO } from '@/lib/constants'
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Notice of Privacy Practices | Moonlit Psychiatry',
-  description: 'HIPAA Notice of Privacy Practices for Moonlit Psychiatry'
+  title: 'Notice of Privacy Practices | Moonlit',
+  description: 'HIPAA Notice of Privacy Practices for Moonlit, PLLC'
 }
 
 export default function HipaaNotice() {

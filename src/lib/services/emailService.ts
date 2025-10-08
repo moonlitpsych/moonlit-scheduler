@@ -23,7 +23,116 @@ interface AppointmentDetails {
 }
 
 class EmailService {
-  
+
+  /**
+   * V2.0: Send duplicate client detection alert to admin
+   */
+  async sendDuplicateClientAlert(params: {
+    patientId: string
+    patientName: string
+    patientEmail: string
+    existingIntakeqId: string
+    newIntakeqId: string
+    duplicateReason: string
+  }): Promise<void> {
+    const subject = `⚠️ Duplicate IntakeQ Client Detected - ${params.patientName}`
+
+    const emailBody = `
+🚨 V2.0 DUPLICATE CLIENT ALERT
+
+A duplicate IntakeQ client was detected during booking:
+
+PATIENT DETAILS:
+• Name: ${params.patientName}
+• Email: ${params.patientEmail}
+• Moonlit Patient ID: ${params.patientId}
+
+INTAKEQ CLIENT IDS:
+• Existing Client ID: ${params.existingIntakeqId}
+• Newly Created ID: ${params.newIntakeqId}
+
+DETECTION REASON:
+${params.duplicateReason}
+
+NEXT STEPS:
+1. Review both IntakeQ clients and determine which to keep
+2. Merge client records in IntakeQ if appropriate
+3. Update Moonlit patient record with correct IntakeQ client ID
+4. Check if this is a known issue or if detection needs improvement
+
+LINKS:
+• IntakeQ Existing Client: https://intakeq.com/client/${params.existingIntakeqId}
+• IntakeQ New Client: https://intakeq.com/client/${params.newIntakeqId}
+• Moonlit Patient: /admin/patients/${params.patientId}
+
+---
+This alert was triggered by the V2.0 duplicate detection system.
+Feature Flag: PRACTICEQ_DUPLICATE_ALERTS_ENABLED
+    `.trim()
+
+    await this.sendEmail({
+      to: 'miriam@trymoonlit.com',
+      subject,
+      body: emailBody
+    })
+
+    console.log('📧 V2.0: Duplicate client alert sent to miriam@trymoonlit.com')
+  }
+
+  /**
+   * V2.0: Send enrichment failure alert to admin
+   */
+  async sendEnrichmentFailureAlert(params: {
+    patientId: string
+    patientName: string
+    appointmentId?: string
+    errorMessage: string
+    failedFields: string[]
+  }): Promise<void> {
+    const subject = `❌ IntakeQ Enrichment Failed - ${params.patientName}`
+
+    const emailBody = `
+🚨 V2.0 ENRICHMENT FAILURE ALERT
+
+IntakeQ client enrichment failed during booking:
+
+PATIENT DETAILS:
+• Name: ${params.patientName}
+• Moonlit Patient ID: ${params.patientId}
+${params.appointmentId ? `• Appointment ID: ${params.appointmentId}` : ''}
+
+FAILURE DETAILS:
+• Error: ${params.errorMessage}
+• Failed Fields: ${params.failedFields.join(', ')}
+
+IMPACT:
+Booking has been blocked to prevent incomplete data in IntakeQ.
+The patient will see: "We're finalizing your reservation. You'll be hearing from our team to get this finalized for you."
+
+NEXT STEPS:
+1. Review the patient's data in Moonlit dashboard
+2. Fix any data issues (invalid phone, DOB, insurance info, etc.)
+3. Manually create the IntakeQ appointment or contact the patient
+4. Check logs for detailed error information
+
+LINKS:
+• Moonlit Patient: /admin/patients/${params.patientId}
+${params.appointmentId ? `• Moonlit Appointment: /admin/appointments/${params.appointmentId}` : ''}
+
+---
+This alert was triggered by the V2.0 enrichment system.
+Feature Flag: PRACTICEQ_ENRICH_ENABLED
+    `.trim()
+
+    await this.sendEmail({
+      to: 'miriam@trymoonlit.com',
+      subject,
+      body: emailBody
+    })
+
+    console.log('📧 V2.0: Enrichment failure alert sent to miriam@trymoonlit.com')
+  }
+
   async sendAppointmentNotifications(appointmentDetails: AppointmentDetails): Promise<void> {
     console.log('📧 Sending appointment notifications...')
 

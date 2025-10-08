@@ -2,8 +2,8 @@ import { LEGAL_VERSION, PRACTICE_INFO } from '@/lib/constants'
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Terms of Service | Moonlit Psychiatry',
-  description: 'Terms of Service for Moonlit Psychiatry'
+  title: 'Terms of Service | Moonlit',
+  description: 'Terms of Service for Moonlit, PLLC'
 }
 
 export default function TermsOfService() {
