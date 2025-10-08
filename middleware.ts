@@ -15,11 +15,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl, 301)
   }
 
-  // 2. Route redirect: /book/* → https://booknow.trymoonlit.com/see_a_psychiatrist (302)
-  // Temporary redirect to Bubble booking page for any /book routes
+  // 2. Route redirect: /book/* → /see-a-psychiatrist-widget (301)
+  // Redirect old booking routes to new native widget page
   if (pathname === '/book' || pathname.startsWith('/book/')) {
-    const redirectUrl = new URL('https://booknow.trymoonlit.com/see_a_psychiatrist')
-    return NextResponse.redirect(redirectUrl, 302)
+    const redirectUrl = new URL(`/see-a-psychiatrist-widget${search}`, request.url)
+    return NextResponse.redirect(redirectUrl, 301)
   }
 
   // Allow all other requests to proceed normally

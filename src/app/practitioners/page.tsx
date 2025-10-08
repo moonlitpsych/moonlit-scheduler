@@ -449,8 +449,7 @@ export default function PractitionersPage() {
                       provider.is_bookable !== false ? {
                         text: `Book ${provider.first_name ? `Dr. ${provider.last_name}` : 'Appointment'}`,
                         onClick: () => {
-                          const slug = generateProviderSlug(provider)
-                          window.location.href = `/book/provider/${slug}?intent=book`
+                          window.location.href = `/see-a-psychiatrist-widget`
                         },
                         variant: 'primary'
                       } : undefined // Non-bookable providers get no Book button
@@ -486,7 +485,7 @@ export default function PractitionersPage() {
                   Book your appointment with any of our practitioners today.
                 </p>
                 <Link
-                  href="/book"
+                  href="/see-a-psychiatrist-widget"
                   className="inline-block px-6 lg:px-8 py-3 lg:py-4 bg-[#BF9C73] hover:bg-[#A8865F] text-white text-base lg:text-lg font-['Newsreader'] rounded-xl transition-colors hover:shadow-lg"
                 >
                   Start Booking Process

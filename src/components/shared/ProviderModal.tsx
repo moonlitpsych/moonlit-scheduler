@@ -302,9 +302,7 @@ export default function ProviderModal() {
                             {provider.is_bookable !== false && showBookButton && (
                                 <button
                                     onClick={() => {
-                                        // Navigate to provider-specific booking using slug
-                                        const slug = generateProviderSlug(provider)
-                                        window.location.href = `/book/provider/${slug}?intent=book`
+                                        window.location.href = `/see-a-psychiatrist-widget`
                                     }}
                                     className="flex-1 bg-[#BF9C73] hover:bg-[#A8865F] text-white py-3 sm:py-4 px-6 sm:px-8 rounded-xl font-['Newsreader'] text-center transition-colors font-medium text-base sm:text-lg shadow-sm"
                                 >

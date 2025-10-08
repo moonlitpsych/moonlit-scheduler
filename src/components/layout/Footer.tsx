@@ -5,6 +5,7 @@ import Image from 'next/image'
 
 export default function Footer() {
     const currentYear = new Date().getFullYear()
+    const bookNavPath = process.env.NEXT_PUBLIC_BOOK_NAV_PATH || '/see-a-psychiatrist-widget'
 
     return (
         <footer 
@@ -32,10 +33,10 @@ export default function Footer() {
                         />
                         
                         <nav className="flex flex-col space-y-0">
-                            <Link href="/book" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
+                            <Link href={bookNavPath} className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
                                 see a psychiatrist
                             </Link>
-                            <Link href="/book?scenario=case-manager" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
+                            <Link href={`${bookNavPath}?scenario=case-manager`} className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
                                 refer someone
                             </Link>
                             <Link href="/ways-to-pay" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">

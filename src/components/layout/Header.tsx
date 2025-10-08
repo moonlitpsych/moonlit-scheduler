@@ -8,6 +8,7 @@ import { Menu, X } from 'lucide-react'
 export default function Header() {
     const [isMenuOpen, setIsMenuOpen] = useState(false)
     const [scrolled, setScrolled] = useState(false)
+    const bookNavPath = process.env.NEXT_PUBLIC_BOOK_NAV_PATH || '/see-a-psychiatrist-widget'
 
     useEffect(() => {
         const handleScroll = () => {
@@ -58,7 +59,7 @@ export default function Header() {
                         
                         {/* CTA Button */}
                         <Link
-                            href="/book"
+                            href={bookNavPath}
                             className="bg-[#BF9C73] hover:bg-[#A8865F] text-white px-6 py-3 rounded-xl font-['Newsreader'] transition-all duration-200 hover:shadow-lg hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-[#BF9C73]/20"
                             aria-label="Start booking your appointment"
                         >
@@ -101,7 +102,7 @@ export default function Header() {
                             </Link>
                         ))}
                         <Link
-                            href="/book"
+                            href={bookNavPath}
                             className="block mx-3 mt-4 bg-[#BF9C73] hover:bg-[#A8865F] text-white px-6 py-3 rounded-xl font-['Newsreader'] text-center transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-[#BF9C73]/20"
                             onClick={() => setIsMenuOpen(false)}
                             aria-label="Start booking your appointment"

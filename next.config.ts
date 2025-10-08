@@ -28,9 +28,14 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/book/:path*',
-        destination: 'https://booknow.trymoonlit.com/see_a_psychiatrist',
-        permanent: false, // 302/307
+        source: '/see_a_psychiatrist',
+        destination: '/see-a-psychiatrist-widget',
+        permanent: true, // 301
+      },
+      {
+        source: '/see-a-psychiatrist',
+        destination: '/see-a-psychiatrist-widget',
+        permanent: true, // 301
       },
     ];
   },
