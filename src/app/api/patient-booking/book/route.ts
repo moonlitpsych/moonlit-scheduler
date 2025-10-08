@@ -389,7 +389,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
 
         // Step 7: Create IntakeQ appointment
         console.log('📅 Creating IntakeQ appointment...')
-        let pqAppointmentId: string
+        let pqAppointmentId: string | null = null
+        let pqSyncError: string | null = null
+
         try {
             const appointmentResult = await createAppointment({
                 intakeqClientId,
@@ -404,42 +406,28 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             console.log('[PQ_SYNC] pqAppointmentId:', pqAppointmentId)
 
         } catch (error: any) {
-            // CRITICAL: Rollback database appointment on ANY IntakeQ failure
-            // (network, 4xx, 5xx, timeout, validation, etc.)
+            // NEW BEHAVIOR: Persist error instead of deleting appointment
             const errorType = error.status ? `HTTP ${error.status}` : error.code || 'UNKNOWN'
-            console.error(`❌ IntakeQ appointment creation failed (${errorType}):`, {
+            pqSyncError = `practiceq_create_failed: ${errorType} - ${error.message}`
+
+            console.error(`BOOKING DEBUG – PQ create failed: ${errorType}:`, {
                 message: error.message,
                 status: error.status,
                 code: error.code,
                 appointmentId
             })
 
-            // BULLETPROOF ROLLBACK: Always attempt, log result with appointment ID for reconciliation
-            console.log(`🗑️ ROLLBACK: Deleting appointment ${appointmentId} due to IntakeQ failure...`)
-
-            try {
-                const { error: deleteError } = await supabaseAdmin
-                    .from('appointments')
-                    .delete()
-                    .eq('id', appointmentId)
-
-                if (deleteError) {
-                    console.error('❌ CRITICAL ROLLBACK FAILURE:', {
-                        appointmentId,
-                        deleteError: deleteError.message,
-                        originalError: error.message
-                    })
-                    console.error(`⚠️ ORPHANED APPOINTMENT: ${appointmentId} - Manual cleanup required!`)
-                    console.error(`   Provider: ${providerId}, Time: ${startDate.toISOString()} - ${endDate.toISOString()}`)
-                } else {
-                    console.log(`✅ ROLLBACK SUCCESS: Deleted appointment ${appointmentId}`)
-                }
-            } catch (rollbackError: any) {
-                console.error('❌ CRITICAL: Rollback exception:', {
-                    appointmentId,
-                    rollbackError: rollbackError.message,
-                    originalError: error.message
+            // Mark appointment as error state
+            const { error: updateError } = await supabaseAdmin
+                .from('appointments')
+                .update({
+                    status: 'error',
+                    notes: (notes || '') + `\n\n[PQ SYNC FAILED ${new Date().toISOString()}]\nError: ${pqSyncError}`
                 })
+                .eq('id', appointmentId)
+
+            if (updateError) {
+                console.error('BOOKING DEBUG – Failed to persist PQ error:', updateError)
             }
 
             return NextResponse.json({
@@ -448,7 +436,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                 code: 'EHR_WRITE_FAILED',
                 details: {
                     errorType,
-                    appointmentId // Include for client-side logging/debugging
+                    appointmentId
                 }
             }, { status: 502 })
         }

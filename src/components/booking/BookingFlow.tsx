@@ -28,6 +28,7 @@ export type BookingStep =
     | 'roi'
     | 'appointment-summary'
     | 'confirmation'
+    | 'booking-error' // NEW: for PracticeQ sync failures
 
 export type BookingScenario = 'self' | 'third-party' | 'case-manager'
 export type BookingIntent = 'book' | 'explore'
@@ -54,6 +55,8 @@ export interface BookingState {
         verified?: boolean
         status?: 'verified' | 'accepted' | 'pending'
     }
+    // NEW: Error handling for PracticeQ sync failures
+    bookingError?: string
 }
 
 interface BookingFlowProps {
@@ -240,21 +243,20 @@ export default function BookingFlow({
                 throw new Error('Invalid response from server')
             }
 
-            console.log('📨 INTAKE BOOKING - API Response:', {
-                status: response.status,
+            console.log('BOOKING DEBUG – server response', {
                 ok: response.ok,
-                success: result?.success,
-                hasPqAppointmentId: !!result?.data?.pqAppointmentId,
-                error: result?.error,
+                pqAppointmentId: result?.data?.pqAppointmentId,
                 code: result?.code
             })
 
-            // Only proceed to confirmation if API returned success with PQ appointment ID
+            // CRITICAL: Only proceed to confirmation if pqAppointmentId exists
             if (!response.ok || !result?.success || !result?.data?.pqAppointmentId) {
-                console.error('❌ INTAKE BOOKING - Appointment creation failed:', {
+                console.error('BOOKING DEBUG – PQ sync failed:', {
                     status: response.status,
-                    result
+                    code: result?.code,
+                    appointmentId: result?.details?.appointmentId
                 })
+
                 // Map error codes to user-friendly messages
                 const errorMessage = result?.code === 'NO_INTAKE_INSTANCE_FOR_PAYER'
                     ? "This insurance isn't configured for new patient visits yet."
@@ -262,14 +264,21 @@ export default function BookingFlow({
                     ? "That provider isn't ready to book yet."
                     : result?.code === 'SLOT_TAKEN'
                     ? "That time was just taken. Please pick another slot."
+                    : result?.code === 'EHR_WRITE_FAILED'
+                    ? "We couldn't finish creating your appointment in PracticeQ. Please try again."
                     : result?.error ?? response.statusText ?? 'Unknown error'
 
-                alert(`Appointment failed: ${errorMessage}`)
+                // Store error state and appointment ID for retry
+                updateState({
+                    bookingError: errorMessage,
+                    appointmentId: result?.details?.appointmentId || undefined
+                })
+                goToStep('booking-error') // Show error UI
                 return // STOP — do not go to confirmation
             }
 
             // Success case - store PQ appointment ID
-            console.log('✅ INTAKE BOOKING - Appointment created successfully:', result.data.pqAppointmentId)
+            console.log('BOOKING DEBUG – PQ sync success:', result.data.pqAppointmentId)
             updateState({
                 appointmentId: result.data.pqAppointmentId,
                 roiContacts: state.roiContacts
@@ -539,6 +548,76 @@ export default function BookingFlow({
                         bookingScenario={state.bookingScenario}
                         onStartOver={handleRestartFlow}
                     />
+                )
+
+            case 'booking-error':
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-[#FEF8F1] via-[#F6B398]/20 to-[#FEF8F1]">
+                        <div className="max-w-6xl mx-auto px-4 py-8">
+                            <div className="text-center mb-8">
+                                <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <svg className="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </div>
+                                <h1 className="text-4xl md:text-5xl font-light text-[#091747] mb-4 font-['Newsreader']">Booking Issue</h1>
+                                <p className="text-xl text-[#091747]/70 max-w-3xl mx-auto leading-relaxed mb-8 font-['Newsreader']">
+                                    {state.bookingError || 'We encountered an issue completing your booking.'}
+                                </p>
+                            </div>
+                            <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl p-8">
+                                <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
+                                    <p className="text-red-800 font-['Newsreader']">
+                                        Your appointment was saved to our system, but we couldn't sync it with our scheduling partner.
+                                        {state.appointmentId && <span className="block mt-2 text-sm text-red-700">Reference: {state.appointmentId}</span>}
+                                    </p>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                                    {state.appointmentId && (
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                try {
+                                                    const res = await fetch('/api/practiceq/retry-appointment', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ appointmentId: state.appointmentId })
+                                                    })
+                                                    const data = await res.json()
+                                                    if (data.success) {
+                                                        console.log('BOOKING DEBUG – retry success')
+                                                        updateState({ appointmentId: data.data.pqAppointmentId })
+                                                        goToStep('confirmation')
+                                                    } else {
+                                                        console.error('BOOKING DEBUG – retry failed:', data.error)
+                                                        alert(`Retry failed: ${data.error}`)
+                                                    }
+                                                } catch (error: any) {
+                                                    console.error('BOOKING DEBUG – retry exception:', error)
+                                                    alert('Network error during retry')
+                                                }
+                                            }}
+                                            className="px-8 py-3 bg-[#BF9C73] hover:bg-[#A8865F] text-white rounded-xl font-medium transition-colors font-['Newsreader']"
+                                        >
+                                            Retry Sync
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={handleRestartFlow}
+                                        className="px-8 py-3 bg-white hover:bg-[#FEF8F1] text-[#091747] font-medium rounded-xl border-2 border-[#BF9C73] transition-colors font-['Newsreader']"
+                                    >
+                                        Start New Booking
+                                    </button>
+                                </div>
+                                <div className="mt-8 text-center border-t pt-6">
+                                    <p className="text-[#091747]/70 font-['Newsreader']">
+                                        Need help? <a href="mailto:hello@trymoonlit.com" className="text-[#BF9C73] hover:text-[#091747] underline">hello@trymoonlit.com</a>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 )
 
             default:
