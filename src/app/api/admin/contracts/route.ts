@@ -45,9 +45,10 @@ export async function GET(request: NextRequest) {
         id,
         provider_id,
         payer_id,
-        status_code,
+        status,
         effective_date,
-        termination_date,
+        expiration_date,
+        notes,
         created_at,
         updated_at,
         provider:providers!provider_payer_networks_provider_id_fkey (
@@ -76,12 +77,12 @@ export async function GET(request: NextRequest) {
     // Transform data for frontend
     const transformedContracts = (contracts || []).map(contract => ({
       ...contract,
-      provider_name: contract.provider ? 
-        `${contract.provider.first_name} ${contract.provider.last_name}` : 
+      provider_name: contract.provider ?
+        `${contract.provider.first_name} ${contract.provider.last_name}` :
         'Unknown Provider',
       payer_name: contract.payer?.name || 'Unknown Payer',
       payer_state: contract.payer?.state || 'Unknown',
-      status_display: contract.status_code || 'unknown',
+      status_display: contract.status || 'unknown',
       contract_type: 'direct' // All from provider_payer_networks are direct contracts
     }))
 
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new contract
+// POST - Create or update contract (UPSERT)
 export async function POST(request: NextRequest) {
   try {
     const { authorized, user } = await verifyAdminAccess()
@@ -128,64 +129,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('📝 Creating new contract:', { provider_id, payer_id, effective_date, expiration_date })
+    console.log('📝 Saving contract (create or update):', { provider_id, payer_id, effective_date, expiration_date })
 
-    // Check if contract already exists for this provider-payer combination
-    const { data: existingContracts, error: checkError } = await supabaseAdmin
-      .from('provider_payer_networks')
-      .select('id, effective_date, expiration_date')
-      .eq('provider_id', provider_id)
-      .eq('payer_id', payer_id)
+    // Use raw SQL for UPSERT with proper conflict resolution
+    // ON CONFLICT updates the row instead of throwing 409 error
+    const { data: savedContract, error: upsertError } = await supabaseAdmin.rpc('upsert_provider_payer_contract', {
+      p_provider_id: provider_id,
+      p_payer_id: payer_id,
+      p_effective_date: effective_date,
+      p_expiration_date: expiration_date || null,
+      p_status: status || null,  // Will default to 'in_network' in the function
+      p_notes: notes || null
+    })
 
-    if (checkError) {
-      console.error('❌ Error checking existing contracts:', checkError)
+    if (upsertError) {
+      console.error('❌ Error upserting contract:', upsertError)
       return NextResponse.json(
-        { success: false, error: 'Failed to check existing contracts', details: checkError.message },
+        { success: false, error: 'Failed to save contract', details: upsertError.message },
         { status: 500 }
       )
     }
 
-    // Check for date overlaps with existing contracts
-    if (existingContracts && existingContracts.length > 0) {
-      const newStart = new Date(effective_date)
-      const newEnd = expiration_date ? new Date(expiration_date) : null
-
-      for (const existing of existingContracts) {
-        const existingStart = new Date(existing.effective_date)
-        const existingEnd = existing.expiration_date ? new Date(existing.expiration_date) : null
-
-        // Check for overlap
-        const overlaps = (
-          (newEnd === null || existingStart <= newEnd) &&
-          (existingEnd === null || newStart <= existingEnd)
-        )
-
-        if (overlaps) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: 'Date overlap detected',
-              details: `A contract already exists for this provider-payer combination with overlapping dates (${existing.effective_date} - ${existing.expiration_date || 'ongoing'}). Please adjust the dates or update the existing contract.`
-            },
-            { status: 409 }
-          )
-        }
-      }
-    }
-
-    // Insert new contract
-    const { data: newContract, error: insertError} = await supabaseAdmin
+    // Fetch the complete contract with joined data
+    const { data: fullContract, error: fetchError } = await supabaseAdmin
       .from('provider_payer_networks')
-      .insert({
-        provider_id,
-        payer_id,
-        effective_date,
-        expiration_date: expiration_date || null,
-        status: status || null,  // Allow null - database will handle defaults
-        notes: notes || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
       .select(`
         id,
         provider_id,
@@ -209,43 +176,45 @@ export async function POST(request: NextRequest) {
           state
         )
       `)
+      .eq('provider_id', provider_id)
+      .eq('payer_id', payer_id)
       .single()
 
-    if (insertError) {
-      console.error('❌ Error inserting contract:', insertError)
+    if (fetchError || !fullContract) {
+      console.error('❌ Error fetching saved contract:', fetchError)
       return NextResponse.json(
-        { success: false, error: 'Failed to create contract', details: insertError.message },
+        { success: false, error: 'Contract saved but failed to retrieve', details: fetchError?.message },
         { status: 500 }
       )
     }
 
-    console.log('✅ Contract created successfully:', newContract.id)
+    console.log('✅ Contract saved successfully:', fullContract.id)
 
     // Transform data for frontend
     const transformedContract = {
-      ...newContract,
-      provider_name: newContract.provider ?
-        `${newContract.provider.first_name} ${newContract.provider.last_name}` :
+      ...fullContract,
+      provider_name: fullContract.provider ?
+        `${fullContract.provider.first_name} ${fullContract.provider.last_name}` :
         'Unknown Provider',
-      payer_name: newContract.payer?.name || 'Unknown Payer',
-      payer_state: newContract.payer?.state || 'Unknown',
-      status_display: newContract.status || 'unknown',
+      payer_name: fullContract.payer?.name || 'Unknown Payer',
+      payer_state: fullContract.payer?.state || 'Unknown',
+      status_display: fullContract.status || 'unknown',
       contract_type: 'direct'
     }
 
     return NextResponse.json({
       success: true,
       data: transformedContract,
-      message: 'Contract created successfully'
-    })
+      message: 'Contract saved successfully'
+    }, { status: 200 })
 
   } catch (error: any) {
-    console.error('❌ Admin create contract error:', error)
+    console.error('❌ Admin save contract error:', error)
 
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to create contract',
+        error: 'Failed to save contract',
         details: error.message
       },
       { status: 500 }
