@@ -57,6 +57,8 @@ export interface BookingState {
     }
     // NEW: Error handling for PracticeQ sync failures
     bookingError?: string
+    // NEW: Submission state to prevent duplicate requests
+    isSubmitting?: boolean
 }
 
 interface BookingFlowProps {
@@ -189,7 +191,18 @@ export default function BookingFlow({
     }
 
     const handleAppointmentConfirmed = async () => {
+        // Prevent duplicate submissions (debouncing)
+        if (state.isSubmitting) {
+            console.warn('⚠️ Booking already in progress, ignoring duplicate request')
+            return
+        }
+
+        // Set submitting flag
+        updateState({ isSubmitting: true })
+
         // Create appointment with enhanced error handling
+        const abortController = new AbortController()
+
         try {
             // Map normalized slot → Intake-only booking payload
             const slot = state.selectedTimeSlot
@@ -197,6 +210,15 @@ export default function BookingFlow({
 
             // Build ISO timestamp from slot date + time
             const startDateTime = `${slot?.date}T${slot?.time}:00`
+
+            // Generate stable idempotency key from booking intent
+            const idempotencyData = {
+                providerId: slot?.provider_id,
+                payerId: state.selectedPayer?.id,
+                start: startDateTime,
+                email: patient?.email
+            }
+            const idempotencyKey = btoa(JSON.stringify(idempotencyData))
 
             // Intake-only payload (server resolves serviceInstanceId)
             // Send EITHER patientId (if exists) OR patient object (for new patients)
@@ -231,8 +253,12 @@ export default function BookingFlow({
 
             const response = await fetch('/api/patient-booking/book', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Idempotency-Key': idempotencyKey
+                },
+                body: JSON.stringify(payload),
+                signal: abortController.signal
             })
 
             let result: any = null
@@ -246,11 +272,12 @@ export default function BookingFlow({
             console.log('BOOKING DEBUG – server response', {
                 ok: response.ok,
                 pqAppointmentId: result?.data?.pqAppointmentId,
+                appointmentId: result?.data?.appointmentId,
                 code: result?.code
             })
 
-            // CRITICAL: Only proceed to confirmation if pqAppointmentId exists
-            if (!response.ok || !result?.success || !result?.data?.pqAppointmentId) {
+            // CRITICAL: Require at least appointmentId (pqAppointmentId is optional based on enrichment)
+            if (!response.ok || !result?.success || !result?.data?.appointmentId) {
                 console.error('BOOKING DEBUG – PQ sync failed:', {
                     status: response.status,
                     code: result?.code,
@@ -277,18 +304,31 @@ export default function BookingFlow({
                 return // STOP — do not go to confirmation
             }
 
-            // Success case - store PQ appointment ID
-            console.log('BOOKING DEBUG – PQ sync success:', result.data.pqAppointmentId)
+            // Success case - store appointment ID (DB primary, PQ optional)
+            console.log('BOOKING DEBUG – Booking success:', {
+                appointmentId: result.data.appointmentId,
+                pqAppointmentId: result.data.pqAppointmentId
+            })
             updateState({
-                appointmentId: result.data.pqAppointmentId,
+                appointmentId: result.data.appointmentId,  // Use DB ID as primary
                 roiContacts: state.roiContacts
             })
             goToStep('confirmation') // Only on success
 
         } catch (error: any) {
             console.error('❌ BOOKING DEBUG - Unexpected error:', error)
+
+            // Handle abort separately
+            if (error.name === 'AbortError') {
+                console.log('Booking request aborted')
+                return
+            }
+
             alert(`Booking failed: ${error.message}`)
             return // STOP — do not go to confirmation
+        } finally {
+            // Always reset submitting flag
+            updateState({ isSubmitting: false })
         }
     }
 
@@ -535,6 +575,7 @@ export default function BookingFlow({
                         onEditTimeSlot={() => goToStep('calendar')}
                         onEditROI={() => goToStep('roi')}
                         onBack={() => goToStep('roi')}
+                        isSubmitting={state.isSubmitting}
                     />
                 )
 

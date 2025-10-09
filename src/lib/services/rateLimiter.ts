@@ -149,6 +149,13 @@ export class TokenBucketRateLimiter {
 
       if (!response.ok) {
         const errorText = await response.text()
+        console.error('❌ IntakeQ API error details:', {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+          headers: Object.fromEntries(response.headers.entries())
+        })
         reject(new Error(`IntakeQ API error: ${response.status} ${response.statusText} - ${errorText}`))
         return
       }

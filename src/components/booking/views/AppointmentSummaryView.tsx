@@ -30,6 +30,7 @@ interface AppointmentSummaryViewProps {
     onEditTimeSlot: () => void
     onEditROI: () => void
     onBack: () => void
+    isSubmitting?: boolean
 }
 
 export default function AppointmentSummaryView({
@@ -43,7 +44,8 @@ export default function AppointmentSummaryView({
     onEditInsurance,
     onEditTimeSlot,
     onEditROI,
-    onBack
+    onBack,
+    isSubmitting = false
 }: AppointmentSummaryViewProps) {
     const [fetchedProvider, setFetchedProvider] = useState<Provider | null>(null)
     const [providerLoading, setProviderLoading] = useState(false)
@@ -465,9 +467,24 @@ export default function AppointmentSummaryView({
                         <button
                             type="button"
                             onClick={onConfirmBooking}
-                            className="px-12 py-4 bg-[#BF9C73] hover:bg-[#B8936A] text-white font-semibold text-lg rounded-xl transition-all duration-200 hover:shadow-lg hover:scale-[1.01] border-2 border-[#BF9C73] hover:border-[#B8936A] font-['Newsreader'] cursor-pointer"
+                            disabled={isSubmitting}
+                            className={`px-12 py-4 text-white font-semibold text-lg rounded-xl transition-all duration-200 border-2 font-['Newsreader'] ${
+                                isSubmitting
+                                    ? 'bg-gray-400 border-gray-400 cursor-not-allowed opacity-70'
+                                    : 'bg-[#BF9C73] hover:bg-[#B8936A] border-[#BF9C73] hover:border-[#B8936A] hover:shadow-lg hover:scale-[1.01] cursor-pointer'
+                            }`}
                         >
-                            {getSubmitButtonText()}
+                            {isSubmitting ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Confirming...
+                                </span>
+                            ) : (
+                                getSubmitButtonText()
+                            )}
                         </button>
                     </div>
 

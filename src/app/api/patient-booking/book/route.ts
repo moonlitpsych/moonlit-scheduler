@@ -144,6 +144,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         const body = await request.json() as IntakeBookingRequest
         const { providerId, payerId, start, locationType, notes } = body
 
+        // Check idempotency key first (before any processing)
+        const idempotencyKey = request.headers.get('Idempotency-Key')
+        if (idempotencyKey) {
+            console.log(`🔑 Idempotency key received: ${idempotencyKey.substring(0, 20)}...`)
+
+            // Check if this request was already processed
+            const { data: existing, error: idempErr } = await supabaseAdmin
+                .from('idempotency_requests')
+                .select('appointment_id, response_data')
+                .eq('key', idempotencyKey)
+                .single()
+
+            if (existing && !idempErr) {
+                console.log(`✅ Idempotent request detected, returning cached response for appointment: ${existing.appointment_id}`)
+                return NextResponse.json(existing.response_data as IntakeBookingResponse, { status: 200 })
+            }
+        }
+
         // Validate required fields
         if ((!body.patientId && !body.patient) || !providerId || !payerId || !start || !locationType) {
             return NextResponse.json({
@@ -220,16 +238,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000)
         console.log(`⏰ Appointment duration: ${durationMinutes} minutes (${startDate.toISOString()} → ${endDate.toISOString()})`)
 
-        // Step 2: Resolve IntakeQ mappings BEFORE creating appointment
-        // This prevents creating DB records when IntakeQ mapping fails
-        console.log('🔍 Resolving IntakeQ mappings...')
+        // Step 2: Resolve IntakeQ mappings (but don't block DB insert on failure)
+        // V2.0 Fix: Allow DB insert to succeed even if IntakeQ sync fails
+        console.log('🔍 Attempting IntakeQ mappings (non-blocking)...')
 
-        // IntakeQ sync re-enabled with new API key (updated Oct 7, 2025)
-        const SKIP_INTAKEQ_SYNC = false
+        // IntakeQ sync - now non-blocking when enrichment is disabled
+        const SKIP_INTAKEQ_SYNC = process.env.PRACTICEQ_ENRICH_ENABLED === 'false'
 
         let intakeqClientId: string = ''
         let practitionerExternalId: string = ''
         let serviceExternalId: string = ''
+        let intakeqMappingError: any = null
 
         if (!SKIP_INTAKEQ_SYNC) {
             try {
@@ -245,13 +264,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                 console.log('✅ IntakeQ mappings resolved:', { intakeqClientId, practitionerExternalId, serviceExternalId })
 
             } catch (error: any) {
-                console.error('❌ Failed to resolve IntakeQ mappings BEFORE appointment creation:', error)
-                return NextResponse.json({
-                    success: false,
-                    error: error.message,
-                    code: error.code || 'MAPPING_ERROR'
-                }, { status: error.status || 422 })
+                console.error('⚠️ IntakeQ mapping failed (will continue with DB insert):', error.message)
+                intakeqMappingError = error
+                // Don't return - continue to create DB appointment
             }
+        } else {
+            console.log('📌 IntakeQ sync skipped (PRACTICEQ_ENRICH_ENABLED=false)')
         }
 
         // Step 3: Conflict check - Check ALL appointments for this provider (any service type)
@@ -263,7 +281,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         // This catches all overlaps including: adjacent, partial, contained, and surrounding
         const { data: conflicts, error: conflictError } = await supabaseAdmin
             .from('appointments')
-            .select('id, start_time, end_time, service_instance_id')
+            .select('id, start_time, end_time, service_instance_id, patient_id, created_at')
             .eq('provider_id', providerId)
             .eq('status', 'scheduled')
             .lt('start_time', endDate.toISOString())      // existing starts before new ends
@@ -274,7 +292,37 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             throw new Error(`Conflict check failed: ${conflictError.message}`)
         }
 
+        // Check if this is a duplicate request (same patient, same time, within last 30 seconds)
         if (conflicts && conflicts.length > 0) {
+            const recentDuplicate = conflicts.find(c => {
+                const createdAt = new Date(c.created_at)
+                const ageSeconds = (Date.now() - createdAt.getTime()) / 1000
+                return c.patient_id === patientId && ageSeconds < 30
+            })
+
+            if (recentDuplicate) {
+                console.warn('⚠️ Duplicate booking request detected (same patient, time, within 30s), returning existing appointment')
+
+                // Fetch the existing appointment with full details
+                const { data: existingAppointment } = await supabaseAdmin
+                    .from('appointments')
+                    .select('id, pq_appointment_id')
+                    .eq('id', recentDuplicate.id)
+                    .single()
+
+                // Return success with the existing appointment
+                return NextResponse.json({
+                    success: true,
+                    data: {
+                        appointmentId: existingAppointment?.id,
+                        pqAppointmentId: existingAppointment?.pq_appointment_id,
+                        isDuplicate: true
+                    },
+                    message: 'Appointment already exists'
+                }, { status: 200 })
+            }
+
+            // Not a duplicate - actual conflict with different patient or older appointment
             console.error('❌ Appointment slot conflict detected:', conflicts[0])
             return NextResponse.json({
                 success: false,
@@ -304,8 +352,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
 
         console.log(`✅ Fetched payer: ${payer.name}`)
 
-        // Step 4: Insert appointment with status='pending_sync' (aligned with v2 schema)
+        // Step 4: Insert appointment with status='scheduled' (baseline DB insert must succeed)
         console.log('💾 Creating appointment record...')
+
+        // Debug trace: Pre-insert
+        if (process.env.INTEGRATIONS_DEBUG_HTTP === 'true') {
+            console.log('🔍 [DB Trace] Pre-insert:', {
+                provider_id: providerId,
+                service_instance_id: serviceInstanceId,
+                payer_id: payerId,
+                patient_id: patientId,
+                start_time: startDate.toISOString(),
+                intakeq_sync_attempted: !SKIP_INTAKEQ_SYNC,
+                intakeq_mapping_error: intakeqMappingError?.message
+            })
+        }
 
         // Prepare appointment data matching v2 schema structure
         const appointmentInsert = {
@@ -346,6 +407,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         }
 
         const appointmentId = appointmentData.id
+
+        // Debug trace: Post-insert
+        if (process.env.INTEGRATIONS_DEBUG_HTTP === 'true') {
+            console.log('✅ [DB Trace] Post-insert: Appointment created with ID:', appointmentId)
+        }
+
         console.log('[BOOKING] created:', {
             appointmentId,
             start_time: startDate.toISOString(),
@@ -490,6 +557,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         }
 
         console.log(`🎉 Intake-only booking completed successfully: ${appointmentId} → ${pqAppointmentId} (service: ${serviceInstanceId})`)
+
+        // Save idempotency record for future duplicate requests
+        if (idempotencyKey) {
+            await supabaseAdmin
+                .from('idempotency_requests')
+                .insert({
+                    key: idempotencyKey,
+                    appointment_id: appointmentId,
+                    request_payload: body,
+                    response_data: response
+                })
+                .then(({ error }) => {
+                    if (error) {
+                        console.warn(`⚠️ Failed to save idempotency record: ${error.message}`)
+                    } else {
+                        console.log(`✅ Idempotency record saved for key: ${idempotencyKey.substring(0, 20)}...`)
+                    }
+                })
+        }
+
         return NextResponse.json(response)
 
     } catch (error: any) {

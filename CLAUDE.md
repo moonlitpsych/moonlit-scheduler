@@ -23,6 +23,119 @@ Before adding columns or modifying tables:
 
 This prevents duplicate columns, schema conflicts, and maintains data integrity.
 
+## ✅ COMPLETED: V2.0 Production Booking System (Oct 9, 2025)
+
+**STATUS:** ✅ READY TO SHIP - All critical functionality verified
+
+### What Was Built:
+
+**Problem:** Original booking system had critical production issues:
+1. IntakeQ API failures blocked DB inserts (losing appointments)
+2. No duplicate request protection (double-click caused conflicts)
+3. No visual feedback on submission (users double-clicked)
+4. Next.js 15.5.4 .env parsing bug concatenated API key with next line
+5. No admin tooling to query bookings
+
+**Solution:**
+- **Non-blocking IntakeQ sync**: DB appointments save even when external API fails
+- **Production-grade idempotency**: Stable key generation + server-side deduplication table
+- **Triple-layer duplicate prevention**: Frontend debouncing + backend detection + visual feedback
+- **Next.js .env workaround**: Extract correct 40-char API key from malformed env var
+- **Admin query endpoint**: Search bookings by email, PracticeQ ID, or appointment ID
+
+**Result:** ✅ Production-ready booking system with verified successful bookings in both DB and PracticeQ
+
+### Key Components:
+
+**1. Idempotency System** (`idempotency_requests` table)
+- Client generates stable key from `{providerId, payerId, start, email}`
+- Server checks table before processing any booking
+- Returns cached response for duplicate requests
+- 24-hour TTL for automatic cleanup
+
+**2. Non-blocking Integration** (`book/route.ts:223-255`)
+- IntakeQ sync failures don't block DB inserts
+- Enrichment controlled by `PRACTICEQ_ENRICH_ENABLED` flag
+- Appointments save with notes indicating sync status
+
+**3. Double-Click Prevention**
+- Frontend: `isSubmitting` flag prevents concurrent requests (`BookingFlow.tsx:193-198`)
+- Backend: 30-second duplicate detection window (`book/route.ts:277-305`)
+- UX: Loading spinner + disabled button (`AppointmentSummaryView.tsx:467-488`)
+- Cleanup: `finally` block guarantees flag reset
+
+**4. Next.js .env Workaround** (`intakeQService.ts:49-71`)
+- Detects malformed key (length > 40 chars)
+- Extracts correct 40-character API key
+- Full key was concatenated: `{API_KEY}NEXT_PUBLIC_BOOK_NAV_PATH=/see-a-psychiatrist-widget`
+
+**5. Admin Tooling** (`/api/admin/bookings/today`)
+- Search by patient email: `?email=patient@example.com`
+- Search by PracticeQ ID: `?pq_appointment_id=68e7f...`
+- Search by appointment ID: `?appointment_id=ee21a38b...`
+- Shows enrichment status breakdown (synced/skipped/pending)
+- Mountain Time timezone for "today" calculation
+
+### Files Modified:
+- `src/app/api/patient-booking/book/route.ts` - Non-blocking sync, idempotency, duplicate detection
+- `src/components/booking/BookingFlow.tsx` - Debouncing, idempotency key generation, AbortController
+- `src/components/booking/views/AppointmentSummaryView.tsx` - Loading spinner and disabled state
+- `src/lib/services/intakeQService.ts` - Next.js .env parsing workaround
+- `src/lib/services/rateLimiter.ts` - Enhanced error logging
+- `src/app/api/admin/bookings/today/route.ts` - Admin query endpoint (NEW)
+
+### Database:
+- `idempotency_requests` table (migration: `/tmp/idempotency_requests.sql`)
+  - Columns: `key`, `appointment_id`, `request_payload`, `response_data`, `created_at`
+  - Index: `idx_idempotency_created_at` for TTL cleanup
+
+### Feature Flags (Production Configuration):
+- ✅ `PRACTICEQ_ENRICH_ENABLED=true` - IntakeQ enrichment active
+- ✅ `INTAKE_HIDE_NON_INTAKE_PROVIDERS=true` - Filter non-intake providers
+- ✅ `INTEGRATIONS_DEBUG_HTTP=true` - Debug logging for API calls
+- 🔵 `PRACTICEQ_DUPLICATE_ALERTS_ENABLED=false` - Future: Email alerts
+- 🔵 `BOOKING_AUTO_REFRESH_ENABLED=false` - Future: Auto-refresh availability
+
+### Verified Bookings (2025-10-09):
+1. `ee21a38b-9f9f-4019-ada7-b5e0b2a16e66` - ✅ Synced (pq_appointment_id: 68e7fe09b820222eee47d49b)
+2. `665f7b82-2bdb-4497-a6b6-8d0221980296` - ✅ Synced (pq_appointment_id: 68e7f98a867a401b3b557e7c)
+3. `3c7cd155-869c-47a2-b9ae-e2f590bee262` - ⚠️ Skipped (pre-fix test, API key issue)
+
+### Critical Patterns for Future Development:
+
+**Idempotency Key Generation** (BookingFlow.tsx:214-221):
+```typescript
+const idempotencyData = {
+  providerId: slot?.provider_id,
+  payerId: state.selectedPayer?.id,
+  start: startDateTime,
+  email: patient?.email
+}
+const idempotencyKey = btoa(JSON.stringify(idempotencyData))
+```
+
+**Non-blocking External API Calls** (book/route.ts:223-255):
+```typescript
+try {
+  intakeqClientId = await ensureClient(patientId, payerId)
+  // ... other IntakeQ operations
+} catch (error: any) {
+  console.error('⚠️ IntakeQ mapping failed (will continue with DB insert):', error.message)
+  intakeqMappingError = error
+  // Don't return - continue to create DB appointment
+}
+```
+
+**Guaranteed Cleanup Pattern** (BookingFlow.tsx:327-330):
+```typescript
+} finally {
+  // Always reset submitting flag
+  updateState({ isSubmitting: false })
+}
+```
+
+---
+
 ## ✅ COMPLETED: Bookability Trigger Migration (Oct 7, 2025)
 
 **STATUS:** ✅ Fixed "Not bookable for this payer" errors

@@ -47,9 +47,26 @@ class IntakeQService {
   private lastDayReset = new Date().getDate()
 
   constructor() {
-    this.apiKey = process.env.INTAKEQ_API_KEY || ''
+    // WORKAROUND: Next.js 15.5.4 has a bug parsing .env.local that concatenates lines
+    // Extracting the correct API key from the malformed environment variable
+    const rawKey = process.env.INTAKEQ_API_KEY || ''
+
+    // If the key contains the expected prefix and is too long, extract just the 40-char key
+    if (rawKey.startsWith('4d09ac93') && rawKey.length > 40) {
+      this.apiKey = rawKey.substring(0, 40)
+      console.log('⚠️ [IntakeQ Init] Worked around Next.js .env parsing bug')
+    } else {
+      this.apiKey = rawKey
+    }
+
     if (!this.apiKey) {
       console.warn('⚠️ IntakeQ API key not found. Set INTAKEQ_API_KEY environment variable.')
+    }
+
+    // Debug log on initialization (sanitized)
+    if (process.env.INTEGRATIONS_DEBUG_HTTP === 'true') {
+      console.log('🔑 [IntakeQ Init] API Key loaded:', this.apiKey ? `${this.apiKey.substring(0, 8)}...${this.apiKey.substring(this.apiKey.length - 4)}` : 'NOT SET')
+      console.log('🔑 [IntakeQ Init] API Key length:', this.apiKey.length)
     }
   }
 
@@ -57,7 +74,7 @@ class IntakeQService {
     // Update counters for legacy tracking (used by getRateLimitStatus)
     const now = Date.now()
     const currentDay = new Date().getDate()
-    
+
     if (currentDay !== this.lastDayReset) {
       this.dailyRequestCount = 0
       this.lastDayReset = currentDay
@@ -69,7 +86,22 @@ class IntakeQService {
     }
 
     const url = `${this.baseUrl}${endpoint}`
-    
+
+    // Debug logging when flag is enabled
+    const debugEnabled = process.env.INTEGRATIONS_DEBUG_HTTP === 'true'
+    if (debugEnabled) {
+      console.log('🔍 [IntakeQ Debug] Request:', {
+        url,
+        method: options.method || 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Key': this.apiKey ? `${this.apiKey.substring(0, 8)}...` : 'NOT_SET',
+          ...options.headers,
+        },
+        bodyShape: options.body ? Object.keys(JSON.parse(options.body as string)) : undefined
+      })
+    }
+
     // Use production-ready rate limiter with queuing and backoff
     const response = await intakeQRateLimiter.makeRequest(url, {
       ...options,

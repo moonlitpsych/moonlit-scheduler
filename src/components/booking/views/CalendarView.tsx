@@ -307,12 +307,9 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
     const handleProviderSelect = async (providerId: string) => {
         console.log('🔄 Provider selection starting:', { providerId, viewMode, currentSelectedProvider: selectedProvider })
 
-        // Lock mode and clear stale UI
+        // Lock mode and clear selected slot
         setViewMode('by_provider')
-        setSelectedProvider(providerId)
         setSelectedSlot(null)
-        setAvailableSlots([])  // Clear stale slots while fetching
-        setConsolidatedSlots([])
 
         // Smooth scroll to calendar section to guide user to next step
         setTimeout(() => {
@@ -320,10 +317,14 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
         }, 100) // Small delay to ensure state updates have rendered
 
         if (selectedDate) {
-            // If a date is already selected, refresh availability for this provider
-            console.log('📅 Using existing selected date:', selectedDate, 'for provider:', providerId)
+            // If a date is already selected, immediately fetch for this provider
+            console.log('📅 Date already selected:', selectedDate, '- fetching for provider:', providerId)
+            // Set provider AFTER starting fetch to avoid race with auto-refresh
+            setSelectedProvider(providerId)
             await fetchAvailabilityForDate(selectedDate, { mode: 'by_provider', providerId })
         } else {
+            // Set provider first, then find soonest date
+            setSelectedProvider(providerId)
             // Find and load soonest available date
             console.log('🔍 Finding soonest availability for provider:', providerId)
             const soonestDate = await findSoonestAvailableDate(providerId)
