@@ -4,6 +4,7 @@ import { normalizeIntakeqClientId, isValidIntakeqClientId } from './utils'
 import { enrichClientData, type EnrichedClientData } from '@/lib/services/intakeqEnrichment'
 import { logIntakeqSync } from '@/lib/services/intakeqAudit'
 import { featureFlags } from '@/lib/config/featureFlags'
+import { upsertPracticeQClient } from '@/lib/services/intakeqClientUpsert'
 
 export interface IntakeQAppointmentRequest {
     intakeqClientId: string
@@ -33,8 +34,13 @@ export interface PolicySnapshot {
 /**
  * Ensures a patient has an IntakeQ client ID, creating one if missing
  * V2.0: Supports enrichment when payerId is provided
+ * V2.0.1: Supports identity matching metadata for audit logging
  */
-export async function ensureClient(patientId: string, payerId?: string | null): Promise<string> {
+export async function ensureClient(
+    patientId: string,
+    payerId?: string | null,
+    identityMatch?: 'strong' | 'fallback' | 'none'
+): Promise<string> {
     const startTime = Date.now()
     try {
         // First check if patient already has an IntakeQ client ID
@@ -68,64 +74,27 @@ export async function ensureClient(patientId: string, payerId?: string | null): 
             }
         }
 
-        // Create new IntakeQ client
-        console.log(`🔄 Creating new IntakeQ client for patient ${patientId}...`)
+        // V2.0: Use upsertPracticeQClient which handles email aliasing and enrichment
+        console.log(`🔄 Creating/updating IntakeQ client for patient ${patientId}...`)
 
-        // V2.0: Apply enrichment if enabled and payerId provided
-        let clientData: EnrichedClientData
-        let enrichmentResult: any = null
+        const upsertResult = await upsertPracticeQClient({
+            firstName: patient.first_name || '',
+            lastName: patient.last_name || '',
+            email: patient.email || '',
+            phone: patient.phone || null,
+            dateOfBirth: patient.date_of_birth || null,
+            payerId: payerId || null,
+            patientId: patientId,
+            identityMatch: identityMatch || 'none'
+        })
 
-        if (featureFlags.practiceqEnrich && payerId) {
-            console.log('🔄 V2.0: Applying enrichment to client data...')
-            enrichmentResult = await enrichClientData(patientId, payerId, {
-                FirstName: patient.first_name || '',
-                LastName: patient.last_name || '',
-                Email: patient.email || '',
-                Phone: patient.phone || null,
-                DateOfBirth: patient.date_of_birth || null
-            })
-            clientData = enrichmentResult.enrichedData
-            console.log(`✅ V2.0: Enrichment applied. Fields: ${enrichmentResult.enrichmentFields.join(', ')}`)
+        const intakeqClientId = upsertResult.intakeqClientId
 
-            // Log enrichment to audit trail
-            await logIntakeqSync({
-                action: 'enrichment_applied',
-                status: 'success',
-                patientId,
-                enrichmentData: {
-                    fields: enrichmentResult.enrichmentFields,
-                    errors: enrichmentResult.errors
-                }
-            })
-        } else {
-            // No enrichment - use basic data
-            clientData = {
-                FirstName: patient.first_name || '',
-                LastName: patient.last_name || '',
-                Email: patient.email || '',
-                Phone: patient.phone || '',
-                DateOfBirth: patient.date_of_birth || null
-            }
-        }
-
-        const clientResponse = await intakeQService.createClient(clientData)
-
-        if (!clientResponse?.Id) {
-            throw new Error('Failed to create IntakeQ client - no client ID returned')
-        }
-
-        // CRITICAL: Normalize the client ID from IntakeQ response
-        // IntakeQ might return {Id: "98"}, {ClientId: 98}, or other formats
-        const rawClientId = clientResponse.Id
-        const intakeqClientId = normalizeIntakeqClientId(rawClientId)
-
-        // Validate the normalized ID before saving to database
-        if (!isValidIntakeqClientId(intakeqClientId)) {
-            console.error(`❌ IntakeQ returned invalid client ID format:`, rawClientId)
-            throw new Error(`Invalid client ID format from IntakeQ: ${JSON.stringify(rawClientId)}`)
-        }
-
-        console.log(`✅ Normalized new IntakeQ client ID: "${intakeqClientId}" (from ${typeof rawClientId}: ${JSON.stringify(rawClientId)})`)
+        console.log(`✅ IntakeQ client upsert complete: ${intakeqClientId}`, {
+            isNew: upsertResult.isNewClient,
+            isDuplicate: upsertResult.isDuplicate,
+            enrichedFields: upsertResult.enrichedFields
+        })
 
         // ✅ FIX: Add delay to ensure IntakeQ has propagated the client
         // IntakeQ needs time before the client is available for appointments
@@ -133,10 +102,12 @@ export async function ensureClient(patientId: string, payerId?: string | null): 
         console.log('⏳ Waiting 2000ms for IntakeQ client propagation...')
         await new Promise(resolve => setTimeout(resolve, 2000))
 
-        // Persist the NORMALIZED IntakeQ client ID to our database
+        // Update our database with the IntakeQ client ID (upsertPracticeQClient already handles alias storage)
+        const updateData: any = { intakeq_client_id: intakeqClientId }
+
         const { error: updateError } = await supabaseAdmin
             .from('patients')
-            .update({ intakeq_client_id: intakeqClientId })
+            .update(updateData)
             .eq('id', patientId)
 
         if (updateError) {
@@ -144,19 +115,7 @@ export async function ensureClient(patientId: string, payerId?: string | null): 
             throw new Error(`Failed to persist IntakeQ client ID: ${updateError.message}`)
         }
 
-        console.log(`✅ Created and persisted IntakeQ client ID for patient ${patientId}: ${intakeqClientId}`)
-
-        // V2.0: Log successful client creation to audit trail
-        const duration = Date.now() - startTime
-        await logIntakeqSync({
-            action: 'create_client',
-            status: 'success',
-            patientId,
-            intakeqClientId,
-            payload: clientData,
-            response: clientResponse,
-            durationMs: duration
-        })
+        console.log(`✅ Persisted IntakeQ client ID for patient ${patientId}: ${intakeqClientId}`)
 
         return intakeqClientId
 

@@ -9,6 +9,19 @@ import { getIntakeqPractitionerId } from '@/lib/integrations/providerMap'
 import { getIntakeqServiceId } from '@/lib/integrations/serviceInstanceMap'
 import { ensureClient, syncClientInsurance, createAppointment } from '@/lib/intakeq/client'
 
+/**
+ * Normalization helpers for identity matching
+ */
+const norm = (s?: string | null) => (s ?? '').trim().toLowerCase()
+const normDob = (d?: string | null) => {
+    if (!d) return null
+    try {
+        return new Date(d).toISOString().slice(0, 10)
+    } catch {
+        return null
+    }
+}
+
 // Intake-only booking request interface (no client serviceInstanceId)
 // Supports BOTH new patient creation and existing patient booking
 interface IntakeBookingRequest {
@@ -58,7 +71,8 @@ interface IntakeBookingResponse {
 
 /**
  * Ensures a patient exists, either by validating existing ID or creating new patient.
- * Implements idempotent upsert by email to prevent duplicates.
+ * V2.0: Implements STRONG MATCHING (email + firstName + lastName + DOB) to prevent
+ * incorrectly merging different patients who share the same email (case manager scenario).
  */
 async function ensurePatient(input: {
     patientId?: string
@@ -69,7 +83,7 @@ async function ensurePatient(input: {
         phone?: string
         dateOfBirth?: string
     }
-}): Promise<{ patientId: string; created: boolean }> {
+}): Promise<{ patientId: string; created: boolean; matchType?: 'strong' | 'fallback' | 'none' }> {
     // Path 1: Existing patient ID provided
     if (input.patientId) {
         console.log(`[ENSURE_PATIENT] Validating existing patient: ${input.patientId}`)
@@ -85,31 +99,68 @@ async function ensurePatient(input: {
         }
 
         console.log(`[ENSURE_PATIENT] ✅ Reused existing patient: ${input.patientId}`)
-        return { patientId: input.patientId, created: false }
+        return { patientId: input.patientId, created: false, matchType: 'strong' }
     }
 
-    // Path 2: New patient data provided
+    // Path 2: New patient data provided - use STRONG MATCHING
     if (input.patient) {
         const { firstName, lastName, email, phone, dateOfBirth } = input.patient
 
-        // Normalize email for idempotent lookup
-        const normalizedEmail = email.trim().toLowerCase()
+        // Normalize all fields for matching
+        const normalizedEmail = norm(email)
+        const normalizedFirstName = norm(firstName)
+        const normalizedLastName = norm(lastName)
+        const normalizedDob = normDob(dateOfBirth)
+        const normalizedPhone = phone ? norm(phone).replace(/\D/g, '') : null
 
-        console.log(`[ENSURE_PATIENT] Creating/finding patient by email: ${normalizedEmail}`)
+        console.log(`[ENSURE_PATIENT] V2.0 Strong matching for:`, {
+            email: normalizedEmail,
+            firstName: normalizedFirstName,
+            lastName: normalizedLastName,
+            dob: normalizedDob,
+            phone: normalizedPhone
+        })
 
-        // Check if patient already exists by email (idempotent)
-        const { data: existing } = await supabaseAdmin
-            .from('patients')
-            .select('id')
-            .eq('email', normalizedEmail)
-            .maybeSingle()
+        // STRONG MATCH: email + firstName + lastName + DOB (all 4 must match)
+        if (normalizedDob) {
+            const { data: strongMatch } = await supabaseAdmin
+                .from('patients')
+                .select('id, first_name, last_name, date_of_birth')
+                .eq('email', normalizedEmail)
+                .ilike('first_name', normalizedFirstName)
+                .ilike('last_name', normalizedLastName)
+                .eq('date_of_birth', normalizedDob)
+                .maybeSingle()
 
-        if (existing) {
-            console.log(`[ENSURE_PATIENT] ✅ Reused existing patient by email: ${existing.id}`)
-            return { patientId: existing.id, created: false }
+            if (strongMatch) {
+                console.log(`[ENSURE_PATIENT] ✅ Strong match found (email+name+DOB): ${strongMatch.id}`)
+                return { patientId: strongMatch.id, created: false, matchType: 'strong' }
+            }
         }
 
-        // Create new patient
+        // FALLBACK MATCH: email + firstName + lastName + phone (when DOB missing)
+        if (!normalizedDob && normalizedPhone) {
+            const { data: fallbackMatch } = await supabaseAdmin
+                .from('patients')
+                .select('id, first_name, last_name, phone')
+                .eq('email', normalizedEmail)
+                .ilike('first_name', normalizedFirstName)
+                .ilike('last_name', normalizedLastName)
+                .maybeSingle()
+
+            // Check if phone matches (remove all non-digits for comparison)
+            if (fallbackMatch && fallbackMatch.phone) {
+                const existingPhone = norm(fallbackMatch.phone).replace(/\D/g, '')
+                if (existingPhone === normalizedPhone) {
+                    console.log(`[ENSURE_PATIENT] ✅ Fallback match found (email+name+phone): ${fallbackMatch.id}`)
+                    return { patientId: fallbackMatch.id, created: false, matchType: 'fallback' }
+                }
+            }
+        }
+
+        // NO MATCH: Create new patient (separate person, even if email matches existing)
+        console.log(`[ENSURE_PATIENT] No strong match found - creating new patient (potential email collision)`)
+
         const { data: newPatient, error: createError} = await supabaseAdmin
             .from('patients')
             .insert({
@@ -117,14 +168,12 @@ async function ensurePatient(input: {
                 last_name: lastName,
                 email: normalizedEmail,
                 phone: phone || null,
-                date_of_birth: dateOfBirth || null,
-                status: 'active',  // Only 'active' allowed by patients_status_check constraint
+                date_of_birth: normalizedDob,
+                status: 'active',
                 created_at: new Date().toISOString()
             })
             .select('id')
             .single()
-
-        console.log('[ENSURE_PATIENT] Allowed patient status values: active (constraint: patients_status_check)')
 
         if (createError || !newPatient) {
             console.error('[ENSURE_PATIENT] ❌ Failed to create patient:', createError)
@@ -132,7 +181,7 @@ async function ensurePatient(input: {
         }
 
         console.log(`[ENSURE_PATIENT] ✅ Created new patient: ${newPatient.id}`)
-        return { patientId: newPatient.id, created: true }
+        return { patientId: newPatient.id, created: true, matchType: 'none' }
     }
 
     // Neither provided
@@ -180,14 +229,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             }, { status: 422 })
         }
 
-        // Step 0: Ensure patient exists (validate or create)
+        // Step 0: Ensure patient exists (validate or create with strong matching)
         let patientId: string
+        let patientMatchType: 'strong' | 'fallback' | 'none' = 'none'
+        let patientCreated = false
         try {
             const result = await ensurePatient({
                 patientId: body.patientId,
                 patient: body.patient
             })
             patientId = result.patientId
+            patientMatchType = result.matchType || 'none'
+            patientCreated = result.created
         } catch (error: any) {
             console.error('❌ ensurePatient failed:', error)
             return NextResponse.json({
@@ -252,8 +305,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
 
         if (!SKIP_INTAKEQ_SYNC) {
             try {
-                // Get/create IntakeQ client (V2.0: pass payerId for enrichment)
-                intakeqClientId = await ensureClient(patientId, payerId)
+                // Get/create IntakeQ client (V2.0: pass payerId for enrichment + identity match)
+                intakeqClientId = await ensureClient(patientId, payerId, patientMatchType)
 
                 // Get provider mapping
                 practitionerExternalId = await getIntakeqPractitionerId(providerId)

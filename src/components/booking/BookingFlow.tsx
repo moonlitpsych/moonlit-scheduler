@@ -251,7 +251,12 @@ export default function BookingFlow({
                 payload
             })
 
-            const response = await fetch('/api/patient-booking/book', {
+            // V2.0: Use new endpoint when enrichment is enabled
+            const bookingEndpoint = process.env.NEXT_PUBLIC_USE_V2_BOOKING === 'true'
+                ? '/api/patient-booking/book-v2'
+                : '/api/patient-booking/book'
+
+            const response = await fetch(bookingEndpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

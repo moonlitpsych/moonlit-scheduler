@@ -91,39 +91,47 @@ export default function AppointmentSummaryView({
                 })
             }
             
-            if (!providerId || provider || fetchedProvider) {
-                console.log('🔍 Skipping provider fetch:', { providerId, hasProvider: !!provider, hasFetched: !!fetchedProvider })
+            // Skip fetch if we don't have required data
+            if (!providerId || !selectedPayer?.id || provider || fetchedProvider) {
+                console.log('🔍 Skipping provider fetch:', {
+                    providerId,
+                    payerId: selectedPayer?.id,
+                    hasProvider: !!provider,
+                    hasFetched: !!fetchedProvider
+                })
                 return
             }
 
             setProviderLoading(true)
             try {
-                console.log('🔍 Fetching provider info for ID:', providerId)
-                
+                console.log('🔍 Fetching provider info for ID:', providerId, 'with payer:', selectedPayer?.id)
+
                 // First, let's try to fetch the provider directly if we have the provider_id
                 // We'll need to create a proper API endpoint or use an existing one
                 const response = await fetch('/api/patient-booking/providers-for-payer', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        payer_id: selectedPayer?.id,
-                        provider_id: providerId 
+                    body: JSON.stringify({
+                        payer_id: selectedPayer.id,
+                        provider_id: providerId
                     })
                 })
                 
                 if (!response.ok) {
-                    throw new Error('Failed to fetch provider')
+                    const errorText = await response.text()
+                    console.error('❌ Provider fetch failed with status:', response.status, 'Response:', errorText)
+                    throw new Error(`Failed to fetch provider: ${response.status} ${errorText}`)
                 }
 
                 const data = await response.json()
                 console.log('🔍 Provider API response:', JSON.stringify(data, null, 2))
-                
+
                 // Handle different response structures
                 let providers = []
                 if (data.success) {
                     providers = data.providers || data.data?.providers || data.data || []
                 }
-                
+
                 if (providers.length > 0) {
                     // Find the specific provider by ID
                     const matchingProvider = providers.find(p => p.id === providerId)
@@ -135,10 +143,10 @@ export default function AppointmentSummaryView({
                         setFetchedProvider(providers[0])
                     }
                 } else {
-                    console.log('❌ No providers found in response')
+                    console.log('⚠️ No providers found in response (non-fatal)')
                 }
             } catch (error) {
-                console.error('❌ Failed to fetch provider:', error)
+                console.error('❌ Failed to fetch provider (non-fatal):', error)
             } finally {
                 setProviderLoading(false)
             }
