@@ -39,6 +39,9 @@ interface IntakeBookingRequest {
     start: string // ISO timestamp
     locationType: 'telehealth' | 'in_person'
     notes?: string
+    // Insurance enrichment fields for IntakeQ
+    memberId?: string
+    groupNumber?: string
 }
 
 interface IntakeBookingResponse {
@@ -191,7 +194,15 @@ async function ensurePatient(input: {
 export async function POST(request: NextRequest): Promise<NextResponse<IntakeBookingResponse>> {
     try {
         const body = await request.json() as IntakeBookingRequest
-        const { providerId, payerId, start, locationType, notes } = body
+        const { providerId, payerId, start, locationType, notes, memberId, groupNumber } = body
+
+        // Log insurance enrichment fields received
+        console.log('[BOOKING REQUEST] Insurance fields:', {
+            hasMemberId: !!memberId,
+            hasGroupNumber: !!groupNumber,
+            memberIdLength: memberId?.length,
+            groupNumberLength: groupNumber?.length
+        })
 
         // Check idempotency key first (before any processing)
         const idempotencyKey = request.headers.get('Idempotency-Key')
@@ -305,8 +316,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
 
         if (!SKIP_INTAKEQ_SYNC) {
             try {
-                // Get/create IntakeQ client (V2.0: pass payerId for enrichment + identity match)
-                intakeqClientId = await ensureClient(patientId, payerId, patientMatchType)
+                // Get/create IntakeQ client (V2.1: pass insurance fields for enrichment)
+                intakeqClientId = await ensureClient(
+                    patientId,
+                    payerId,
+                    patientMatchType,
+                    body.memberId,      // Pass member ID for IntakeQ enrichment
+                    body.groupNumber    // Pass group number for IntakeQ enrichment
+                )
 
                 // Get provider mapping
                 practitionerExternalId = await getIntakeqPractitionerId(providerId)

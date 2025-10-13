@@ -70,7 +70,7 @@ class IntakeQService {
     }
   }
 
-  private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     // Update counters for legacy tracking (used by getRateLimitStatus)
     const now = Date.now()
     const currentDay = new Date().getDate()
@@ -122,17 +122,25 @@ class IntakeQService {
 
   async createClient(clientData: IntakeQClient): Promise<{ Id: string }> {
     console.log('📝 Creating IntakeQ client...')
-    
+    console.log('🔍 [INTAKEQ API] Request body:', JSON.stringify(clientData, null, 2))
+
     try {
       const response = await this.makeRequest<{ ClientId: number }>('/clients', {
         method: 'POST',
         body: JSON.stringify(clientData),
       })
-      
+
       console.log(`✅ IntakeQ client created: ${response.ClientId}`)
-      return { Id: response.ClientId.toString() }
+      console.log('🔍 [INTAKEQ API] Full response:', JSON.stringify(response, null, 2))
+
+      // Return the full response to preserve any additional fields
+      return {
+        Id: response.ClientId.toString(),
+        ...response
+      }
     } catch (error: any) {
       console.error('❌ Failed to create IntakeQ client:', error.message)
+      console.error('🔍 [INTAKEQ API] Error details:', error)
       throw error
     }
   }

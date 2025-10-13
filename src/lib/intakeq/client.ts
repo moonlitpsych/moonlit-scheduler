@@ -35,11 +35,14 @@ export interface PolicySnapshot {
  * Ensures a patient has an IntakeQ client ID, creating one if missing
  * V2.0: Supports enrichment when payerId is provided
  * V2.0.1: Supports identity matching metadata for audit logging
+ * V2.1: Supports member ID and group number for insurance enrichment
  */
 export async function ensureClient(
     patientId: string,
     payerId?: string | null,
-    identityMatch?: 'strong' | 'fallback' | 'none'
+    identityMatch?: 'strong' | 'fallback' | 'none',
+    memberId?: string | null,
+    groupNumber?: string | null
 ): Promise<string> {
     const startTime = Date.now()
     try {
@@ -77,6 +80,15 @@ export async function ensureClient(
         // V2.0: Use upsertPracticeQClient which handles email aliasing and enrichment
         console.log(`🔄 Creating/updating IntakeQ client for patient ${patientId}...`)
 
+        // Log enrichment data being passed
+        console.log('[INTAKEQ ENRICHMENT]', {
+            hasPhone: !!patient.phone,
+            hasDOB: !!patient.date_of_birth,
+            hasPayerId: !!payerId,
+            hasMemberId: !!memberId,
+            hasGroupNumber: !!groupNumber
+        })
+
         const upsertResult = await upsertPracticeQClient({
             firstName: patient.first_name || '',
             lastName: patient.last_name || '',
@@ -84,6 +96,8 @@ export async function ensureClient(
             phone: patient.phone || null,
             dateOfBirth: patient.date_of_birth || null,
             payerId: payerId || null,
+            memberId: memberId || null,
+            groupNumber: groupNumber || null,
             patientId: patientId,
             identityMatch: identityMatch || 'none'
         })

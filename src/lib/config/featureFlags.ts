@@ -21,6 +21,15 @@ export interface FeatureFlags {
 
   /** Enable duplicate client detection and email alerts (V2.0) */
   practiceqDuplicateAlerts: boolean
+
+  /** Send questionnaire immediately on appointment creation (V2.0) */
+  practiceqSendQuestionnaireOnCreate: boolean
+
+  /** Enable email aliasing for duplicate emails (case manager handling) (V2.0) */
+  practiceqAliasEmailsForDuplicates: boolean
+
+  /** Bypass network check in dev/test (allows booking without provider-payer mapping) */
+  PRACTICEQ_BYPASS_NETWORK_CHECK: boolean
 }
 
 /**
@@ -55,6 +64,21 @@ export const featureFlags: FeatureFlags = {
     process.env.PRACTICEQ_DUPLICATE_ALERTS_ENABLED,
     false
   ),
+
+  practiceqSendQuestionnaireOnCreate: parseBooleanEnv(
+    process.env.PRACTICEQ_SEND_QUESTIONNAIRE_ON_CREATE,
+    true // Default to true in V2.0
+  ),
+
+  practiceqAliasEmailsForDuplicates: parseBooleanEnv(
+    process.env.PRACTICEQ_ALIAS_EMAILS_FOR_DUPLICATES,
+    true // Default to true in V2.0 (case manager handling)
+  ),
+
+  PRACTICEQ_BYPASS_NETWORK_CHECK: parseBooleanEnv(
+    process.env.PRACTICEQ_BYPASS_NETWORK_CHECK,
+    false // Default to false (strict checking in production)
+  ),
 }
 
 /**
@@ -66,6 +90,9 @@ export function getFeatureFlagsStatus(): Record<string, boolean> {
     intakeHideNonIntakeProviders: featureFlags.intakeHideNonIntakeProviders,
     practiceqEnrich: featureFlags.practiceqEnrich,
     practiceqDuplicateAlerts: featureFlags.practiceqDuplicateAlerts,
+    practiceqSendQuestionnaireOnCreate: featureFlags.practiceqSendQuestionnaireOnCreate,
+    practiceqAliasEmailsForDuplicates: featureFlags.practiceqAliasEmailsForDuplicates,
+    PRACTICEQ_BYPASS_NETWORK_CHECK: featureFlags.PRACTICEQ_BYPASS_NETWORK_CHECK
   }
 }
 
@@ -79,6 +106,7 @@ export function validateFeatureFlagEnv(): { valid: boolean; missing: string[] } 
     'INTAKE_HIDE_NON_INTAKE_PROVIDERS',
     'PRACTICEQ_ENRICH_ENABLED',
     'PRACTICEQ_DUPLICATE_ALERTS_ENABLED',
+    'PRACTICEQ_ALIAS_EMAILS_FOR_DUPLICATES',
   ]
 
   const missing = requiredEnvVars.filter(key => process.env[key] === undefined)

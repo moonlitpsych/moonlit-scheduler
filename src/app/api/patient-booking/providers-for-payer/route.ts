@@ -150,8 +150,7 @@ export async function POST(request: NextRequest) {
                         services!inner(
                             id,
                             name,
-                            duration_minutes,
-                            service_type
+                            duration_minutes
                         )
                     `)
                     .eq('payer_id', payer_id)
@@ -169,7 +168,6 @@ export async function POST(request: NextRequest) {
                         service_id: instance.service_id,
                         service_instance_id: instance.id,
                         name: `${instance.services.name} (${instance.services.duration_minutes}m)`,
-                        type: instance.services.service_type || 'unknown',
                         duration_minutes: instance.services.duration_minutes
                     }))
 

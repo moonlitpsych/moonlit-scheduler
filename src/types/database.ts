@@ -1653,11 +1653,13 @@ export interface PatientInfo {
     email?: string
     dateOfBirth: string
     dob?: string
+    // Note: address removed in V2.0 - collected in intake paperwork instead
 }
 
 export interface InsuranceInfo extends PatientInfo {
     memberId?: string
     groupNumber?: string
+    // Note: address removed in V2.0 - collected in intake paperwork instead
 }
 
 export interface ROIContact {

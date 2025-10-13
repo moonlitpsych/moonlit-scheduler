@@ -75,12 +75,26 @@ export function normalizeDateOfBirth(dob: string | null | undefined): string | n
       return null
     }
 
+    // Check for unrealistic dates
+    const currentYear = new Date().getFullYear()
+    const birthYear = date.getFullYear()
+
+    // Reject dates more than 120 years ago or in the future
+    if (birthYear < (currentYear - 120) || birthYear > currentYear) {
+      console.warn(`⚠️ Unrealistic date of birth (year ${birthYear}): ${dob}`)
+      console.warn(`⚠️ IntakeQ may reject dates outside reasonable range. Consider using a test date like 1990-01-01`)
+      // Don't return null, let IntakeQ handle it and we can see the error
+    }
+
     // Format as YYYY-MM-DD
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
 
-    return `${year}-${month}-${day}`
+    const normalized = `${year}-${month}-${day}`
+    console.log(`📅 Normalized DOB: ${dob} → ${normalized}`)
+
+    return normalized
   } catch (error) {
     console.warn(`⚠️ Error normalizing date of birth: ${dob}`, error)
     return null

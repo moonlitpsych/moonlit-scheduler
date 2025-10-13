@@ -1,7 +1,7 @@
 'use client'
 
 import { InsuranceInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 // Import view components (ensure these match your actual imports)
 import AppointmentSummaryView from './views/AppointmentSummaryView'
@@ -91,7 +91,14 @@ export default function BookingFlow({
 
     const goToStep = (step: BookingStep) => {
         setState(prev => ({ ...prev, step }))
+        // V2.0: Scroll to top immediately on step change
+        window.scrollTo({ top: 0, behavior: 'smooth' })
     }
+
+    // V2.0: Auto-scroll to top on step changes (backup for any direct state mutations)
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+    }, [state.step])
 
     // Navigation handlers
     const handleWelcomeSelection = (scenario: BookingScenario) => {
@@ -231,7 +238,7 @@ export default function BookingFlow({
                             lastName: patient?.lastName || '',
                             email: patient?.email || '',
                             phone: patient?.phone,
-                            dateOfBirth: patient?.dateOfBirth
+                            dateOfBirth: patient?.dateOfBirth || patient?.dob  // Support both field names
                         }
                     }
                 ),
@@ -239,7 +246,10 @@ export default function BookingFlow({
                 payerId: state.selectedPayer?.id,
                 start: startDateTime,
                 locationType: 'telehealth' as const,
-                notes: patient?.notes || undefined
+                notes: patient?.notes || undefined,
+                // Insurance enrichment fields (IntakeQ client upsert)
+                memberId: patient?.insuranceId || undefined,  // Map insuranceId → memberId
+                groupNumber: patient?.groupNumber || undefined
             }
 
             // Log payload for debugging

@@ -27,8 +27,7 @@ export default function InsuranceInfoView({
         dob: '',
         email: '',
         phone: '',
-        insuranceId: '',
-        address: ''
+        insuranceId: ''
     })
 
     const [errors, setErrors] = useState<Record<string, string>>({})
@@ -384,19 +383,6 @@ export default function InsuranceInfoView({
                     {errors.insuranceId && (
                         <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.insuranceId}</p>
                     )}
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
-                        Address (Optional)
-                    </label>
-                    <input
-                        type="text"
-                        value={patientInfo.address}
-                        onChange={(e) => handleInputChange('address', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader']"
-                        placeholder="Enter address"
-                    />
                 </div>
 
                 {/* Actions */}

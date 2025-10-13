@@ -267,6 +267,8 @@ async function findExistingClients(
  */
 async function getInsuranceCompanyName(payerId: string): Promise<string | null> {
   try {
+    console.log(`🔍 [INSURANCE DEBUG] Looking up insurance name for payer ${payerId}`)
+
     const { data, error } = await supabaseAdmin
       .from('payer_external_mappings')
       .select('value')
@@ -284,9 +286,11 @@ async function getInsuranceCompanyName(payerId: string): Promise<string | null> 
         .eq('id', payerId)
         .single()
 
+      console.log(`🔍 [INSURANCE DEBUG] Using fallback payer name: ${payer?.name}`)
       return payer?.name || null
     }
 
+    console.log(`🔍 [INSURANCE DEBUG] Found mapping: ${data.value}`)
     return data.value
   } catch (error) {
     console.error('❌ Error getting insurance company name:', error)
@@ -315,13 +319,29 @@ async function updateClient(
   }
 
   console.log(`🔄 Updating IntakeQ client ${clientId} with:`, Object.keys(updates))
+  console.log('🔍 [INTAKEQ DEBUG] Update payload:', JSON.stringify(updates, null, 2))
 
-  await intakeQService.makeRequest(`/clients/${clientId}`, {
+  // IntakeQ requires full client object for updates
+  // First fetch the complete client data
+  const fullClient = await intakeQService.makeRequest<any>(
+    `/clients/${clientId}`,
+    { method: 'GET' }
+  )
+
+  // Merge updates with existing data
+  const updatePayload = {
+    ...fullClient,
+    ...updates,
+    Id: clientId  // Ensure ID is always present
+  }
+
+  const updateResponse = await intakeQService.makeRequest('/clients', {
     method: 'PUT',
-    body: JSON.stringify(updates)
+    body: JSON.stringify(updatePayload)
   })
 
   console.log(`✅ Updated IntakeQ client ${clientId}`)
+  console.log('🔍 [INTAKEQ DEBUG] Update response:', JSON.stringify(updateResponse, null, 2))
 }
 
 /**
@@ -436,18 +456,24 @@ export async function upsertPracticeQClient(
 
       if (!primaryClient.Phone && normalizedPhone) {
         updates.Phone = normalizedPhone
+        enrichedFields.push('Phone')
       }
       if (!primaryClient.DateOfBirth && normalizedDob) {
         updates.DateOfBirth = normalizedDob
+        enrichedFields.push('DateOfBirth')
       }
-      if (!primaryClient.PrimaryInsuranceName && insuranceCompanyName) {
-        updates.PrimaryInsuranceName = insuranceCompanyName
+      // Use correct IntakeQ field names for insurance
+      if (!primaryClient.PrimaryInsuranceCompany && insuranceCompanyName) {
+        updates.PrimaryInsuranceCompany = insuranceCompanyName
+        enrichedFields.push('PrimaryInsuranceCompany')
       }
-      if (!primaryClient.PrimaryMemberID && normalizedMemberId) {
-        updates.PrimaryMemberID = normalizedMemberId
+      if (!primaryClient.PrimaryInsurancePolicyNumber && normalizedMemberId) {
+        updates.PrimaryInsurancePolicyNumber = normalizedMemberId
+        enrichedFields.push('PrimaryInsurancePolicyNumber')
       }
-      if (request.groupNumber && !primaryClient.PrimaryGroupNumber) {
-        updates.PrimaryGroupNumber = request.groupNumber
+      if (request.groupNumber && !primaryClient.PrimaryInsuranceGroupNumber) {
+        updates.PrimaryInsuranceGroupNumber = request.groupNumber
+        enrichedFields.push('PrimaryInsuranceGroupNumber')
       }
 
       // Add contact info to Additional Information (public API limitation)
@@ -469,7 +495,45 @@ export async function upsertPracticeQClient(
       }
 
       // Apply updates if needed
-      await updateClient(primaryClient.Id, updates)
+      if (Object.keys(updates).length > 0) {
+        await updateClient(primaryClient.Id, updates)
+
+        // V2.0: Verify DOB was saved if we updated it (retry once if missing)
+        if (updates.DateOfBirth && normalizedDob) {
+          console.log(`🔍 Verifying DOB update for client ${primaryClient.Id}...`)
+          try {
+            const verifyResponse = await intakeQService.makeRequest<IntakeQClientSearchResult>(
+              `/clients/${primaryClient.Id}`,
+              { method: 'GET' }
+            )
+
+            if (!verifyResponse.DateOfBirth) {
+              console.warn(`⚠️ IntakeQ response missing DOB after update, retrying...`)
+
+              // IntakeQ requires the full client object for updates
+              // First fetch the complete client data
+              const fullClient = await intakeQService.makeRequest<IntakeQClientSearchResult>(
+                `/clients/${primaryClient.Id}`,
+                { method: 'GET' }
+              )
+
+              // Now update with the complete object including DOB
+              await intakeQService.makeRequest('/clients', {
+                method: 'PUT',
+                body: JSON.stringify({
+                  ...fullClient,
+                  Id: primaryClient.Id,
+                  DateOfBirth: normalizedDob
+                })
+              })
+              console.log(`✅ DOB retry successful`)
+            }
+          } catch (retryError) {
+            console.error(`❌ DOB verification/retry failed:`, retryError)
+            errors.push('DOB may not have been saved to IntakeQ')
+          }
+        }
+      }
 
       // Add pinned note if contact was provided
       if (request.contactName && request.contactEmail) {
@@ -583,12 +647,23 @@ export async function upsertPracticeQClient(
       Email: emailSelection.intakeqEmail // Use selected email (canonical or alias)
     }
 
-    // Add enriched fields
+    // Add enriched fields (don't send empty strings - omit if missing)
     if (normalizedPhone) newClientData.Phone = normalizedPhone
     if (normalizedDob) newClientData.DateOfBirth = normalizedDob
-    if (insuranceCompanyName) newClientData.PrimaryInsuranceName = insuranceCompanyName
-    if (normalizedMemberId) newClientData.PrimaryMemberID = normalizedMemberId
-    if (request.groupNumber) newClientData.PrimaryGroupNumber = request.groupNumber
+    // Use correct IntakeQ field names for insurance
+    if (insuranceCompanyName) newClientData.PrimaryInsuranceCompany = insuranceCompanyName
+    if (normalizedMemberId) newClientData.PrimaryInsurancePolicyNumber = normalizedMemberId
+    if (request.groupNumber) newClientData.PrimaryInsuranceGroupNumber = request.groupNumber
+
+    console.log('🔍 [INSURANCE DEBUG] Insurance fields in client data:', {
+      hasInsuranceCompany: !!insuranceCompanyName,
+      insuranceCompany: insuranceCompanyName,
+      hasPolicyNumber: !!normalizedMemberId,
+      policyNumber: normalizedMemberId,
+      originalMemberId: request.memberId,
+      hasGroupNumber: !!request.groupNumber,
+      groupNumber: request.groupNumber
+    })
 
     // Add contact info to Additional Information (public API limitation)
     if (request.contactName) {
@@ -609,11 +684,46 @@ export async function upsertPracticeQClient(
       console.log('📝 Storing contact in AdditionalInformation field (API limitation)')
     }
 
+    // Log the exact data being sent to IntakeQ
+    console.log('🔍 [INTAKEQ DEBUG] Creating client with data:', JSON.stringify(newClientData, null, 2))
+    console.log('🔍 [INTAKEQ DEBUG] Specifically DOB:', {
+      normalizedDob,
+      originalDob: request.dateOfBirth,
+      inPayload: newClientData.DateOfBirth
+    })
+
     // Create the client
     const clientResponse = await intakeQService.createClient(newClientData)
     const intakeqClientId = clientResponse.Id
 
     console.log(`✅ Created new IntakeQ client: ${intakeqClientId}`)
+    console.log('🔍 [INTAKEQ DEBUG] Client creation response:', JSON.stringify(clientResponse, null, 2))
+
+    // V2.0: Verify DOB was saved (retry once if missing)
+    if (normalizedDob && !clientResponse.DateOfBirth) {
+      console.warn(`⚠️ IntakeQ response missing DOB, retrying with targeted update...`)
+      try {
+        // Fetch the full client first to preserve all fields
+        const fullClient = await intakeQService.makeRequest<IntakeQClientSearchResult>(
+          `/clients/${intakeqClientId}`,
+          { method: 'GET' }
+        )
+
+        // Update with complete object including DOB
+        await intakeQService.makeRequest('/clients', {
+          method: 'PUT',
+          body: JSON.stringify({
+            ...fullClient,
+            Id: intakeqClientId,
+            DateOfBirth: normalizedDob
+          })
+        })
+        console.log(`✅ DOB retry successful`)
+      } catch (retryError) {
+        console.error(`❌ DOB retry failed:`, retryError)
+        errors.push('DOB may not have been saved to IntakeQ')
+      }
+    }
 
     // Add pinned note if contact was provided
     if (request.contactName && request.contactEmail) {

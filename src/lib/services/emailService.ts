@@ -1,3 +1,5 @@
+import { logIntakeqSync } from './intakeqAudit'
+
 // Email notification service for appointment bookings
 interface AppointmentDetails {
   appointmentId: string
@@ -12,6 +14,11 @@ interface AppointmentDetails {
     email: string
     phone: string
   }
+  contact?: {  // V2.0: Case manager/contact person
+    name: string
+    email: string
+    phone?: string
+  }
   schedule: {
     date: string
     startTime: string
@@ -20,6 +27,10 @@ interface AppointmentDetails {
   }
   emrSystem: string
   payerName?: string
+  telehealth?: {  // V2.0: Telehealth link details
+    meetingUrl?: string
+    intakeUrl?: string
+  }
 }
 
 class EmailService {
@@ -131,6 +142,90 @@ Feature Flag: PRACTICEQ_ENRICH_ENABLED
     })
 
     console.log('📧 V2.0: Enrichment failure alert sent to miriam@trymoonlit.com')
+  }
+
+  /**
+   * V2.0: Send appointment details mirror to contact/case manager
+   * This ensures the contact gets everything the patient gets
+   */
+  async sendContactMirrorEmail(details: AppointmentDetails): Promise<void> {
+    if (!details.contact?.email) {
+      console.log('ℹ️ No contact email provided - skipping mirror email')
+      return
+    }
+
+    const subject = `${details.patient.name} — appointment details & intake`
+
+    const emailBody = `
+Hello ${details.contact.name},
+
+You have been designated as the contact person for ${details.patient.name}'s appointment.
+Here are the complete details:
+
+APPOINTMENT INFORMATION:
+• Patient: ${details.patient.name}
+• Provider: ${details.provider.name}
+• Date: ${details.schedule.date}
+• Time: ${details.schedule.startTime} - ${details.schedule.endTime} (Mountain Time)
+• Duration: ${details.schedule.duration}
+
+${details.telehealth?.meetingUrl ? `
+TELEHEALTH LINK:
+${details.telehealth.meetingUrl}
+
+Please ensure ${details.patient.name} can access this link at the appointment time.
+It's recommended to test the connection 5-10 minutes before the appointment.
+` : ''}
+
+${details.telehealth?.intakeUrl ? `
+INTAKE QUESTIONNAIRE:
+${details.telehealth.intakeUrl}
+
+Please help ${details.patient.name} complete this intake form before the appointment.
+This helps the provider prepare and makes the visit more efficient.
+` : ''}
+
+IMPORTANT REMINDERS:
+• The appointment is in Mountain Time (MT)
+• Ensure a quiet, private space for the telehealth visit
+• Have insurance information ready
+• Prepare a list of current medications
+• Write down any questions for the provider
+
+APPOINTMENT REFERENCE:
+• Appointment ID: ${details.appointmentId}
+${details.emrAppointmentId ? `• ${details.emrSystem.toUpperCase()} ID: ${details.emrAppointmentId}` : ''}
+
+If you need to reschedule or have questions, please contact:
+• Email: hello@trymoonlit.com
+• Phone: (801) 410-7877
+
+Thank you for supporting ${details.patient.name}'s care journey.
+
+Best regards,
+Moonlit Care Team
+    `.trim()
+
+    await this.sendEmail({
+      to: details.contact.email,
+      subject,
+      body: emailBody
+      // No CC per privacy requirements - both emails include notice about contact notification
+    })
+
+    console.log(`📧 V2.0: Contact mirror email sent to ${details.contact.email}`)
+
+    // Audit the contact mirror
+    await logIntakeqSync({
+      action: 'mirror_contact_email',
+      status: 'success',
+      appointmentId: details.appointmentId,
+      payload: {
+        contactEmail: details.contact.email,
+        // Redacted for privacy
+        redacted: true
+      }
+    })
   }
 
   async sendAppointmentNotifications(appointmentDetails: AppointmentDetails): Promise<void> {
@@ -279,7 +374,7 @@ Moonlit Scheduler Team
     console.log(`📧 Practitioner notification sent to ${details.provider.email}`)
   }
 
-  private async sendEmail(params: { to: string; subject: string; body: string }): Promise<void> {
+  async sendEmail(params: { to: string; subject: string; body?: string; html?: string; cc?: string }): Promise<void> {
     // Check if we have Resend API key configured
     const resendApiKey = process.env.RESEND_API_KEY
     
@@ -300,12 +395,25 @@ Moonlit Scheduler Team
       const { Resend } = await import('resend')
       const resend = new Resend(resendApiKey)
 
-      const { data, error } = await resend.emails.send({
+      const emailData: any = {
         from: process.env.FROM_EMAIL || 'Moonlit Scheduler <notifications@trymoonlit.com>',
         to: params.to,
         subject: params.subject,
-        text: params.body,
-      })
+      }
+
+      // Support both text and HTML bodies
+      if (params.html) {
+        emailData.html = params.html
+      } else if (params.body) {
+        emailData.text = params.body
+      }
+
+      // Add CC if provided
+      if (params.cc) {
+        emailData.cc = params.cc
+      }
+
+      const { data, error } = await resend.emails.send(emailData)
 
       if (error) {
         throw new Error(`Resend API error: ${error.message}`)
@@ -315,16 +423,29 @@ Moonlit Scheduler Team
       
     } catch (error: any) {
       console.error(`❌ Failed to send email to ${params.to}:`, error.message)
-      
+
       // Fallback: log the email content so it's not lost
       console.log('📬 EMAIL CONTENT (fallback):')
       console.log(`To: ${params.to}`)
       console.log(`Subject: ${params.subject}`)
       console.log('Body:')
       console.log('---')
-      console.log(params.body)
+      console.log(params.body || params.html || '')
       console.log('---\n')
-      
+
+      // Audit the failure
+      await logIntakeqSync({
+        action: 'email_failed',
+        status: 'failed',
+        error: error.message,
+        payload: {
+          to: params.to,
+          subject: params.subject,
+          // Don't log actual content for privacy
+          bodyLength: (params.body || params.html || '').length
+        }
+      })
+
       // Re-throw error so caller knows sending failed
       throw new Error(`Email delivery failed: ${error.message}`)
     }
@@ -333,4 +454,5 @@ Moonlit Scheduler Team
 
 // Create and export singleton instance
 export const emailService = new EmailService()
+export const sendEmail = emailService.sendEmail.bind(emailService)
 export default emailService
