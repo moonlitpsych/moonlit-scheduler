@@ -97,6 +97,32 @@ export default function ROIView({
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-xl p-8">
+                    {/* Skip Option - Prominent at Top */}
+                    <div className="mb-8 pb-8 border-b-2 border-[#BF9C73]/10">
+                        <button
+                            type="button"
+                            onClick={() => onSubmit([])}
+                            className="
+                                w-full py-4 px-6 bg-[#BF9C73] hover:bg-[#BF9C73]/90
+                                text-white rounded-xl font-semibold transition-colors
+                                text-lg shadow-sm
+                            "
+                            style={{ fontFamily: 'Newsreader, serif' }}
+                        >
+                            No other contact needed — proceed to appointment summary
+                        </button>
+                        <p className="text-sm text-[#091747]/60 mt-3 text-center">
+                            Most patients don't need to add additional contacts
+                        </p>
+                    </div>
+
+                    {/* Optional Contact Form Section */}
+                    <div className="text-center mb-6">
+                        <p className="text-[#091747]/70 font-medium">
+                            OR add an emergency contact or care coordinator (optional)
+                        </p>
+                    </div>
+
                     <form onSubmit={handleSubmit} className="space-y-8">
                         {/* Existing Contacts */}
                         {contacts.length > 0 && (
@@ -284,18 +310,6 @@ export default function ROIView({
                                 style={{ fontFamily: 'Newsreader, serif' }}
                             >
                                 Continue to Confirmation
-                            </button>
-                        </div>
-
-                        {/* Skip Option */}
-                        <div className="text-center pt-4">
-                            <button
-                                type="button"
-                                onClick={() => onSubmit([])}
-                                className="text-[#091747]/60 hover:text-[#091747] text-sm underline transition-colors"
-                                style={{ fontFamily: 'Newsreader, serif' }}
-                            >
-                                Skip - No additional contacts needed
                             </button>
                         </div>
                     </form>

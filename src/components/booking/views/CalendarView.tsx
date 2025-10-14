@@ -1026,6 +1026,31 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                     </p>
                 </div>
 
+                {/* Self-Pay Pricing Information */}
+                {selectedPayer?.id === 'cash-payment' && (
+                    <div className="max-w-2xl mx-auto mb-8">
+                        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6 shadow-sm">
+                            <h3 className="text-xl font-bold text-blue-900 mb-3 font-['Newsreader']">
+                                Self-Pay Pricing
+                            </h3>
+                            <div className="space-y-2 text-blue-800">
+                                <div className="flex items-baseline gap-2">
+                                    <span className="font-semibold text-lg">Intake appointments:</span>
+                                    <span className="text-2xl font-bold">$400</span>
+                                </div>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="font-semibold text-lg">Follow-up appointments:</span>
+                                    <span className="text-2xl font-bold">$133</span>
+                                    <span className="text-sm text-blue-700">each</span>
+                                </div>
+                                <p className="text-sm mt-4 text-blue-700 border-t border-blue-200 pt-3">
+                                    💡 Rates do not vary from provider to provider. Please choose a provider to see their availability.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Booking Mode Toggle */}
                 <div className="max-w-lg mx-auto mb-8">
                     <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-2">

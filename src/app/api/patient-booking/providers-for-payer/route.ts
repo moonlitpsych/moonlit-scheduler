@@ -29,13 +29,132 @@ export async function POST(request: NextRequest) {
 
         console.log('🔍 NEW: Fetching bookable providers using new view:', { payer_id, language, include_co_visit_info })
 
-        // CANONICAL: Use v_bookable_provider_payer view exclusively
-        console.log('📡 Using canonical v_bookable_provider_payer view...')
-        // Get bookable relationships from canonical view
-        const { data: relationships, error: relationshipError } = await supabaseAdmin
-            .from(BOOKABILITY_VIEWS.BOOKABLE)
-            .select(BOOKABLE_PROVIDER_SELECT)
-            .eq('payer_id', payer_id)
+        // Special handling for cash payment
+        let relationships, relationshipError;
+
+        if (payer_id === 'cash-payment') {
+            console.log('💵 Cash payment detected - fetching all providers accepting new patients')
+
+            // For cash payment, skip the canonical view and directly fetch all providers
+            // that accept new patients
+            const { data: cashProviders, error: cashError } = await supabaseAdmin
+                .from('providers')
+                .select(PROVIDER_DETAILS_SELECT)
+                .eq('is_bookable', true)
+                .eq('accepts_new_patients', true)
+
+            if (cashError) {
+                console.error('❌ Error fetching cash payment providers:', cashError)
+                return NextResponse.json(
+                    { success: false, error: 'Failed to fetch cash payment providers', details: cashError },
+                    { status: 500 }
+                )
+            }
+
+            // For cash payment, we'll create the response directly without relationships
+            // Skip all the relationship processing and go straight to the response
+            console.log(`💵 Found ${cashProviders?.length || 0} providers for cash payment`)
+
+            // Get focus areas for cash providers
+            const providersWithFocus = []
+            if (cashProviders) {
+                const providerIds = cashProviders.map(p => p.id)
+
+                const { data: allFocusAreas } = await supabaseAdmin
+                    .from('provider_focus_areas')
+                    .select(`
+                        provider_id,
+                        focus_areas!inner (
+                            id,
+                            name,
+                            slug,
+                            focus_type
+                        ),
+                        priority,
+                        confidence
+                    `)
+                    .in('provider_id', providerIds)
+                    .eq('focus_areas.is_active', true)
+                    .order('priority', { ascending: true })
+
+                const focusAreasByProvider = (allFocusAreas || []).reduce((acc, fa) => {
+                    if (!acc[fa.provider_id]) {
+                        acc[fa.provider_id] = []
+                    }
+                    acc[fa.provider_id].push({
+                        id: fa.focus_areas.id,
+                        name: fa.focus_areas.name,
+                        slug: fa.focus_areas.slug,
+                        type: fa.focus_areas.focus_type,
+                        priority: fa.priority,
+                        confidence: fa.confidence
+                    })
+                    return acc
+                }, {} as Record<string, any[]>)
+
+                for (const provider of cashProviders) {
+                    providersWithFocus.push({
+                        ...provider,
+                        focus_json: focusAreasByProvider[provider.id] || [],
+                        // Add cash payment specific fields
+                        accepted_services: [
+                            {
+                                service_id: 'intake-service',
+                                service_instance_id: 'cash-intake-instance',
+                                name: 'Intake Appointment (60m)',
+                                duration_minutes: 60
+                            },
+                            {
+                                service_id: 'followup-service',
+                                service_instance_id: 'cash-followup-instance',
+                                name: 'Follow-up Appointment (30m)',
+                                duration_minutes: 30
+                            }
+                        ],
+                        network_status: 'in_network',
+                        billing_provider_id: null,
+                        rendering_provider_id: null,
+                        supervision_level: null,
+                        requires_co_visit: false,
+                        co_visit_provider_id: null
+                    })
+                }
+            }
+
+            // Apply language filtering
+            const filteredProviders = filterProvidersByLanguage(providersWithFocus, language)
+
+            console.log(`💵 Cash payment: ${filteredProviders.length} providers after language filter`)
+
+            return NextResponse.json({
+                success: true,
+                data: {
+                    payer_id,
+                    language,
+                    providers: filteredProviders,
+                    total_providers: filteredProviders.length,
+                    debug_info: {
+                        bookable_providers_found: providersWithFocus.length,
+                        direct_relationships: providersWithFocus.length,
+                        supervised_relationships: 0,
+                        co_visit_required: 0,
+                        providers_after_language_filter: filteredProviders.length,
+                        is_cash_payment: true
+                    }
+                }
+            })
+        } else {
+            // CANONICAL: Use v_bookable_provider_payer view exclusively
+            console.log('📡 Using canonical v_bookable_provider_payer view...')
+            // Get bookable relationships from canonical view
+            const result = await supabaseAdmin
+                .from(BOOKABILITY_VIEWS.BOOKABLE)
+                .select(BOOKABLE_PROVIDER_SELECT)
+                .eq('payer_id', payer_id)
+
+            relationships = result.data
+            relationshipError = result.error
+        }
 
         if (relationshipError) {
             console.error('❌ Error fetching from canonical view:', relationshipError)
@@ -142,18 +261,50 @@ export async function POST(request: NextRequest) {
             const providersWithServiceInstances = []
             if (providersWithFocus) {
                 // Get all service instances for this payer
-                const { data: serviceInstances, error: serviceError } = await supabaseAdmin
-                    .from('service_instances')
-                    .select(`
-                        id,
-                        service_id,
-                        services!inner(
+                let serviceInstances, serviceError;
+
+                if (payer_id === 'cash-payment') {
+                    // For cash payment, use default telehealth service instances or create mock ones
+                    console.log('💵 Using default service instances for cash payment')
+                    // Create mock service instances for cash payment
+                    serviceInstances = [
+                        {
+                            id: 'cash-intake',
+                            service_id: 'intake-service',
+                            services: {
+                                id: 'intake-service',
+                                name: 'Intake Appointment',
+                                duration_minutes: 60
+                            }
+                        },
+                        {
+                            id: 'cash-followup',
+                            service_id: 'followup-service',
+                            services: {
+                                id: 'followup-service',
+                                name: 'Follow-up Appointment',
+                                duration_minutes: 30
+                            }
+                        }
+                    ]
+                } else {
+                    // Fetch real service instances for insurance payers
+                    const result = await supabaseAdmin
+                        .from('service_instances')
+                        .select(`
                             id,
-                            name,
-                            duration_minutes
-                        )
-                    `)
-                    .eq('payer_id', payer_id)
+                            service_id,
+                            services!inner(
+                                id,
+                                name,
+                                duration_minutes
+                            )
+                        `)
+                        .eq('payer_id', payer_id)
+
+                    serviceInstances = result.data
+                    serviceError = result.error
+                }
 
                 if (serviceError) {
                     console.error('❌ Error fetching service instances:', serviceError)

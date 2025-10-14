@@ -8,6 +8,7 @@ import { resolveIntakeServiceInstance } from '@/lib/services/intakeResolver'
 import { getIntakeqPractitionerId } from '@/lib/integrations/providerMap'
 import { getIntakeqServiceId } from '@/lib/integrations/serviceInstanceMap'
 import { ensureClient, syncClientInsurance, createAppointment } from '@/lib/intakeq/client'
+import { emailService } from '@/lib/services/emailService'
 
 /**
  * Normalization helpers for identity matching
@@ -627,6 +628,69 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         }
 
         console.log(`🎉 Intake-only booking completed successfully: ${appointmentId} → ${pqAppointmentId} (service: ${serviceInstanceId})`)
+
+        // Send admin email notification
+        try {
+            // Get patient details for the email
+            const { data: patientData } = await supabaseAdmin
+                .from('patients')
+                .select('first_name, last_name, email, phone')
+                .eq('id', patientId)
+                .single()
+
+            if (patientData) {
+                // Format date for subject line (e.g., "2025-10-15")
+                const appointmentDate = startDate.toISOString().split('T')[0]
+
+                // Get patient initials
+                const firstInitial = patientData.first_name ? patientData.first_name.charAt(0).toUpperCase() : ''
+                const lastInitial = patientData.last_name ? patientData.last_name.charAt(0).toUpperCase() : ''
+                const patientInitials = `${firstInitial}${lastInitial}`
+
+                // Format appointment time (e.g., "10:00 AM")
+                const appointmentTime = startDate.toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                    timeZone: 'America/Denver'
+                })
+
+                // Send notification email
+                await emailService.sendEmail({
+                    to: 'hello@trymoonlit.com',
+                    subject: `New Scheduler appt for ${appointmentDate} for ${patientInitials}`,
+                    body: `
+🎯 New Appointment Booking Alert
+
+APPOINTMENT DETAILS:
+• Patient: ${patientData.first_name} ${patientData.last_name}
+• Email: ${patientData.email}
+• Phone: ${patientData.phone || 'Not provided'}
+• Provider: ${providerData ? `${providerData.first_name} ${providerData.last_name}` : 'Provider'}
+• Date: ${appointmentDate}
+• Time: ${appointmentTime} (Mountain Time)
+• Duration: ${durationMinutes} minutes
+• Payer: ${payer.name}
+
+SYSTEM DETAILS:
+• Local Appointment ID: ${appointmentId}
+• IntakeQ Appointment ID: ${pqAppointmentId || 'Not created'}
+• Service Instance: ${serviceInstanceId}
+• Location: ${locationType}
+
+---
+This booking was created through the Moonlit Scheduler widget.
+                    `.trim()
+                })
+
+                console.log('✅ Admin notification email sent to hello@trymoonlit.com')
+            } else {
+                console.warn('⚠️ Could not fetch patient data for email notification')
+            }
+        } catch (emailError: any) {
+            console.error('❌ Failed to send admin notification email:', emailError.message)
+            // Don't fail the booking if email fails
+        }
 
         // Save idempotency record for future duplicate requests
         if (idempotencyKey) {

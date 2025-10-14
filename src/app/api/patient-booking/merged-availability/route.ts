@@ -73,14 +73,16 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        // UUID validation for payer_id
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-        if (!uuidRegex.test(payer_id)) {
-            console.log(`❌ Invalid payer_id format: ${payer_id}`)
-            return NextResponse.json(
-                { error: `Invalid payer_id format: ${payer_id}`, code: 'INVALID_PAYER_ID', success: false },
-                { status: 422 }
-            )
+        // UUID validation for payer_id (except for cash payment)
+        if (payer_id !== 'cash-payment') {
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+            if (!uuidRegex.test(payer_id)) {
+                console.log(`❌ Invalid payer_id format: ${payer_id}`)
+                return NextResponse.json(
+                    { error: `Invalid payer_id format: ${payer_id}`, code: 'INVALID_PAYER_ID', success: false },
+                    { status: 422 }
+                )
+            }
         }
 
         console.log(`🔍 Getting Intake-only availability for payer ${payer_id} on ${requestDate}${provider_id ? ` (provider: ${provider_id})` : ''}`)
@@ -119,38 +121,81 @@ export async function POST(request: NextRequest) {
             console.log(`✅ Cache already exists for requested date range`)
         }
 
-        // Step 3: Get BOOKABLE providers using canonical view (consistent with providers-for-payer API)
-        const { data: bookableRelationships, error: networkError } = await supabaseAdmin
-            .from('v_bookable_provider_payer')
-            .select('*')
-            .eq('payer_id', payer_id)
+        // Step 3: Get BOOKABLE providers (special handling for cash payment)
+        let bookableProviders: any[] = []
 
-        if (networkError) {
-            console.error('❌ Error fetching bookable provider relationships:', networkError)
-            return NextResponse.json(
-                { error: 'Failed to fetch bookable provider relationships', details: networkError, success: false },
-                { status: 500 }
-            )
+        if (payer_id === 'cash-payment') {
+            console.log('💵 Cash payment detected - fetching all providers accepting new patients')
+
+            // For cash payment, get all providers that accept new patients
+            const { data: cashProviders, error: cashError } = await supabaseAdmin
+                .from('providers')
+                .select('*')
+                .eq('is_bookable', true)
+                .eq('accepts_new_patients', true)
+
+            if (cashError) {
+                console.error('❌ Error fetching cash payment providers:', cashError)
+                return NextResponse.json(
+                    { error: 'Failed to fetch cash payment providers', details: cashError, success: false },
+                    { status: 500 }
+                )
+            }
+
+            // Transform to expected format for cash payment
+            bookableProviders = cashProviders?.map(provider => ({
+                provider_id: provider.id,
+                payer_id: 'cash-payment',
+                via: 'direct',
+                attending_provider_id: null,
+                supervision_level: null,
+                requires_co_visit: false,
+                effective: true,
+                bookable_from_date: null,
+                first_name: provider.first_name,
+                last_name: provider.last_name,
+                title: provider.title,
+                role: provider.role,
+                provider_type: provider.provider_type,
+                is_active: provider.is_active,
+                is_bookable: provider.is_bookable
+            })) || []
+
+            console.log(`💵 Found ${bookableProviders.length} providers for cash payment`)
+        } else {
+            // Use canonical view for insurance payers
+            const { data: bookableRelationships, error: networkError } = await supabaseAdmin
+                .from('v_bookable_provider_payer')
+                .select('*')
+                .eq('payer_id', payer_id)
+
+            if (networkError) {
+                console.error('❌ Error fetching bookable provider relationships:', networkError)
+                return NextResponse.json(
+                    { error: 'Failed to fetch bookable provider relationships', details: networkError, success: false },
+                    { status: 500 }
+                )
+            }
+
+            // Transform canonical view data to expected format
+            bookableProviders = bookableRelationships?.map(rel => ({
+                provider_id: rel.provider_id,
+                payer_id: rel.payer_id,
+                via: rel.network_status === 'in_network' ? 'direct' : 'supervised',
+                attending_provider_id: rel.billing_provider_id,
+                supervision_level: rel.network_status === 'supervised' ? 'standard' : null,
+                requires_co_visit: false, // Not modeled in new view
+                effective: true,
+                bookable_from_date: rel.effective_date,
+                first_name: rel.first_name,
+                last_name: rel.last_name,
+                title: rel.title,
+                role: rel.role,
+                provider_type: rel.provider_type,
+                is_active: rel.is_active,
+                is_bookable: rel.is_bookable
+            })) || []
         }
-
-        // Transform canonical view data to expected format
-        const bookableProviders = bookableRelationships?.map(rel => ({
-            provider_id: rel.provider_id,
-            payer_id: rel.payer_id,
-            via: rel.network_status === 'in_network' ? 'direct' : 'supervised',
-            attending_provider_id: rel.billing_provider_id,
-            supervision_level: rel.network_status === 'supervised' ? 'standard' : null,
-            requires_co_visit: false, // Not modeled in new view
-            effective: true,
-            bookable_from_date: rel.effective_date,
-            first_name: rel.first_name,
-            last_name: rel.last_name,
-            title: rel.title,
-            role: rel.role,
-            provider_type: rel.provider_type,
-            is_active: rel.is_active,
-            is_bookable: rel.is_bookable
-        })) || []
 
         if (provider_id) {
             const filtered = bookableProviders.filter(bp => bp.provider_id === provider_id)

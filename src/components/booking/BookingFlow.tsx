@@ -57,6 +57,7 @@ export interface BookingState {
     }
     // NEW: Error handling for PracticeQ sync failures
     bookingError?: string
+    showPQSyncError?: boolean // Only show IntakeQ sync error banner for actual IntakeQ issues
     // NEW: Submission state to prevent duplicate requests
     isSubmitting?: boolean
 }
@@ -291,29 +292,51 @@ export default function BookingFlow({
                 code: result?.code
             })
 
+            // Check if we got a duplicate appointment (which is actually success)
+            if (result?.success && result?.data?.isDuplicate) {
+                console.log('✅ Found existing appointment, treating as success')
+                updateState({
+                    appointmentId: result.data.appointmentId,
+                    roiContacts: state.roiContacts
+                })
+                goToStep('confirmation')
+                return
+            }
+
             // CRITICAL: Require at least appointmentId (pqAppointmentId is optional based on enrichment)
             if (!response.ok || !result?.success || !result?.data?.appointmentId) {
-                console.error('BOOKING DEBUG – PQ sync failed:', {
+                console.error('BOOKING DEBUG – Booking failed:', {
                     status: response.status,
                     code: result?.code,
                     appointmentId: result?.details?.appointmentId
                 })
 
                 // Map error codes to user-friendly messages
-                const errorMessage = result?.code === 'NO_INTAKE_INSTANCE_FOR_PAYER'
+                const errorMessage = result?.code === 'CONFLICT'
+                    ? "That time slot is no longer available. Please choose another time."
+                    : result?.code === 'DUPLICATE_REQUEST'
+                    ? "You've already booked this appointment. Check your email for confirmation."
+                    : result?.code === 'NO_INTAKE_INSTANCE_FOR_PAYER'
                     ? "This insurance isn't configured for new patient visits yet."
                     : result?.code === 'MISSING_PROVIDER_MAPPING'
                     ? "That provider isn't ready to book yet."
+                    : result?.code === 'PATIENT_UPSERT_FAILED'
+                    ? "We couldn't create your patient record. Please check your information and try again."
                     : result?.code === 'SLOT_TAKEN'
                     ? "That time was just taken. Please pick another slot."
                     : result?.code === 'EHR_WRITE_FAILED'
-                    ? "We couldn't finish creating your appointment in PracticeQ. Please try again."
+                    ? "We couldn't sync with our scheduling system. Your appointment was saved - we'll complete setup and email you."
                     : result?.error ?? response.statusText ?? 'Unknown error'
+
+                // Only show PQ sync error if it's specifically an IntakeQ issue
+                const showPQError = result?.code === 'EHR_WRITE_FAILED' ||
+                                   result?.code === 'MISSING_PROVIDER_MAPPING'
 
                 // Store error state and appointment ID for retry
                 updateState({
                     bookingError: errorMessage,
-                    appointmentId: result?.details?.appointmentId || undefined
+                    appointmentId: result?.details?.appointmentId || undefined,
+                    showPQSyncError: showPQError
                 })
                 goToStep('booking-error') // Show error UI
                 return // STOP — do not go to confirmation
@@ -622,12 +645,15 @@ export default function BookingFlow({
                                 </p>
                             </div>
                             <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl p-8">
-                                <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
-                                    <p className="text-red-800 font-['Newsreader']">
-                                        Your appointment was saved to our system, but we couldn't sync it with our scheduling partner.
-                                        {state.appointmentId && <span className="block mt-2 text-sm text-red-700">Reference: {state.appointmentId}</span>}
-                                    </p>
-                                </div>
+                                {/* Only show PQ sync error banner if it's an IntakeQ-specific issue */}
+                                {state.showPQSyncError && (
+                                    <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
+                                        <p className="text-red-800 font-['Newsreader']">
+                                            Your appointment was saved to our system, but we couldn't sync it with our scheduling partner.
+                                            {state.appointmentId && <span className="block mt-2 text-sm text-red-700">Reference: {state.appointmentId}</span>}
+                                        </p>
+                                    </div>
+                                )}
                                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                                     {state.appointmentId && (
                                         <button

@@ -109,7 +109,8 @@ export default function InsuranceInfoView({
             newErrors.phone = 'Phone number is required'
         }
 
-        if (!patientInfo.insuranceId.trim()) {
+        // Only require insurance ID for non-cash payment
+        if (selectedPayer.id !== 'cash-payment' && !patientInfo.insuranceId.trim()) {
             newErrors.insuranceId = 'Insurance ID is required'
         }
 
@@ -367,23 +368,26 @@ export default function InsuranceInfoView({
                     </div>
                 </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
-                        {bookingForSomeoneElse ? 'Patient\'s Insurance ID *' : 'Insurance ID *'}
-                    </label>
-                    <input
-                        type="text"
-                        value={patientInfo.insuranceId}
-                        onChange={(e) => handleInputChange('insuranceId', e.target.value)}
-                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
-                            errors.insuranceId ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder={bookingForSomeoneElse ? "Enter patient's insurance ID/member number" : "Enter insurance ID/member number"}
-                    />
-                    {errors.insuranceId && (
-                        <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.insuranceId}</p>
-                    )}
-                </div>
+                {/* Only show Insurance ID field if not cash payment */}
+                {selectedPayer.id !== 'cash-payment' && (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2 font-['Newsreader']">
+                            {bookingForSomeoneElse ? 'Patient\'s Insurance ID *' : 'Insurance ID *'}
+                        </label>
+                        <input
+                            type="text"
+                            value={patientInfo.insuranceId}
+                            onChange={(e) => handleInputChange('insuranceId', e.target.value)}
+                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#BF9C73] focus:border-[#BF9C73] transition-colors font-['Newsreader'] ${
+                                errors.insuranceId ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder={bookingForSomeoneElse ? "Enter patient's insurance ID/member number" : "Enter insurance ID/member number"}
+                        />
+                        {errors.insuranceId && (
+                            <p className="mt-1 text-sm text-red-600 font-['Newsreader']">{errors.insuranceId}</p>
+                        )}
+                    </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex items-center justify-between pt-6">
