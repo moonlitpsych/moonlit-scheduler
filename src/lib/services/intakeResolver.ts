@@ -27,7 +27,17 @@ export async function resolveIntakeServiceInstance(payerId: string): Promise<Int
     try {
         console.log('📦 resolveIntake {payerId}', payerId)
 
-        // Validate payerId is a UUID
+        // Special handling for cash payment
+        if (payerId === 'cash-payment') {
+            console.log('💵 Cash payment detected - returning default intake service instance')
+            // Real UUID from service_instances where payer_id IS NULL (applies to all payers/cash)
+            return {
+                serviceInstanceId: '1e2c8ef7-84ae-49af-bafd-01efc16757a8',
+                durationMinutes: 60
+            }
+        }
+
+        // Validate payerId is a UUID for non-cash payments
         if (!isValidUUID(payerId)) {
             const invalidPayerError = new Error(`Invalid payer ID format: ${payerId}`)
             ;(invalidPayerError as any).status = 422

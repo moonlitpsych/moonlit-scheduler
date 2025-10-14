@@ -80,7 +80,8 @@ interface V2BookingResponse {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<V2BookingResponse>> {
-  // V2.0: Strong identity matching without ON CONFLICT - recompiled
+  // V2.0: Strong identity matching without ON CONFLICT - FRESH COMPILE TEST
+  console.log('🔵 V2.0 BOOK-V2 ENDPOINT - FRESH COMPILATION ACTIVE')
   const startTime = Date.now()
   const warnings: string[] = []
 
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
           .eq('id', patientId)
           .single()
 
-        if (existingPatient && !existingPatient.primary_payer_id && body.payerId) {
+        if (existingPatient && !existingPatient.primary_payer_id && body.payerId && body.payerId !== 'cash-payment') {
           await supabaseAdmin
             .from('patients')
             .update({ primary_payer_id: body.payerId })
@@ -167,7 +168,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
       try {
         // Strong match: email + firstName + lastName + DOB
         if (normalizedDob) {
-          const { data: strongMatch } = await supabaseAdmin
+          console.log(`🔍 V2.0: Attempting strong match with:`, {
+            email: normalizedEmail,
+            firstName: normalizedFirstName,
+            lastName: normalizedLastName,
+            dob: normalizedDob
+          })
+
+          const { data: strongMatch, error: strongMatchError } = await supabaseAdmin
             .from('patients')
             .select('id, primary_payer_id')
             .eq('email', normalizedEmail)
@@ -176,24 +184,32 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
             .eq('date_of_birth', normalizedDob)
             .maybeSingle()
 
+          if (strongMatchError) {
+            console.error(`❌ V2.0: Strong match query error:`, strongMatchError)
+          }
+
           if (strongMatch) {
             resolvedPatientId = strongMatch.id
             matchType = 'strong'
             console.log(`✅ V2.0: Strong match found (email+name+DOB): ${resolvedPatientId}`)
 
-            // Update primary_payer_id if not set
-            if (!strongMatch.primary_payer_id && body.payerId) {
+            // Update primary_payer_id if not set (skip for cash payment)
+            if (!strongMatch.primary_payer_id && body.payerId && body.payerId !== 'cash-payment') {
               await supabaseAdmin
                 .from('patients')
                 .update({ primary_payer_id: body.payerId })
                 .eq('id', resolvedPatientId)
             }
+          } else {
+            console.log(`⚠️ V2.0: No strong match found`)
           }
         }
 
         // Fallback match: email + firstName + lastName + phone (only if no strong match)
         if (!resolvedPatientId && normalizedPhone) {
-          const { data: fallbackMatch } = await supabaseAdmin
+          console.log(`🔍 V2.0: Attempting fallback match with phone: ${patient.phone}`)
+
+          const { data: fallbackMatch, error: fallbackMatchError } = await supabaseAdmin
             .from('patients')
             .select('id, primary_payer_id')
             .eq('email', normalizedEmail)
@@ -202,23 +218,30 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
             .eq('phone', patient.phone) // Use original phone format
             .maybeSingle()
 
+          if (fallbackMatchError) {
+            console.error(`❌ V2.0: Fallback match query error:`, fallbackMatchError)
+          }
+
           if (fallbackMatch) {
             resolvedPatientId = fallbackMatch.id
             matchType = 'fallback'
             console.log(`✅ V2.0: Fallback match found (email+name+phone): ${resolvedPatientId}`)
 
-            // Update primary_payer_id if not set
-            if (!fallbackMatch.primary_payer_id && body.payerId) {
+            // Update primary_payer_id if not set (skip for cash payment)
+            if (!fallbackMatch.primary_payer_id && body.payerId && body.payerId !== 'cash-payment') {
               await supabaseAdmin
                 .from('patients')
                 .update({ primary_payer_id: body.payerId })
                 .eq('id', resolvedPatientId)
             }
+          } else {
+            console.log(`⚠️ V2.0: No fallback match found`)
           }
         }
 
         // No match found - create new patient
         if (!resolvedPatientId) {
+          console.log(`📝 V2.0: Creating new patient with email: ${normalizedEmail}`)
           const { data: newPatient, error: insertError } = await supabaseAdmin
             .from('patients')
             .insert({
@@ -227,7 +250,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
               email: normalizedEmail,
               phone: patient.phone || null,
               date_of_birth: patient.dateOfBirth || null,
-              primary_payer_id: body.payerId || null,
+              // Set to null for cash payment (not a valid UUID)
+              primary_payer_id: (body.payerId && body.payerId !== 'cash-payment') ? body.payerId : null,
               status: 'active',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
@@ -316,38 +340,108 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
     // No additional validation needed here - the UI is the source of truth
 
     // Step 3: Resolve service instance and duration
+    // The resolver handles cash payment correctly - returns real UUID for cash service instance
     const intakeInstance = await resolveIntakeServiceInstance(body.payerId)
-    const serviceInstanceId = intakeInstance.serviceInstanceId
+    const isCashPayment = body.payerId === 'cash-payment'
+    const serviceInstanceId = intakeInstance.serviceInstanceId // Always use resolver value (no override)
     const durationMinutes = intakeInstance.durationMinutes
+
+    console.log(`🔍 V2.0: Resolved service instance:`, {
+      payerId: body.payerId,
+      isCashPayment,
+      serviceInstanceId,
+      serviceInstanceType: typeof serviceInstanceId,
+      durationMinutes
+    })
 
     const startDate = new Date(body.start)
     const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000)
 
     // Step 4: Check for conflicts
+    console.log(`🔍 V2.0: Checking conflicts for provider ${body.providerId}, patient ${resolvedPatientId}`)
     const { data: conflicts } = await supabaseAdmin
       .from('appointments')
-      .select('id, start_time, patient_id, created_at')
+      .select('id, start_time, end_time, patient_id, created_at, status')
       .eq('provider_id', body.providerId)
       .eq('status', 'scheduled')
       .lt('start_time', endDate.toISOString())
       .gt('end_time', startDate.toISOString())
 
     if (conflicts && conflicts.length > 0) {
-      // Check for recent duplicate
+      console.log(`⚠️ V2.0: Found ${conflicts.length} conflicting appointments:`, conflicts.map(c => ({
+        id: c.id,
+        patient_id: c.patient_id,
+        is_same_patient: c.patient_id === resolvedPatientId,
+        start: c.start_time,
+        created_at: c.created_at,
+        age_minutes: Math.floor((Date.now() - new Date(c.created_at).getTime()) / (60 * 1000))
+      })))
+
+      // Detect test patient by email pattern (for extended duplicate window)
+      const { data: patientForCheck } = await supabaseAdmin
+        .from('patients')
+        .select('email')
+        .eq('id', resolvedPatientId)
+        .single()
+
+      const isTestPatient = patientForCheck?.email?.includes('test') ||
+                           patientForCheck?.email?.includes('@trymoonlit.com') ||
+                           false
+
+      // Check for duplicate from same patient
+      // - Production: within 10 minutes
+      // - Test patients: within 24 hours (to prevent false conflicts during testing)
+      const duplicateWindow = isTestPatient ? 24 * 60 * 60 * 1000 : 10 * 60 * 1000
+
       const recentDuplicate = conflicts.find(c => {
         const ageMs = Date.now() - new Date(c.created_at).getTime()
-        return c.patient_id === resolvedPatientId && ageMs < 30000
+        const isSamePatient = c.patient_id === resolvedPatientId
+        const isWithinWindow = ageMs < duplicateWindow
+
+        console.log(`🔍 Checking conflict ${c.id}: patient match=${isSamePatient}, age=${Math.floor(ageMs/1000)}s, within window=${isWithinWindow} (${isTestPatient ? '24h test' : '10min prod'})`)
+
+        return isSamePatient && isWithinWindow
       })
 
       if (recentDuplicate) {
-        console.log(`⚠️ V2.0: Duplicate booking detected within 30s`)
-        return NextResponse.json({
-          success: false,
-          error: 'Duplicate booking detected',
-          code: 'DUPLICATE_REQUEST'
-        }, { status: 409 })
+        const windowDesc = isTestPatient ? '24h test window' : '10min window'
+        console.log(`✅ V2.0: Found existing appointment within ${windowDesc} (${recentDuplicate.id}), returning it`)
+
+        // Fetch the full appointment details to return
+        const { data: existingAppointment } = await supabaseAdmin
+          .from('appointments')
+          .select('*')
+          .eq('id', recentDuplicate.id)
+          .single()
+
+        if (existingAppointment) {
+          console.log(`✅ V2.0: Returning existing appointment as success`, {
+            id: existingAppointment.id,
+            pq_appointment_id: existingAppointment.pq_appointment_id
+          })
+
+          // Return success with the existing appointment
+          return NextResponse.json({
+            success: true,
+            data: {
+              appointmentId: existingAppointment.id,
+              pqAppointmentId: existingAppointment.pq_appointment_id || undefined,
+              status: existingAppointment.status,
+              start: existingAppointment.start_time,
+              end: existingAppointment.end_time,
+              duration: durationMinutes,
+              provider: {
+                id: body.providerId,
+                name: providerName
+              },
+              isDuplicate: true,
+              message: 'Found your existing appointment'
+            }
+          })
+        }
       }
 
+      console.log(`❌ V2.0: Conflict is NOT a duplicate - returning 409`)
       return NextResponse.json({
         success: false,
         error: 'Time slot unavailable',
@@ -407,53 +501,97 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
     console.log(`📋 V2.0: Built patient_info snapshot (match: ${matchType})`)
 
     // Step 5b: Get payer info for insurance_info field
-    const { data: payer, error: payerError } = await supabaseAdmin
-      .from('payers')
-      .select('id, name, payer_type')
-      .eq('id', body.payerId)
-      .single()
+    // Special handling for cash payment
+    let payer: { id: string; name: string; payer_type?: string } | null = null
+    let payerError = null
 
-    if (payerError || !payer) {
-      console.error('❌ V2.0: Failed to fetch payer:', payerError)
-      return NextResponse.json({
-        success: false,
-        error: `Payer not found: ${body.payerId}`,
-        code: 'INVALID_PAYER'
-      }, { status: 404 })
+    if (body.payerId === 'cash-payment') {
+      // Mock payer object for cash payment
+      payer = {
+        id: 'cash-payment',
+        name: 'Cash Payment (Self-Pay)',
+        payer_type: 'self_pay'
+      }
+    } else {
+      const result = await supabaseAdmin
+        .from('payers')
+        .select('id, name, payer_type')
+        .eq('id', body.payerId)
+        .single()
+
+      payer = result.data
+      payerError = result.error
+
+      if (payerError || !payer) {
+        console.error('❌ V2.0: Failed to fetch payer:', payerError)
+        return NextResponse.json({
+          success: false,
+          error: `Payer not found: ${body.payerId}`,
+          code: 'INVALID_PAYER'
+        }, { status: 404 })
+      }
     }
 
     // Build insurance_info snapshot (required non-null field)
     const insuranceInfo = {
-      payer_id: body.payerId,
+      // For cash payment, store null payer_id and indicate self-pay
+      payer_id: (body.payerId === 'cash-payment') ? null : body.payerId,
       payer_name: payer.name,
+      payment_type: (body.payerId === 'cash-payment') ? 'self_pay' : 'insurance',
       member_id: body.memberId || null,
       group_number: body.groupNumber || null
     }
 
-    console.log(`📋 V2.0: Built insurance_info snapshot for payer: ${payer.name}`)
+    console.log(`📋 V2.0: Built insurance_info snapshot:`, {
+      payer_name: payer.name,
+      payment_type: insuranceInfo.payment_type,
+      is_cash: body.payerId === 'cash-payment'
+    })
 
     // Step 6: Create appointment in database first (V2.0: DB-first approach)
+    const appointmentPayload = {
+      patient_id: resolvedPatientId,
+      provider_id: body.providerId,
+      // Set to NULL for cash payment (not a valid UUID)
+      payer_id: (body.payerId && body.payerId !== 'cash-payment') ? body.payerId : null,
+      service_instance_id: serviceInstanceId,
+      start_time: startDate.toISOString(),
+      end_time: endDate.toISOString(),
+      status: 'scheduled',
+      appointment_type: body.locationType === 'telehealth' ? 'telehealth' : null, // Only 'telehealth' or NULL allowed by constraint
+      location_type: body.locationType,
+      patient_info: patientInfo, // Required non-null snapshot
+      insurance_info: insuranceInfo, // Required non-null snapshot
+      notes: body.notes || null,
+      created_at: new Date().toISOString()
+    }
+
+    console.log(`🔍 V2.0: Appointment insert payload:`, {
+      patient_id: appointmentPayload.patient_id,
+      provider_id: appointmentPayload.provider_id,
+      payer_id: appointmentPayload.payer_id,
+      service_instance_id: appointmentPayload.service_instance_id,
+      service_instance_id_type: typeof appointmentPayload.service_instance_id,
+      is_cash_payment: body.payerId === 'cash-payment',
+      start_time: appointmentPayload.start_time,
+      patient_info: appointmentPayload.patient_info,
+      insurance_info: appointmentPayload.insurance_info
+    })
+
     const { data: appointment, error: appointmentError} = await supabaseAdmin
       .from('appointments')
-      .insert({
-        patient_id: resolvedPatientId,
-        provider_id: body.providerId,
-        payer_id: body.payerId,
-        service_instance_id: serviceInstanceId,
-        start_time: startDate.toISOString(),
-        end_time: endDate.toISOString(),
-        status: 'scheduled',
-        appointment_type: body.locationType === 'telehealth' ? 'telehealth' : null, // Only 'telehealth' or NULL allowed by constraint
-        location_type: body.locationType,
-        patient_info: patientInfo, // Required non-null snapshot
-        insurance_info: insuranceInfo, // Required non-null snapshot
-        notes: body.notes || null,
-        created_at: new Date().toISOString()
-      })
+      .insert(appointmentPayload)
       .select('id, start_time, end_time')
       .single()
 
     if (appointmentError || !appointment) {
+      console.error(`❌ V2.0: Appointment insert failed:`, {
+        error: appointmentError?.message,
+        code: (appointmentError as any)?.code,
+        details: (appointmentError as any)?.details,
+        hint: (appointmentError as any)?.hint,
+        payload: appointmentPayload
+      })
       console.error(`❌ V2.0: Failed to insert appointment: ${appointmentError?.message}`)
 
       // Log to audit with full context
@@ -500,13 +638,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
 
     const providerName = provider ? `${provider.first_name} ${provider.last_name}` : 'Provider'
 
+    // Use payer name from already-fetched payer object
+    const payerName = payer?.name || 'Unknown'
+
     // Step 7: IntakeQ sync (non-blocking with enrichment)
     let intakeqClientId: string | undefined
     let pqAppointmentId: string | undefined
     let enrichedFields: string[] = []
     let questionnaireSent = false
     let contactNotified = false
+    // isCashPayment already declared at line 344
 
+    console.log(`🔍 DEBUG: Starting IntakeQ enrichment - featureFlags.practiceqEnrich=${featureFlags.practiceqEnrich}, isCashPayment=${isCashPayment}, payerId=${body.payerId}`)
+
+    // V2.0: Cash payment gets FULL IntakeQ treatment (appointments, questionnaires, enrichment, emails)
+    // Only difference: payer_id is NULL in database
     if (featureFlags.practiceqEnrich) {
       try {
         console.log('🔄 V2.0: Starting IntakeQ sync with enrichment...')
@@ -724,6 +870,68 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
           durationMs: Date.now() - startTime
         })
       }
+    }
+
+    // Step 7b: Send admin email notification (for all bookings)
+    try {
+      // Get patient full details for email
+      const { data: fullPatient } = await supabaseAdmin
+        .from('patients')
+        .select('first_name, last_name, email, phone')
+        .eq('id', resolvedPatientId)
+        .single()
+
+      if (fullPatient) {
+        // Format date for subject line (e.g., "2025-10-15")
+        const appointmentDate = startDate.toISOString().split('T')[0]
+
+        // Get patient initials
+        const firstInitial = fullPatient.first_name ? fullPatient.first_name.charAt(0).toUpperCase() : ''
+        const lastInitial = fullPatient.last_name ? fullPatient.last_name.charAt(0).toUpperCase() : ''
+        const patientInitials = `${firstInitial}${lastInitial}`
+
+        // Format appointment time (e.g., "10:00 AM")
+        const appointmentTime = startDate.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: 'America/Denver'
+        })
+
+        // Send notification email
+        await emailService.sendEmail({
+          to: 'hello@trymoonlit.com',
+          subject: `New Scheduler appt for ${appointmentDate} for ${patientInitials}`,
+          body: `
+🎯 New Appointment Booking Alert
+
+APPOINTMENT DETAILS:
+• Patient: ${fullPatient.first_name} ${fullPatient.last_name}
+• Email: ${fullPatient.email}
+• Phone: ${fullPatient.phone || 'Not provided'}
+• Provider: ${providerName}
+• Date: ${appointmentDate}
+• Time: ${appointmentTime} (Mountain Time)
+• Duration: ${durationMinutes} minutes
+• Payer: ${payerName}
+
+SYSTEM DETAILS:
+• Local Appointment ID: ${appointment.id}
+• IntakeQ Appointment ID: ${pqAppointmentId || 'Not created (cash payment)'}
+• Service Instance: ${serviceInstanceId}
+• Location: ${body.locationType}
+• Booking Type: ${isCashPayment ? 'Cash Payment (Self-Pay)' : 'Insurance'}
+
+---
+This booking was created through the Moonlit Scheduler widget.
+          `.trim()
+        })
+
+        console.log('✅ Admin notification email sent to hello@trymoonlit.com')
+      }
+    } catch (emailError: any) {
+      console.error('❌ Failed to send admin notification email:', emailError.message)
+      // Don't fail the booking if email fails
     }
 
     // Step 8: Cache idempotency response
