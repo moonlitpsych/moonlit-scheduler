@@ -227,7 +227,9 @@ export async function POST(request: NextRequest) {
         
         console.log(`🔄 Provider breakdown: ${regularProviders.length} regular, ${coVisitProviders.length} co-visit required`)
 
-        const targetDate = new Date(requestDate)
+        // FIX: Parse date in Mountain Time to get correct day of week
+        // new Date('2025-10-15') can give wrong day due to timezone interpretation
+        const targetDate = new Date(requestDate + 'T12:00:00-06:00') // Mountain Time noon
         const dayOfWeek = targetDate.getDay()
         console.log(`📅 Target date ${requestDate} is day of week ${dayOfWeek} (0=Sun, 1=Mon, etc.)`)
 
