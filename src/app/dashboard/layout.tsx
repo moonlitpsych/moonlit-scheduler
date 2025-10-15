@@ -9,6 +9,7 @@ import { isAdminEmail } from '@/lib/admin-auth'
 import ProviderSelector from '@/components/admin/ProviderSelector'
 import {
   Calendar,
+  Home,
   LogOut,
   Menu,
   Network,
@@ -99,6 +100,7 @@ export default function DashboardLayout({
   const isPractitioner = provider && ['practitioner', 'psychiatrist', 'psychiatry_resident', 'provider'].includes(provider.role)
 
   const navigation = [
+    { name: 'Dashboard', href: '/dashboard', icon: Home, show: isPractitioner },
     { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner, beta: true },
     { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
     { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner, beta: true },
