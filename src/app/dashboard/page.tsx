@@ -69,23 +69,35 @@ export default function DashboardPage() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
-            // Load provider
-            const { data: providerData, error: providerError } = await supabase
-                .from('providers')
-                .select('*')
-                .eq('auth_user_id', user.id)
-                .eq('is_active', true)
-                .single()
+            // Check for impersonation context first
+            const impersonation = (await import('@/lib/provider-impersonation')).providerImpersonationManager.getImpersonatedProvider()
 
-            if (providerError || !providerData) {
-                console.error('Provider lookup failed:', {
-                    error: providerError,
-                    userId: user.id,
-                    userEmail: user.email
-                })
-                toast.error('Provider Not Found', `Provider account not found for ${user.email}. Please contact support.`)
-                setLoading(false)
-                return
+            let providerData: Provider | null = null
+
+            if (impersonation) {
+                // Admin viewing as a provider - use impersonated provider
+                providerData = impersonation.provider as Provider
+            } else {
+                // Regular provider viewing their own dashboard
+                const { data: loadedProvider, error: providerError } = await supabase
+                    .from('providers')
+                    .select('*')
+                    .eq('auth_user_id', user.id)
+                    .eq('is_active', true)
+                    .single()
+
+                if (providerError || !loadedProvider) {
+                    console.error('Provider lookup failed:', {
+                        error: providerError,
+                        userId: user.id,
+                        userEmail: user.email
+                    })
+                    toast.error('Provider Not Found', `Provider account not found for ${user.email}. Please contact support.`)
+                    setLoading(false)
+                    return
+                }
+
+                providerData = loadedProvider
             }
 
             setProvider(providerData)

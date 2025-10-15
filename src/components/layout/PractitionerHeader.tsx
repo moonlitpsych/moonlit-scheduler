@@ -5,7 +5,11 @@ import Link from 'next/link'
 import Image from 'next/image'
 import ContextSwitcher from '@/components/auth/ContextSwitcher'
 
-export default function PractitionerHeader() {
+interface PractitionerHeaderProps {
+    children?: React.ReactNode
+}
+
+export default function PractitionerHeader({ children }: PractitionerHeaderProps) {
     const [scrolled, setScrolled] = useState(false)
 
     useEffect(() => {
@@ -38,8 +42,9 @@ export default function PractitionerHeader() {
                         />
                     </Link>
 
-                    {/* Context Switcher */}
-                    <div className="flex items-center">
+                    {/* Context Switcher and Optional Children (e.g., Provider Selector) */}
+                    <div className="flex items-center space-x-3">
+                        {children}
                         <div className="bg-[#BF9C73] rounded-lg">
                             <ContextSwitcher />
                         </div>

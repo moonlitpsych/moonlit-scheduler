@@ -136,6 +136,118 @@ try {
 
 ---
 
+## ✅ COMPLETED: Provider Impersonation System (Oct 15, 2025)
+
+**STATUS:** ✅ READY FOR TESTING - Admin can view provider dashboards for support
+
+### What Was Built:
+
+**Problem:** When providers have questions about their dashboard, admins need to see exactly what they're seeing to provide effective support. Previously, admins only had their own admin view with no way to experience the provider interface.
+
+**Solution:**
+- **Provider Selection**: Admins can choose which provider to view as
+- **Full Impersonation**: Admin sees exactly what the selected provider sees
+- **Quick Switching**: Dropdown allows switching between providers without logout
+- **Audit Trail**: All admin actions logged with timestamps and changes
+- **Self-Viewing**: Admins who are also providers can view their own provider dashboard
+
+**Result:** ✅ Complete provider support experience with full audit logging
+
+### Key Components:
+
+**1. Provider Impersonation Manager** (`/src/lib/provider-impersonation.ts`)
+- Stores impersonation context in sessionStorage
+- Manages provider selection and switching
+- Logs all admin actions for compliance
+- Provides helper methods for audit trail
+
+**2. Provider Selector Page** (`/src/app/dashboard/select-provider/page.tsx`)
+- Full-screen provider list with search
+- Status chips showing "Active", "Inactive", "Not yet a user"
+- "(You)" indicator for admin's own provider record
+- Clean navigation back to admin dashboard
+
+**3. Provider Selector Dropdown** (`/src/components/admin/ProviderSelector.tsx`)
+- Appears in dashboard header when admin is viewing
+- Shows "Viewing as: Dr. [Name]"
+- Quick-switch dropdown with search
+- Link to full provider selector page
+
+**4. Audit Logging** (`admin_action_logs` table)
+- Tracks impersonation starts and switches
+- Records all data modifications
+- JSON changes field for before/after comparison
+- Indexed for efficient admin and provider queries
+
+### User Flow:
+
+1. Admin logs in → Sees Admin Dashboard
+2. Clicks "Provider Dashboard" in ContextSwitcher
+3. Routed to `/dashboard/select-provider`
+4. Selects provider (e.g., "Dr. Travis Norseth")
+5. Dashboard loads with EXACT provider experience
+6. Header shows "Viewing as: Dr. Travis Norseth" with dropdown
+7. Can switch to another provider via dropdown
+8. Can return to Admin Dashboard via ContextSwitcher
+
+### Files Created:
+- `/src/lib/provider-impersonation.ts` - Core impersonation logic
+- `/src/app/dashboard/select-provider/page.tsx` - Provider selection page
+- `/src/components/admin/ProviderSelector.tsx` - Header dropdown component
+- `/src/hooks/useAdminAudit.ts` - Hook for audit logging in pages
+- `/database-migrations/006-create-admin-action-logs.sql` - Audit table migration
+
+### Files Modified:
+- `/src/app/dashboard/layout.tsx` - Loads impersonated provider, adds selector to header
+- `/src/app/dashboard/page.tsx` - Uses impersonated provider data
+- `/src/components/layout/PractitionerHeader.tsx` - Accepts children for selector
+- `/src/components/auth/ContextSwitcher.tsx` - Routes to selector, clears impersonation
+
+### Database:
+- `admin_action_logs` table (migration: `006-create-admin-action-logs.sql`)
+  - Columns: `id`, `admin_email`, `provider_id`, `action_type`, `description`, `table_name`, `record_id`, `changes`, `created_at`
+  - Indexes: `admin_email`, `provider_id`, `action_type`, `created_at`
+
+### Critical Patterns:
+
+**Impersonation Check** (use in all provider pages):
+```typescript
+import { providerImpersonationManager } from '@/lib/provider-impersonation'
+
+const impersonation = providerImpersonationManager.getImpersonatedProvider()
+const provider = impersonation ? impersonation.provider : loadFromDatabase()
+```
+
+**Audit Logging** (use when admin modifies data):
+```typescript
+import { useAdminAudit } from '@/hooks/useAdminAudit'
+
+const { isAdminViewing, withAuditLog } = useAdminAudit()
+
+await withAuditLog(
+  'availability_update',
+  `Updated availability for ${provider.first_name}`,
+  async () => {
+    // Make database changes
+    return await supabase.from('provider_availability').update(...)
+  },
+  { tableName: 'provider_availability', recordId: scheduleId }
+)
+```
+
+**Status Chips in Provider List**:
+- 🟢 **Active**: `is_active = true` AND `auth_user_id` exists (can log in)
+- 🟡 **Not yet a user**: `is_active = true` but no `auth_user_id` (hasn't signed up)
+- ⚫ **Inactive**: `is_active = false` (archived or removed)
+
+### Next Steps (Future):
+1. Add impersonation banner showing "Admin Mode: Viewing as Dr. [Name]"
+2. Update availability and profile pages to use `useAdminAudit` hook
+3. Create admin page to view audit logs
+4. Add email notifications when admin makes changes on behalf of provider
+
+---
+
 ## ✅ COMPLETED: Bookability Trigger Migration (Oct 7, 2025)
 
 **STATUS:** ✅ Fixed "Not bookable for this payer" errors
