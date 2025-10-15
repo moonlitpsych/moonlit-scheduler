@@ -103,7 +103,7 @@ export default function DashboardLayout({
     { name: 'Dashboard', href: '/dashboard', icon: Home, show: isPractitioner },
     { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner, beta: true },
     { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
-    { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner, beta: true },
+    { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
   ].filter(item => item.show)
 
   // Show loading state
