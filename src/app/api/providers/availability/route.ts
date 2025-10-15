@@ -3,6 +3,7 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { Database } from '@/types/database'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isAdminEmail } from '@/lib/admin-auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,20 +31,39 @@ export async function POST(request: NextRequest) {
     console.log('🔧 Provider availability API: Saving schedule for provider:', providerId)
     console.log('🔧 User:', user.email)
 
-    // Verify user has access to this provider
+    // Check if user is admin
+    const isAdmin = isAdminEmail(user.email || '')
+
+    // Load provider for verification and logging
     const { data: provider, error: providerError } = await supabaseAdmin
       .from('providers')
       .select('*')
       .eq('id', providerId)
-      .eq('auth_user_id', user.id)
       .single()
 
     if (providerError || !provider) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Provider not found or access denied' 
+      return NextResponse.json({
+        success: false,
+        error: 'Provider not found'
+      }, { status: 404 })
+    }
+
+    // Verify access: must be the provider themselves OR an admin
+    if (!isAdmin && provider.auth_user_id !== user.id) {
+      return NextResponse.json({
+        success: false,
+        error: 'Access denied'
       }, { status: 403 })
     }
+
+    console.log(`🔧 ${isAdmin ? 'Admin' : 'Provider'} updating schedule for: ${provider.first_name} ${provider.last_name}`)
+
+    // Load existing availability for audit logging
+    const { data: oldAvailability } = await supabaseAdmin
+      .from('provider_availability')
+      .select('*')
+      .eq('provider_id', providerId)
+      .order('day_of_week')
 
     // Delete existing availability for this provider
     const { error: deleteError } = await supabaseAdmin
@@ -112,6 +132,31 @@ export async function POST(request: NextRequest) {
       console.log(`✅ Successfully inserted ${insertData.length} availability records`)
     }
 
+    // Log admin action if this was an admin edit
+    if (isAdmin) {
+      try {
+        await supabaseAdmin
+          .from('admin_action_logs')
+          .insert({
+            admin_email: user.email,
+            provider_id: providerId,
+            action_type: 'availability_update',
+            description: `Updated availability schedule for ${provider.first_name} ${provider.last_name}`,
+            table_name: 'provider_availability',
+            changes: {
+              before: oldAvailability || [],
+              after: newBlocks,
+              blocksDeleted: oldAvailability?.length || 0,
+              blocksCreated: newBlocks.length
+            }
+          })
+        console.log('✅ Audit log created for admin action')
+      } catch (logError) {
+        console.error('⚠️ Failed to create audit log (non-blocking):', logError)
+        // Don't fail the request if logging fails
+      }
+    }
+
     console.log('✅ Schedule saved successfully')
 
     return NextResponse.json({
@@ -153,18 +198,28 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Verify user has access to this provider
+    // Check if user is admin
+    const isAdmin = isAdminEmail(user.email || '')
+
+    // Load provider for verification
     const { data: provider, error: providerError } = await supabaseAdmin
       .from('providers')
       .select('*')
       .eq('id', providerId)
-      .eq('auth_user_id', user.id)
       .single()
 
     if (providerError || !provider) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Provider not found or access denied' 
+      return NextResponse.json({
+        success: false,
+        error: 'Provider not found'
+      }, { status: 404 })
+    }
+
+    // Verify access: must be the provider themselves OR an admin
+    if (!isAdmin && provider.auth_user_id !== user.id) {
+      return NextResponse.json({
+        success: false,
+        error: 'Access denied'
       }, { status: 403 })
     }
 

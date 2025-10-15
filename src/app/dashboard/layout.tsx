@@ -4,6 +4,9 @@ import PractitionerHeader from '@/components/layout/PractitionerHeader'
 import { Database } from '@/types/database'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { ToastProvider } from '@/contexts/ToastContext'
+import { providerImpersonationManager } from '@/lib/provider-impersonation'
+import { isAdminEmail } from '@/lib/admin-auth'
+import ProviderSelector from '@/components/admin/ProviderSelector'
 import {
   Calendar,
   LogOut,
@@ -26,7 +29,9 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [provider, setProvider] = useState<any>(null)
-  
+  const [isAdminViewing, setIsAdminViewing] = useState(false)
+  const [loading, setLoading] = useState(true)
+
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClientComponentClient<Database>()
@@ -36,45 +41,92 @@ export default function DashboardLayout({
     router.push('/auth/login')
   }
 
-  // Get user info on mount
+  // Get user info on mount and handle impersonation
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
-      
-      if (user) {
-        // FIXED: Add is_active filter to only get active provider records
-        const { data: providerData } = await supabase
-          .from('providers')
-          .select('*')
-          .eq('auth_user_id', user.id)
-          .eq('is_active', true)  // ← This is the key fix!
-          .single()
-        
-        setProvider(providerData)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        setUser(user)
+
+        if (!user) {
+          setLoading(false)
+          return
+        }
+
+        // Check if user is admin
+        const isAdmin = isAdminEmail(user.email || '')
+
+        // Check for impersonation context
+        const impersonation = providerImpersonationManager.getImpersonatedProvider()
+
+        if (isAdmin && impersonation) {
+          // Admin viewing as another provider
+          setIsAdminViewing(true)
+          setProvider(impersonation.provider)
+          setLoading(false)
+        } else if (isAdmin && !impersonation && pathname !== '/dashboard/select-provider') {
+          // Admin hasn't selected a provider yet - redirect to selector
+          router.replace('/dashboard/select-provider')
+          return
+        } else {
+          // Regular provider viewing their own dashboard
+          setIsAdminViewing(false)
+
+          // FIXED: Add is_active filter to only get active provider records
+          const { data: providerData } = await supabase
+            .from('providers')
+            .select('*')
+            .eq('auth_user_id', user.id)
+            .eq('is_active', true)
+            .single()
+
+          setProvider(providerData)
+          setLoading(false)
+        }
+      } catch (error) {
+        console.error('Error loading dashboard:', error)
+        setLoading(false)
       }
     }
     getUser()
-  }, [supabase])
+  }, [supabase, pathname, router])
 
   // No auto-redirect - dashboard home page now exists
 
-  const isAdmin = provider?.role === 'admin'
+  // When admin is viewing as a provider, hide all admin features
+  // This ensures they see exactly what the provider sees
+  const isAdmin = false // Never show admin features in provider dashboard
   const isPractitioner = provider && ['practitioner', 'psychiatrist', 'psychiatry_resident', 'provider'].includes(provider.role)
 
   const navigation = [
     { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner, beta: true },
-    { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner || isAdmin },
+    { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
     { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner, beta: true },
-    { name: 'Manage Providers', href: '/dashboard/admin/providers', icon: Users, show: isAdmin },
-    { name: 'System Settings', href: '/dashboard/admin/settings', icon: Settings, show: isAdmin },
   ].filter(item => item.show)
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#FEF8F1] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#BF9C73] mx-auto"></div>
+          <p className="mt-4 text-[#091747] font-medium">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <ToastProvider>
       <div className="min-h-screen bg-[#FEF8F1]">
-        {/* Practitioner Header */}
-        <PractitionerHeader />
+        {/* Practitioner Header with Provider Selector for Admins */}
+        <PractitionerHeader>
+          {isAdminViewing && (
+            <div className="ml-4">
+              <ProviderSelector />
+            </div>
+          )}
+        </PractitionerHeader>
         
         {/* Dashboard Content */}
         <div className="h-screen bg-[#FEF8F1] flex pt-16">

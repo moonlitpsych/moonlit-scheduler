@@ -6,6 +6,8 @@ import { ChevronDown, Settings, UserCheck, LogOut, RefreshCcw } from 'lucide-rea
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
 import { authContextManager, UserContext, AuthContextData } from '@/lib/auth-context'
+import { providerImpersonationManager } from '@/lib/provider-impersonation'
+import { isAdminEmail } from '@/lib/admin-auth'
 
 export default function ContextSwitcher() {
   const [authContext, setAuthContext] = useState<AuthContextData | null>(null)
@@ -29,14 +31,27 @@ export default function ContextSwitcher() {
 
   const switchContext = async (newContext: UserContext) => {
     if (!authContext || newContext === authContext.activeContext) return
-    
+
     setSwitching(true)
     setIsOpen(false)
 
     try {
       authContextManager.setActiveContext(newContext)
-      const route = authContextManager.getDashboardRoute(newContext)
-      router.push(route)
+
+      // If switching to provider dashboard and user is admin, route to provider selector
+      if (newContext === 'provider' && authContext.user && isAdminEmail(authContext.user.email || '')) {
+        // Clear any existing impersonation
+        providerImpersonationManager.clearImpersonation()
+        router.push('/dashboard/select-provider')
+      } else if (newContext === 'admin') {
+        // Clear impersonation when switching back to admin
+        providerImpersonationManager.clearImpersonation()
+        const route = authContextManager.getDashboardRoute(newContext)
+        router.push(route)
+      } else {
+        const route = authContextManager.getDashboardRoute(newContext)
+        router.push(route)
+      }
     } catch (error) {
       console.error('Error switching context:', error)
       setSwitching(false)
