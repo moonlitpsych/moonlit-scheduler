@@ -183,7 +183,7 @@ export default function PartnerDashboardPage() {
         {/* Page header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
-            Welcome back, {partnerUser.first_name}!
+            Welcome back{partnerUser.full_name ? `, ${partnerUser.full_name.split(' ')[0]}` : ''}!
           </h1>
           <p className="text-gray-600 font-['Newsreader'] font-light">
             Here's what's happening with your patients and appointments today.
