@@ -9,9 +9,10 @@ import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { TransferPatientModal } from '@/components/partner-dashboard/TransferPatientModal'
+import { SendNotificationModal } from '@/components/partner-dashboard/SendNotificationModal'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
-import { Users, Calendar, CheckCircle, AlertCircle, XCircle, Filter, UserCheck } from 'lucide-react'
+import { Users, Calendar, CheckCircle, AlertCircle, XCircle, Filter, UserCheck, Bell } from 'lucide-react'
 import Link from 'next/link'
 
 interface PatientWithDetails {
@@ -67,6 +68,10 @@ export default function PatientRosterPage() {
   // Transfer modal state
   const [transferModalOpen, setTransferModalOpen] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<PatientWithDetails | null>(null)
+
+  // Notification modal state
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false)
+  const [notifyPatient, setNotifyPatient] = useState<PatientWithDetails | null>(null)
 
   // Fetch partner user and patients
   useEffect(() => {
@@ -220,6 +225,32 @@ export default function PatientRosterPage() {
   // Check if user can transfer patients (admin or case_manager)
   const canTransferPatients = partnerUser &&
     ['partner_admin', 'partner_case_manager'].includes(partnerUser.role)
+
+  // Notification modal handlers
+  const handleOpenNotificationModal = (patient: PatientWithDetails) => {
+    setNotifyPatient(patient)
+    setNotificationModalOpen(true)
+  }
+
+  const handleCloseNotificationModal = () => {
+    setNotificationModalOpen(false)
+    setNotifyPatient(null)
+  }
+
+  const handleNotificationSuccess = async () => {
+    // Refresh patient list after successful notification
+    try {
+      const response = await fetch('/api/partner-dashboard/patients')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setPatients(data.data.patients)
+        }
+      }
+    } catch (err) {
+      console.error('Error refreshing patients:', err)
+    }
+  }
 
   if (error) {
     return (
@@ -437,15 +468,27 @@ export default function PatientRosterPage() {
                           >
                             View Details
                           </Link>
-                          {canTransferPatients && patient.current_assignment && (
+                          {canTransferPatients && (
                             <>
+                              {patient.current_assignment && (
+                                <>
+                                  <span className="text-gray-300">|</span>
+                                  <button
+                                    onClick={() => handleOpenTransferModal(patient)}
+                                    className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                                  >
+                                    <UserCheck className="w-4 h-4" />
+                                    <span>Transfer</span>
+                                  </button>
+                                </>
+                              )}
                               <span className="text-gray-300">|</span>
                               <button
-                                onClick={() => handleOpenTransferModal(patient)}
-                                className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                                onClick={() => handleOpenNotificationModal(patient)}
+                                className="text-green-600 hover:text-green-800 flex items-center space-x-1"
                               >
-                                <UserCheck className="w-4 h-4" />
-                                <span>Transfer</span>
+                                <Bell className="w-4 h-4" />
+                                <span>Notify</span>
                               </button>
                             </>
                           )}
@@ -467,6 +510,17 @@ export default function PatientRosterPage() {
           isOpen={transferModalOpen}
           onClose={handleCloseTransferModal}
           onSuccess={handleTransferSuccess}
+        />
+      )}
+
+      {/* Send Notification Modal */}
+      {notifyPatient && (
+        <SendNotificationModal
+          patient={notifyPatient}
+          appointments={notifyPatient.next_appointment ? [notifyPatient.next_appointment] : []}
+          isOpen={notificationModalOpen}
+          onClose={handleCloseNotificationModal}
+          onSuccess={handleNotificationSuccess}
         />
       )}
     </div>
