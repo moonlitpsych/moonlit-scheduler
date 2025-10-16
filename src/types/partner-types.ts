@@ -313,8 +313,7 @@ export interface InvitePartnerUserRequest {
   organization_id: string
   email: string
   role: PartnerUser['role']
-  first_name?: string
-  last_name?: string
+  full_name?: string
   message?: string
 }
 

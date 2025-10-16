@@ -8,24 +8,24 @@ import crypto from 'crypto'
 export async function POST(request: NextRequest) {
   try {
     const body: InvitePartnerUserRequest = await request.json()
-    const { organization_id, email, role, first_name, last_name, message } = body
+    const { organization_id, email, role, full_name, message } = body
 
     if (!organization_id || !email || !role) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Organization ID, email, and role are required' 
+        {
+          success: false,
+          error: 'Organization ID, email, and role are required'
         },
         { status: 400 }
       )
     }
 
     // Validate role
-    if (!['partner_admin', 'partner_case_manager'].includes(role)) {
+    if (!['partner_admin', 'partner_case_manager', 'partner_referrer'].includes(role)) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid role. Must be partner_admin or partner_case_manager' 
+        {
+          success: false,
+          error: 'Invalid role. Must be partner_admin, partner_case_manager, or partner_referrer'
         },
         { status: 400 }
       )
@@ -54,22 +54,25 @@ export async function POST(request: NextRequest) {
     // 2. Check if user already exists
     const { data: existingUser } = await supabaseAdmin
       .from('partner_users')
-      .select('id, status, email')
+      .select('id, is_active, email, auth_user_id, invitation_token')
       .eq('email', email.toLowerCase())
       .eq('organization_id', organization_id)
       .single()
 
     if (existingUser) {
-      if (existingUser.status === 'active') {
+      // If user is active and has auth account, they're fully set up
+      if (existingUser.is_active && existingUser.auth_user_id) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'User already exists and is active in this organization' 
+          {
+            success: false,
+            error: 'User already exists and is active in this organization'
           },
           { status: 409 }
         )
-      } else if (existingUser.status === 'pending_invitation') {
-        // Update existing pending invitation
+      }
+
+      // If user has invitation token (pending), resend/update invitation
+      if (existingUser.invitation_token || !existingUser.auth_user_id) {
         const invitationToken = crypto.randomBytes(32).toString('hex')
         const invitationExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
 
@@ -79,19 +82,18 @@ export async function POST(request: NextRequest) {
             invitation_token: invitationToken,
             invitation_expires: invitationExpires.toISOString(),
             role: role,
-            first_name: first_name || null,
-            last_name: last_name || null,
+            full_name: full_name || existingUser.full_name || null,
             updated_at: new Date().toISOString()
           })
           .eq('id', existingUser.id)
 
         // Send new invitation email
         await sendInvitationEmail(
-          email, 
-          organization.name, 
-          invitationToken, 
-          role, 
-          first_name, 
+          email,
+          organization.name,
+          invitationToken,
+          role,
+          full_name,
           message
         )
 
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Create new partner user record with pending status
+    // 3. Create new partner user record (without auth_user_id yet)
     const invitationToken = crypto.randomBytes(32).toString('hex')
     const invitationExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
 
@@ -112,10 +114,9 @@ export async function POST(request: NextRequest) {
       .insert({
         organization_id,
         email: email.toLowerCase(),
-        first_name: first_name || null,
-        last_name: last_name || null,
+        full_name: full_name || null,
         role,
-        status: 'pending_invitation',
+        is_active: false, // Will be set to true when invitation is accepted
         email_verified: false,
         invitation_token: invitationToken,
         invitation_expires: invitationExpires.toISOString(),
@@ -138,11 +139,11 @@ export async function POST(request: NextRequest) {
     // 4. Send invitation email
     try {
       await sendInvitationEmail(
-        email, 
-        organization.name, 
-        invitationToken, 
-        role, 
-        first_name, 
+        email,
+        organization.name,
+        invitationToken,
+        role,
+        full_name,
         message
       )
     } catch (emailError: any) {
@@ -203,25 +204,30 @@ async function sendInvitationEmail(
   organizationName: string,
   invitationToken: string,
   role: string,
-  firstName?: string,
+  fullName?: string,
   customMessage?: string
 ) {
   const invitationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/partner-auth/accept-invitation?token=${invitationToken}`
-  
-  const roleDisplayName = role === 'partner_admin' ? 'Partner Admin' : 'Case Manager'
-  
+
+  const roleDisplayNames = {
+    'partner_admin': 'Partner Admin',
+    'partner_case_manager': 'Case Manager',
+    'partner_referrer': 'Referral Partner'
+  }
+  const roleDisplayName = roleDisplayNames[role as keyof typeof roleDisplayNames] || 'Partner User'
+
   const emailHtml = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #091747;">Welcome to Moonlit Scheduler</h2>
-      
-      <p>Hello${firstName ? ` ${firstName}` : ''},</p>
-      
+
+      <p>Hello${fullName ? ` ${fullName}` : ''},</p>
+
       <p>You've been invited to join <strong>${organizationName}</strong> as a ${roleDisplayName} on the Moonlit Scheduler platform.</p>
-      
+
       ${customMessage ? `<div style="background-color: #FEF8F1; padding: 15px; border-left: 4px solid #BF9C73; margin: 20px 0;">
         <p style="margin: 0;"><em>"${customMessage}"</em></p>
       </div>` : ''}
-      
+
       <p>As a ${roleDisplayName}, you'll be able to:</p>
       <ul>
         <li>View and manage patient appointments</li>
@@ -230,16 +236,16 @@ async function sendInvitationEmail(
         ${role === 'partner_admin' ? '<li>Invite and manage other team members</li>' : ''}
         <li>Receive notifications about appointment updates</li>
       </ul>
-      
+
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${invitationUrl}" 
+        <a href="${invitationUrl}"
            style="background-color: #BF9C73; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
           Accept Invitation & Set Password
         </a>
       </div>
-      
+
       <p><small>This invitation expires in 7 days. If you have any questions, please contact us at hello@trymoonlit.com.</small></p>
-      
+
       <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
       <p style="color: #666; font-size: 14px;">
         Moonlit Scheduler - Streamlining mental health care coordination
