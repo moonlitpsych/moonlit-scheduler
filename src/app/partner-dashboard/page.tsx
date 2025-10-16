@@ -54,20 +54,33 @@ export default function PartnerDashboardPage() {
         }
         
         setPartnerUser(userData.data)
-        
-        // Fetch dashboard data (if needed)
-        // For now, we'll use empty dashboard data since the API needs more work
-        setDashboardData({
-          upcoming_appointments: [],
-          my_assigned_patients: [],
-          recent_changes: [],
-          organization_stats: {
-            total_patients: 0,
-            active_patients: 0,
-            appointments_this_week: 0,
-            pending_changes: 0
+
+        // Fetch dashboard stats
+        const statsResponse = await fetch('/api/partner-dashboard/stats')
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json()
+          if (statsData.success) {
+            setDashboardData({
+              upcoming_appointments: [],
+              my_assigned_patients: [],
+              recent_changes: [],
+              organization_stats: statsData.data.organization_stats
+            })
+          } else {
+            // Fallback to empty stats if API fails
+            setDashboardData({
+              upcoming_appointments: [],
+              my_assigned_patients: [],
+              recent_changes: [],
+              organization_stats: {
+                total_patients: 0,
+                active_patients: 0,
+                appointments_this_week: 0,
+                pending_changes: 0
+              }
+            })
           }
-        })
+        }
         
       } catch (err: any) {
         console.error('Error loading dashboard:', err)
