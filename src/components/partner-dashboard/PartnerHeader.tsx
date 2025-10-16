@@ -68,6 +68,16 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
             >
               Patients
             </Link>
+            <Link
+              href="/partner-dashboard/calendar"
+              className={`px-3 py-2 text-sm font-medium font-['Newsreader'] rounded-md transition-colors ${
+                currentPage === 'calendar'
+                  ? 'bg-moonlit-cream text-moonlit-brown'
+                  : 'text-gray-600 hover:text-moonlit-navy'
+              }`}
+            >
+              Calendar
+            </Link>
           </nav>
 
           {/* User Menu */}
