@@ -43,6 +43,10 @@ interface IntakeBookingRequest {
     // Insurance enrichment fields for IntakeQ
     memberId?: string
     groupNumber?: string
+    // Partner referral tracking (V3.0)
+    referralCode?: string // Partner user email or code
+    referredByOrganizationId?: string // Organization ID (for Eddie referrals)
+    referredByPartnerUserId?: string // Partner user ID (for Eddie referrals)
 }
 
 interface IntakeBookingResponse {
@@ -77,6 +81,7 @@ interface IntakeBookingResponse {
  * Ensures a patient exists, either by validating existing ID or creating new patient.
  * V2.0: Implements STRONG MATCHING (email + firstName + lastName + DOB) to prevent
  * incorrectly merging different patients who share the same email (case manager scenario).
+ * V3.0: Accepts referral tracking fields for Eddie-model partner referrals
  */
 async function ensurePatient(input: {
     patientId?: string
@@ -87,6 +92,9 @@ async function ensurePatient(input: {
         phone?: string
         dateOfBirth?: string
     }
+    // V3.0: Partner referral tracking
+    referredByPartnerUserId?: string
+    referredByOrganizationId?: string
 }): Promise<{ patientId: string; created: boolean; matchType?: 'strong' | 'fallback' | 'none' }> {
     // Path 1: Existing patient ID provided
     if (input.patientId) {
@@ -174,7 +182,10 @@ async function ensurePatient(input: {
                 phone: phone || null,
                 date_of_birth: normalizedDob,
                 status: 'active',
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                // V3.0: Partner referral tracking
+                referred_by_partner_user_id: input.referredByPartnerUserId || null,
+                referred_by_organization_id: input.referredByOrganizationId || null
             })
             .select('id')
             .single()
@@ -185,6 +196,9 @@ async function ensurePatient(input: {
         }
 
         console.log(`[ENSURE_PATIENT] ✅ Created new patient: ${newPatient.id}`)
+        if (input.referredByPartnerUserId) {
+            console.log(`[ENSURE_PATIENT] 📌 Tracked referral from partner user: ${input.referredByPartnerUserId}`)
+        }
         return { patientId: newPatient.id, created: true, matchType: 'none' }
     }
 
@@ -195,7 +209,18 @@ async function ensurePatient(input: {
 export async function POST(request: NextRequest): Promise<NextResponse<IntakeBookingResponse>> {
     try {
         const body = await request.json() as IntakeBookingRequest
-        const { providerId, payerId, start, locationType, notes, memberId, groupNumber } = body
+        const {
+            providerId,
+            payerId,
+            start,
+            locationType,
+            notes,
+            memberId,
+            groupNumber,
+            referralCode,
+            referredByOrganizationId,
+            referredByPartnerUserId
+        } = body
 
         // Log insurance enrichment fields received
         console.log('[BOOKING REQUEST] Insurance fields:', {
@@ -204,6 +229,30 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             memberIdLength: memberId?.length,
             groupNumberLength: groupNumber?.length
         })
+
+        // V3.0: Resolve referralCode to partner_user_id if provided
+        let resolvedPartnerUserId = referredByPartnerUserId
+        let resolvedOrganizationId = referredByOrganizationId
+
+        if (referralCode && !resolvedPartnerUserId) {
+            console.log(`[V3.0 REFERRAL] Resolving referral code: ${referralCode}`)
+
+            // Look up partner user by email or code
+            const { data: partnerUser } = await supabaseAdmin
+                .from('partner_users')
+                .select('id, organization_id, full_name, role')
+                .eq('email', referralCode.toLowerCase().trim())
+                .eq('is_active', true)
+                .single()
+
+            if (partnerUser) {
+                resolvedPartnerUserId = partnerUser.id
+                resolvedOrganizationId = partnerUser.organization_id
+                console.log(`[V3.0 REFERRAL] ✅ Resolved referral: ${partnerUser.full_name} (${partnerUser.role})`)
+            } else {
+                console.log(`[V3.0 REFERRAL] ⚠️ Referral code not found: ${referralCode}`)
+            }
+        }
 
         // Check idempotency key first (before any processing)
         const idempotencyKey = request.headers.get('Idempotency-Key')
@@ -248,7 +297,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         try {
             const result = await ensurePatient({
                 patientId: body.patientId,
-                patient: body.patient
+                patient: body.patient,
+                // V3.0: Pass referral tracking
+                referredByPartnerUserId: resolvedPartnerUserId,
+                referredByOrganizationId: resolvedOrganizationId
             })
             patientId = result.patientId
             patientMatchType = result.matchType || 'none'
@@ -690,6 +742,53 @@ This booking was created through the Moonlit Scheduler widget.
         } catch (emailError: any) {
             console.error('❌ Failed to send admin notification email:', emailError.message)
             // Don't fail the booking if email fails
+        }
+
+        // V3.0: Log referral activity if this was a partner referral
+        if (resolvedPartnerUserId && resolvedOrganizationId && patientCreated) {
+            try {
+                // Get partner user details for activity log
+                const { data: partnerUser } = await supabaseAdmin
+                    .from('partner_users')
+                    .select('full_name, role')
+                    .eq('id', resolvedPartnerUserId)
+                    .single()
+
+                // Get patient details for activity log
+                const { data: patientData } = await supabaseAdmin
+                    .from('patients')
+                    .select('first_name, last_name')
+                    .eq('id', patientId)
+                    .single()
+
+                if (partnerUser && patientData) {
+                    await supabaseAdmin
+                        .from('patient_activity_log')
+                        .insert({
+                            patient_id: patientId,
+                            organization_id: resolvedOrganizationId,
+                            appointment_id: appointmentId,
+                            activity_type: 'appointment_booked',
+                            title: 'New patient referred and booked first appointment',
+                            description: `${patientData.first_name} ${patientData.last_name} was referred by ${partnerUser.full_name} and booked their first appointment`,
+                            metadata: {
+                                referral_code: referralCode || null,
+                                partner_user_role: partnerUser.role,
+                                appointment_start: startDate.toISOString()
+                            },
+                            actor_type: 'partner_user',
+                            actor_id: resolvedPartnerUserId,
+                            actor_name: partnerUser.full_name,
+                            visible_to_partner: true,
+                            visible_to_patient: false
+                        })
+
+                    console.log(`[V3.0 REFERRAL] ✅ Logged referral activity for partner user: ${partnerUser.full_name}`)
+                }
+            } catch (activityError: any) {
+                console.error('[V3.0 REFERRAL] ⚠️ Failed to log referral activity:', activityError.message)
+                // Don't fail the booking if activity logging fails
+            }
         }
 
         // Save idempotency record for future duplicate requests
