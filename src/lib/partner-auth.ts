@@ -57,20 +57,30 @@ export async function getPartnerUserFromRequest(request: NextRequest): Promise<P
  * Check if partner user has access to a specific patient
  */
 export async function checkPatientAccess(
-  partnerUser: PartnerUser, 
+  partnerUser: PartnerUser,
   patientId: string
 ): Promise<boolean> {
   try {
     const { data: affiliation } = await supabaseAdmin
       .from('patient_organization_affiliations')
-      .select('id, roi_consent_status')
+      .select('id, consent_on_file, consent_expires_on, status')
       .eq('patient_id', patientId)
       .eq('organization_id', partnerUser.organization_id)
       .eq('status', 'active')
       .single()
 
-    // Check if affiliation exists and ROI consent is granted
-    return !!(affiliation && affiliation.roi_consent_status === 'granted')
+    if (!affiliation) return false
+
+    // Check if ROI consent is on file
+    if (!affiliation.consent_on_file) return false
+
+    // Check if consent has expired
+    if (affiliation.consent_expires_on) {
+      const expirationDate = new Date(affiliation.consent_expires_on)
+      if (expirationDate < new Date()) return false
+    }
+
+    return true
   } catch (error) {
     return false
   }
@@ -252,15 +262,15 @@ DECLARE
   org_id UUID;
 BEGIN
   partner_user_id := current_partner_user_id();
-  
+
   IF partner_user_id IS NULL THEN
     RETURN NULL;
   END IF;
-  
+
   SELECT organization_id INTO org_id
-  FROM partner_users 
-  WHERE id = partner_user_id AND status = 'active';
-  
+  FROM partner_users
+  WHERE id = partner_user_id AND is_active = true;
+
   RETURN org_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -275,19 +285,21 @@ DECLARE
   has_access BOOLEAN := false;
 BEGIN
   org_id := current_partner_org_id();
-  
+
   IF org_id IS NULL THEN
     RETURN false;
   END IF;
-  
+
+  -- Check if affiliation exists with valid ROI consent
   SELECT EXISTS(
     SELECT 1 FROM patient_organization_affiliations
     WHERE patient_id = $1
       AND organization_id = org_id
       AND status = 'active'
-      AND roi_consent_status = 'granted'
+      AND consent_on_file = true
+      AND (consent_expires_on IS NULL OR consent_expires_on > NOW())
   ) INTO has_access;
-  
+
   RETURN has_access;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
