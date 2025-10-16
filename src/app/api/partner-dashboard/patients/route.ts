@@ -115,18 +115,46 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get assignments for case managers
-    const { data: assignments, error: assignmentsError } = await supabaseAdmin
+    // Get assignments for current user (to mark "assigned to me")
+    const { data: myAssignments, error: myAssignmentsError } = await supabaseAdmin
       .from('partner_user_patient_assignments')
       .select('patient_id, assignment_type')
       .eq('partner_user_id', partnerUser.id)
       .eq('status', 'active')
 
-    if (assignmentsError) {
-      console.error('Error fetching assignments:', assignmentsError)
+    if (myAssignmentsError) {
+      console.error('Error fetching my assignments:', myAssignmentsError)
     }
 
-    const assignedPatientIds = new Set(assignments?.map(a => a.patient_id) || [])
+    const assignedPatientIds = new Set(myAssignments?.map(a => a.patient_id) || [])
+
+    // Get ALL active assignments for organization (for transfer functionality)
+    const { data: allAssignments, error: allAssignmentsError } = await supabaseAdmin
+      .from('partner_user_patient_assignments')
+      .select(`
+        patient_id,
+        partner_user_id,
+        assignment_type,
+        partner_users (
+          full_name
+        )
+      `)
+      .eq('organization_id', partnerUser.organization_id)
+      .eq('status', 'active')
+      .eq('assignment_type', 'primary')
+
+    if (allAssignmentsError) {
+      console.error('Error fetching all assignments:', allAssignmentsError)
+    }
+
+    // Create a map of patient_id -> assignment
+    const assignmentsByPatient = (allAssignments || []).reduce((acc, assignment) => {
+      acc[assignment.patient_id] = {
+        partner_user_id: assignment.partner_user_id,
+        partner_users: assignment.partner_users
+      }
+      return acc
+    }, {} as Record<string, any>)
 
     // Get upcoming appointments for these patients
     const patientIds = affiliations?.map(a => a.patient_id) || []
@@ -180,6 +208,7 @@ export async function GET(request: NextRequest) {
         status: affiliation.status
       },
       is_assigned_to_me: assignedPatientIds.has(affiliation.patient_id),
+      current_assignment: assignmentsByPatient[affiliation.patient_id] || null,
       next_appointment: appointmentsByPatient[affiliation.patient_id]?.[0] || null,
       upcoming_appointment_count: appointmentsByPatient[affiliation.patient_id]?.length || 0
     })) || []

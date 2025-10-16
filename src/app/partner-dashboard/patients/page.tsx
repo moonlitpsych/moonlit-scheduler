@@ -8,9 +8,10 @@
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
+import { TransferPatientModal } from '@/components/partner-dashboard/TransferPatientModal'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
-import { Users, Calendar, CheckCircle, AlertCircle, XCircle, Filter } from 'lucide-react'
+import { Users, Calendar, CheckCircle, AlertCircle, XCircle, Filter, UserCheck } from 'lucide-react'
 import Link from 'next/link'
 
 interface PatientWithDetails {
@@ -36,6 +37,12 @@ interface PatientWithDetails {
     status: string
   }
   is_assigned_to_me: boolean
+  current_assignment?: {
+    partner_user_id: string
+    partner_users?: {
+      full_name: string
+    }
+  }
   next_appointment?: {
     id: string
     start_time: string
@@ -56,6 +63,10 @@ export default function PatientRosterPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'assigned' | 'roi_missing'>('all')
+
+  // Transfer modal state
+  const [transferModalOpen, setTransferModalOpen] = useState(false)
+  const [selectedPatient, setSelectedPatient] = useState<PatientWithDetails | null>(null)
 
   // Fetch partner user and patients
   useEffect(() => {
@@ -179,6 +190,36 @@ export default function PatientRosterPage() {
       minute: '2-digit'
     })
   }
+
+  // Transfer modal handlers
+  const handleOpenTransferModal = (patient: PatientWithDetails) => {
+    setSelectedPatient(patient)
+    setTransferModalOpen(true)
+  }
+
+  const handleCloseTransferModal = () => {
+    setTransferModalOpen(false)
+    setSelectedPatient(null)
+  }
+
+  const handleTransferSuccess = async () => {
+    // Refresh patient list after successful transfer
+    try {
+      const response = await fetch('/api/partner-dashboard/patients')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setPatients(data.data.patients)
+        }
+      }
+    } catch (err) {
+      console.error('Error refreshing patients:', err)
+    }
+  }
+
+  // Check if user can transfer patients (admin or case_manager)
+  const canTransferPatients = partnerUser &&
+    ['partner_admin', 'partner_case_manager'].includes(partnerUser.role)
 
   if (error) {
     return (
@@ -389,12 +430,26 @@ export default function PatientRosterPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <Link
-                          href={`/partner-dashboard/patients/${patient.id}`}
-                          className="text-moonlit-brown hover:text-moonlit-brown/80"
-                        >
-                          View Details
-                        </Link>
+                        <div className="flex items-center space-x-3">
+                          <Link
+                            href={`/partner-dashboard/patients/${patient.id}`}
+                            className="text-moonlit-brown hover:text-moonlit-brown/80"
+                          >
+                            View Details
+                          </Link>
+                          {canTransferPatients && patient.current_assignment && (
+                            <>
+                              <span className="text-gray-300">|</span>
+                              <button
+                                onClick={() => handleOpenTransferModal(patient)}
+                                className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                              >
+                                <UserCheck className="w-4 h-4" />
+                                <span>Transfer</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -404,6 +459,16 @@ export default function PatientRosterPage() {
           )}
         </div>
       </div>
+
+      {/* Transfer Patient Modal */}
+      {selectedPatient && (
+        <TransferPatientModal
+          patient={selectedPatient}
+          isOpen={transferModalOpen}
+          onClose={handleCloseTransferModal}
+          onSuccess={handleTransferSuccess}
+        />
+      )}
     </div>
   )
 }
