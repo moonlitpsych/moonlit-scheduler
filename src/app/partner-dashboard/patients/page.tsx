@@ -6,14 +6,21 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import useSWR from 'swr'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { TransferPatientModal } from '@/components/partner-dashboard/TransferPatientModal'
 import { SendNotificationModal } from '@/components/partner-dashboard/SendNotificationModal'
+import { UploadROIModal } from '@/components/partner-dashboard/UploadROIModal'
+import { AssignProviderModal } from '@/components/partner-dashboard/AssignProviderModal'
+import SyncAppointmentsButton from '@/components/partner-dashboard/SyncAppointmentsButton'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
-import { Users, Calendar, CheckCircle, AlertCircle, XCircle, Filter, UserCheck, Bell } from 'lucide-react'
+import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText } from 'lucide-react'
 import Link from 'next/link'
+
+// SWR fetcher function
+const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 interface PatientWithDetails {
   id: string
@@ -23,6 +30,12 @@ interface PatientWithDetails {
   phone?: string
   date_of_birth?: string
   status: string
+  primary_provider_id?: string
+  primary_provider?: {
+    id: string
+    first_name: string
+    last_name: string
+  }
   primary_insurance_payer?: {
     id: string
     name: string
@@ -34,8 +47,10 @@ interface PatientWithDetails {
     consent_on_file: boolean
     consent_expires_on?: string
     consent_status: 'active' | 'expired' | 'missing'
+    roi_file_url?: string
     primary_contact_user_id?: string
     status: string
+    last_practiceq_sync_at?: string | null
   }
   is_assigned_to_me: boolean
   current_assignment?: {
@@ -44,6 +59,15 @@ interface PatientWithDetails {
       full_name: string
     }
   }
+  previous_appointment?: {
+    id: string
+    start_time: string
+    status: string
+    providers?: {
+      first_name: string
+      last_name: string
+    }
+  } | null
   next_appointment?: {
     id: string
     start_time: string
@@ -57,13 +81,41 @@ interface PatientWithDetails {
 }
 
 export default function PatientRosterPage() {
-  const [partnerUser, setPartnerUser] = useState<PartnerUser | null>(null)
-  const [patients, setPatients] = useState<PatientWithDetails[]>([])
-  const [filteredPatients, setFilteredPatients] = useState<PatientWithDetails[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'assigned' | 'roi_missing'>('all')
+
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [allPatients, setAllPatients] = useState<PatientWithDetails[]>([])
+
+  // Use SWR for data fetching with caching
+  const { data: partnerData, error: partnerError } = useSWR('/api/partner/me', fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 300000, // 5 minutes
+  })
+
+  const { data: patientsData, error: patientsError, mutate } = useSWR(
+    `/api/partner-dashboard/patients?page=${page}&limit=20`,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 30000, // 30 seconds
+      onSuccess: (data) => {
+        if (data.success && page === 1) {
+          setAllPatients(data.data.patients)
+        } else if (data.success && page > 1) {
+          setAllPatients(prev => [...prev, ...data.data.patients])
+        }
+      }
+    }
+  )
+
+  const partnerUser = partnerData?.success ? partnerData.data : null
+  const patients = patientsData?.success ? allPatients : []
+  const totalCount = patientsData?.data?.pagination?.total || 0
+  const hasMore = patientsData?.data?.pagination?.hasMore || false
+  const loading = !patientsData && !patientsError
+  const error = partnerError || patientsError
 
   // Transfer modal state
   const [transferModalOpen, setTransferModalOpen] = useState(false)
@@ -73,118 +125,70 @@ export default function PatientRosterPage() {
   const [notificationModalOpen, setNotificationModalOpen] = useState(false)
   const [notifyPatient, setNotifyPatient] = useState<PatientWithDetails | null>(null)
 
-  // Fetch partner user and patients
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true)
+  // ROI modal state
+  const [roiModalOpen, setRoiModalOpen] = useState(false)
+  const [roiPatient, setRoiPatient] = useState<PatientWithDetails | null>(null)
 
-        // Get authenticated user
-        const supabase = createClientComponentClient<Database>()
-        const { data: { user } } = await supabase.auth.getUser()
+  // Assign provider modal state
+  const [assignProviderModalOpen, setAssignProviderModalOpen] = useState(false)
+  const [assignProviderPatient, setAssignProviderPatient] = useState<PatientWithDetails | null>(null)
 
-        if (!user) {
-          setError('Authentication required')
-          return
-        }
+  // Function to refresh patient data (used by sync button)
+  const refreshPatientData = async () => {
+    setPage(1)
+    setAllPatients([])
+    await mutate() // Revalidate SWR cache
+  }
 
-        // Fetch partner user data
-        const userResponse = await fetch('/api/partner/me', {
-          headers: { 'x-partner-user-id': user.id }
-        })
+  // Optimistic update helper - updates UI immediately, then revalidates
+  const optimisticUpdatePatient = async (
+    patientId: string,
+    updates: Partial<PatientWithDetails>,
+    apiCall: () => Promise<void>
+  ) => {
+    // Update local state immediately for instant UI feedback
+    setAllPatients(prev =>
+      prev.map(p => p.id === patientId ? { ...p, ...updates } : p)
+    )
 
-        if (!userResponse.ok) {
-          setError('Failed to load partner user data')
-          return
-        }
-
-        const userData = await userResponse.json()
-        if (!userData.success) {
-          setError(userData.error || 'Failed to load user data')
-          return
-        }
-
-        setPartnerUser(userData.data)
-
-        // Fetch patients
-        const patientsResponse = await fetch('/api/partner-dashboard/patients')
-
-        if (!patientsResponse.ok) {
-          setError('Failed to load patients')
-          return
-        }
-
-        const patientsData = await patientsResponse.json()
-        if (!patientsData.success) {
-          setError(patientsData.error || 'Failed to load patients')
-          return
-        }
-
-        setPatients(patientsData.data.patients)
-        setFilteredPatients(patientsData.data.patients)
-
-      } catch (err: any) {
-        console.error('Error loading patients:', err)
-        setError('Failed to load patient roster')
-      } finally {
-        setLoading(false)
-      }
+    try {
+      // Make the actual API call
+      await apiCall()
+      // Refresh from server to get authoritative data
+      await mutate()
+    } catch (error) {
+      // Rollback on error by refreshing from server
+      console.error('Optimistic update failed, rolling back:', error)
+      await mutate()
+      throw error
     }
+  }
 
-    fetchData()
-  }, [])
+  // Load more patients (pagination)
+  const loadMorePatients = () => {
+    if (hasMore) {
+      setPage(prev => prev + 1)
+    }
+  }
 
-  // Filter and search patients
-  useEffect(() => {
-    let filtered = [...patients]
-
+  // Filter and search patients (client-side filtering)
+  const filteredPatients = patients.filter(p => {
     // Apply type filter
-    if (filterType === 'assigned') {
-      filtered = filtered.filter(p => p.is_assigned_to_me)
-    } else if (filterType === 'roi_missing') {
-      filtered = filtered.filter(p => p.affiliation.consent_status !== 'active')
-    }
+    if (filterType === 'assigned' && !p.is_assigned_to_me) return false
+    if (filterType === 'roi_missing' && p.affiliation.consent_status === 'active') return false
 
     // Apply search filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase()
-      filtered = filtered.filter(p =>
+      return (
         `${p.first_name} ${p.last_name}`.toLowerCase().includes(search) ||
         p.email?.toLowerCase().includes(search) ||
         p.phone?.includes(search)
       )
     }
 
-    setFilteredPatients(filtered)
-  }, [patients, searchTerm, filterType])
-
-  const getROIStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            <CheckCircle className="w-3 h-3 mr-1" />
-            Active
-          </span>
-        )
-      case 'expired':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-            <AlertCircle className="w-3 h-3 mr-1" />
-            Expired
-          </span>
-        )
-      case 'missing':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-            <XCircle className="w-3 h-3 mr-1" />
-            Missing
-          </span>
-        )
-      default:
-        return null
-    }
-  }
+    return true
+  })
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -208,18 +212,8 @@ export default function PatientRosterPage() {
   }
 
   const handleTransferSuccess = async () => {
-    // Refresh patient list after successful transfer
-    try {
-      const response = await fetch('/api/partner-dashboard/patients')
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          setPatients(data.data.patients)
-        }
-      }
-    } catch (err) {
-      console.error('Error refreshing patients:', err)
-    }
+    // Refresh patient list using SWR cache invalidation
+    await refreshPatientData()
   }
 
   // Check if user can transfer patients (admin or case_manager)
@@ -238,18 +232,40 @@ export default function PatientRosterPage() {
   }
 
   const handleNotificationSuccess = async () => {
-    // Refresh patient list after successful notification
-    try {
-      const response = await fetch('/api/partner-dashboard/patients')
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          setPatients(data.data.patients)
-        }
-      }
-    } catch (err) {
-      console.error('Error refreshing patients:', err)
-    }
+    // Refresh patient list using SWR cache invalidation
+    await refreshPatientData()
+  }
+
+  // ROI modal handlers
+  const handleOpenROIModal = (patient: PatientWithDetails) => {
+    setRoiPatient(patient)
+    setRoiModalOpen(true)
+  }
+
+  const handleCloseROIModal = () => {
+    setRoiModalOpen(false)
+    setRoiPatient(null)
+  }
+
+  const handleROISuccess = async () => {
+    // Refresh patient list using SWR cache invalidation
+    await refreshPatientData()
+  }
+
+  // Assign provider modal handlers
+  const handleOpenAssignProviderModal = (patient: PatientWithDetails) => {
+    setAssignProviderPatient(patient)
+    setAssignProviderModalOpen(true)
+  }
+
+  const handleCloseAssignProviderModal = () => {
+    setAssignProviderModalOpen(false)
+    setAssignProviderPatient(null)
+  }
+
+  const handleAssignProviderSuccess = async () => {
+    // Refresh patient list using SWR cache invalidation
+    await refreshPatientData()
   }
 
   if (error) {
@@ -399,10 +415,16 @@ export default function PatientRosterPage() {
                       Contact
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      ROI Status
+                      Provider
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Previous Appointment
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Next Appointment
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Sync
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -415,16 +437,19 @@ export default function PatientRosterPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div>
-                            <div className="text-sm font-medium text-gray-900">
+                            <Link
+                              href={`/partner-dashboard/patients/${patient.id}`}
+                              className="text-sm font-medium text-moonlit-brown hover:text-moonlit-brown/80 hover:underline"
+                            >
                               {patient.first_name} {patient.last_name}
-                              {patient.is_assigned_to_me && (
-                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                  Assigned
-                                </span>
-                              )}
-                            </div>
+                            </Link>
+                            {patient.is_assigned_to_me && (
+                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                Assigned
+                              </span>
+                            )}
                             {patient.primary_insurance_payer && (
-                              <div className="text-sm text-gray-500">
+                              <div className="text-sm text-gray-500 mt-1">
                                 {patient.primary_insurance_payer.name}
                               </div>
                             )}
@@ -436,11 +461,34 @@ export default function PatientRosterPage() {
                         <div className="text-sm text-gray-500">{patient.phone || '—'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getROIStatusBadge(patient.affiliation.consent_status)}
-                        {patient.affiliation.consent_expires_on && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Expires: {new Date(patient.affiliation.consent_expires_on).toLocaleDateString()}
+                        {patient.primary_provider ? (
+                          <button
+                            onClick={() => handleOpenAssignProviderModal(patient)}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-moonlit-brown/10 text-moonlit-brown hover:bg-moonlit-brown/20 transition-colors"
+                            title="Click to change provider"
+                          >
+                            Dr. {patient.primary_provider.last_name}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleOpenAssignProviderModal(patient)}
+                            className="text-sm text-blue-600 hover:text-blue-800 underline"
+                          >
+                            Assign provider
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {patient.previous_appointment ? (
+                          <div className="text-sm text-gray-500">
+                            {new Date(patient.previous_appointment.start_time).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
                           </div>
+                        ) : (
+                          <span className="text-sm text-gray-500">—</span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -460,19 +508,35 @@ export default function PatientRosterPage() {
                           <span className="text-sm text-gray-500">No upcoming</span>
                         )}
                       </td>
+                      <td className="px-6 py-4">
+                        <SyncAppointmentsButton
+                          patientId={patient.id}
+                          patientName={`${patient.first_name} ${patient.last_name}`}
+                          lastSyncAt={patient.affiliation.last_practiceq_sync_at}
+                          onSyncComplete={refreshPatientData}
+                        />
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-3">
-                          <Link
-                            href={`/partner-dashboard/patients/${patient.id}`}
-                            className="text-moonlit-brown hover:text-moonlit-brown/80"
-                          >
-                            View Details
-                          </Link>
+                          {/* ROI Upload Button - only show if no ROI on file */}
+                          {!patient.affiliation.consent_on_file && (
+                            <>
+                              <button
+                                onClick={() => handleOpenROIModal(patient)}
+                                className="text-moonlit-brown hover:text-moonlit-brown/80 flex items-center space-x-1"
+                                title="Upload ROI"
+                              >
+                                <FileText className="w-4 h-4" />
+                                <span>Upload ROI</span>
+                              </button>
+                              {canTransferPatients && <span className="text-gray-300">|</span>}
+                            </>
+                          )}
+
                           {canTransferPatients && (
                             <>
                               {patient.current_assignment && (
                                 <>
-                                  <span className="text-gray-300">|</span>
                                   <button
                                     onClick={() => handleOpenTransferModal(patient)}
                                     className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
@@ -480,9 +544,9 @@ export default function PatientRosterPage() {
                                     <UserCheck className="w-4 h-4" />
                                     <span>Transfer</span>
                                   </button>
+                                  <span className="text-gray-300">|</span>
                                 </>
                               )}
-                              <span className="text-gray-300">|</span>
                               <button
                                 onClick={() => handleOpenNotificationModal(patient)}
                                 className="text-green-600 hover:text-green-800 flex items-center space-x-1"
@@ -498,6 +562,22 @@ export default function PatientRosterPage() {
                   ))}
                 </tbody>
               </table>
+
+              {/* Load More Button */}
+              {hasMore && (
+                <div className="p-6 text-center border-t border-gray-200">
+                  <button
+                    onClick={loadMorePatients}
+                    disabled={loading}
+                    className="px-6 py-2 bg-moonlit-brown text-white rounded-lg hover:bg-moonlit-brown/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loading ? 'Loading...' : `Load More (${totalCount - patients.length} remaining)`}
+                  </button>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Showing {patients.length} of {totalCount} patients
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -521,6 +601,27 @@ export default function PatientRosterPage() {
           isOpen={notificationModalOpen}
           onClose={handleCloseNotificationModal}
           onSuccess={handleNotificationSuccess}
+        />
+      )}
+
+      {/* Upload ROI Modal */}
+      {roiPatient && partnerUser && (
+        <UploadROIModal
+          patient={roiPatient}
+          organizationId={partnerUser.organization_id}
+          isOpen={roiModalOpen}
+          onClose={handleCloseROIModal}
+          onSuccess={handleROISuccess}
+        />
+      )}
+
+      {/* Assign Provider Modal */}
+      {assignProviderPatient && (
+        <AssignProviderModal
+          patient={assignProviderPatient}
+          isOpen={assignProviderModalOpen}
+          onClose={handleCloseAssignProviderModal}
+          onSuccess={handleAssignProviderSuccess}
         />
       )}
     </div>
