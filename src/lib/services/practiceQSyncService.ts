@@ -35,6 +35,12 @@ interface IntakeQAppointment {
   StartDateIso: string
   EndDateIso: string
   Duration: number
+  CustomFields?: Array<{
+    Label?: string
+    Name?: string
+    Value?: string
+    Answer?: string
+  }>
 }
 
 interface SyncResult {
@@ -66,13 +72,13 @@ class PracticeQSyncService {
    * Sync appointments for a single patient from PracticeQ
    *
    * @param patientId - Moonlit patient ID
-   * @param organizationId - Organization ID (for access control)
+   * @param organizationId - Organization ID (for access control, null for admin/provider sync)
    * @param dateRange - Date range to sync (default: last 90 days + next 90 days)
    * @returns Sync result with summary
    */
   async syncPatientAppointments(
     patientId: string,
-    organizationId: string,
+    organizationId: string | null,
     dateRange?: { startDate: string; endDate: string }
   ): Promise<SyncResult> {
     const warnings: string[] = []
@@ -94,17 +100,21 @@ class PracticeQSyncService {
 
     console.log(`🔄 [PracticeQ Sync] Starting sync for ${patient.first_name} ${patient.last_name} (${patient.email})`)
 
-    // 2. Verify patient is affiliated with organization
-    const { data: affiliation, error: affError } = await supabaseAdmin
-      .from('patient_organization_affiliations')
-      .select('id')
-      .eq('patient_id', patientId)
-      .eq('organization_id', organizationId)
-      .eq('status', 'active')
-      .single()
+    // 2. Verify patient is affiliated with organization (skip for admin/provider sync)
+    if (organizationId) {
+      const { data: affiliation, error: affError } = await supabaseAdmin
+        .from('patient_organization_affiliations')
+        .select('id')
+        .eq('patient_id', patientId)
+        .eq('organization_id', organizationId)
+        .eq('status', 'active')
+        .single()
 
-    if (affError || !affiliation) {
-      throw new Error(`Patient ${patientId} not affiliated with organization ${organizationId}`)
+      if (affError || !affiliation) {
+        throw new Error(`Patient ${patientId} not affiliated with organization ${organizationId}`)
+      }
+    } else {
+      console.log(`🔓 [PracticeQ Sync] Skipping organization check (admin/provider sync)`)
     }
 
     // 3. Calculate date range (default: last 90 days + next 90 days)
@@ -145,6 +155,9 @@ class PracticeQSyncService {
         else if (result.syncAction === 'updated') summary.updated++
         else if (result.syncAction === 'unchanged') summary.unchanged++
         else if (result.syncAction === 'error') summary.errors++
+
+        // Update patient payer from appointment custom fields (if available)
+        await this.updatePatientPayer(patientId, intakeqAppt)
       } catch (error: any) {
         console.error(`❌ [PracticeQ Sync] Error processing appointment ${intakeqAppt.Id}:`, error.message)
         summary.errors++
@@ -161,11 +174,20 @@ class PracticeQSyncService {
     }
 
     // 6. Update last sync time
-    await supabaseAdmin
-      .from('patient_organization_affiliations')
-      .update({ last_practiceq_sync_at: new Date().toISOString() })
-      .eq('patient_id', patientId)
-      .eq('organization_id', organizationId)
+    if (organizationId) {
+      // Partner dashboard: update affiliation sync time
+      await supabaseAdmin
+        .from('patient_organization_affiliations')
+        .update({ last_practiceq_sync_at: new Date().toISOString() })
+        .eq('patient_id', patientId)
+        .eq('organization_id', organizationId)
+    } else {
+      // Admin/provider dashboard: update patient sync time
+      await supabaseAdmin
+        .from('patients')
+        .update({ last_intakeq_sync: new Date().toISOString() })
+        .eq('id', patientId)
+    }
 
     console.log(`✅ [PracticeQ Sync] Complete: ${summary.new} new, ${summary.updated} updated, ${summary.unchanged} unchanged, ${summary.errors} errors`)
 
@@ -317,6 +339,122 @@ class PracticeQSyncService {
     }
 
     return statusMap[intakeqStatus] || 'scheduled'
+  }
+
+  /**
+   * Extract insurance company name from IntakeQ custom fields
+   */
+  private extractInsuranceFromCustomFields(appointment: IntakeQAppointment): string | null {
+    if (!appointment.CustomFields || appointment.CustomFields.length === 0) {
+      return null
+    }
+
+    // Look for insurance-related custom fields
+    const insuranceField = appointment.CustomFields.find(field => {
+      const label = (field.Label || field.Name || '').toLowerCase()
+      return label.includes('insurance company') ||
+             label.includes('name of your insurance') ||
+             label.includes('insurance provider')
+    })
+
+    if (!insuranceField) {
+      return null
+    }
+
+    const insuranceName = insuranceField.Value || insuranceField.Answer
+    return insuranceName ? insuranceName.trim() : null
+  }
+
+  /**
+   * Map insurance name from IntakeQ to payer ID
+   */
+  private async mapInsuranceToPayer(insuranceName: string): Promise<string | null> {
+    // Normalize the insurance name
+    const normalized = insuranceName.toLowerCase().trim()
+
+    // Define mappings from common IntakeQ insurance names to payer names
+    const mappings: Record<string, string[]> = {
+      'dmba': ['DMBA'],
+      'health choice': ['Health Choice Utah', 'HCU'],
+      'molina': ['Molina Utah'],
+      'uuhp': ['HealthyU (UUHP)', 'University of Utah Health Plans (UUHP)'],
+      'selecthealth': ['SelectHealth Integrated', 'SelectHealth Care', 'SelectHealth Med', 'SelectHealth Value'],
+      'utah medicaid': ['Utah Medicaid Fee-for-Service'],
+      'medicaid': ['Utah Medicaid Fee-for-Service', 'Molina Utah', 'Health Choice Utah', 'HealthyU (UUHP)', 'SelectHealth Integrated'],
+      'tam': ['Utah Medicaid Fee-for-Service'], // Targeted Adult Medicaid
+      'hmhi': ['HMHI BHN'],
+      'optum': ['Optum Commercial Behavioral Health', 'Optum Salt Lake and Tooele County Medicaid Network'],
+      'united': ['United Healthcare'],
+      'aetna': ['Aetna'],
+      'cigna': ['Cigna'],
+      'regence': ['Regence BlueCross BlueShield'],
+      'tricare': ['TriCare West'],
+      'triwest': ['TriWest']
+    }
+
+    // Find matching payer names
+    let possiblePayerNames: string[] = []
+    for (const [key, payerNames] of Object.entries(mappings)) {
+      if (normalized.includes(key)) {
+        possiblePayerNames = payerNames
+        break
+      }
+    }
+
+    if (possiblePayerNames.length === 0) {
+      console.warn(`⚠️ [Insurance Mapping] Unknown insurance name: "${insuranceName}"`)
+      return null
+    }
+
+    // Query database for matching payer (case-insensitive, Utah only)
+    const { data: payers, error } = await supabaseAdmin
+      .from('payers')
+      .select('id, name')
+      .eq('state', 'UT')
+      .in('name', possiblePayerNames)
+      .limit(1)
+
+    if (error || !payers || payers.length === 0) {
+      console.warn(`⚠️ [Insurance Mapping] No payer found for "${insuranceName}" (tried: ${possiblePayerNames.join(', ')})`)
+      return null
+    }
+
+    console.log(`✅ [Insurance Mapping] Mapped "${insuranceName}" → ${payers[0].name} (${payers[0].id})`)
+    return payers[0].id
+  }
+
+  /**
+   * Update patient's primary payer from appointment insurance data
+   */
+  private async updatePatientPayer(patientId: string, appointment: IntakeQAppointment): Promise<void> {
+    // Extract insurance from custom fields
+    const insuranceName = this.extractInsuranceFromCustomFields(appointment)
+
+    if (!insuranceName) {
+      return // No insurance info in this appointment
+    }
+
+    // Map to payer ID
+    const payerId = await this.mapInsuranceToPayer(insuranceName)
+
+    if (!payerId) {
+      return // Couldn't map to a known payer
+    }
+
+    // Update patient's primary payer
+    const { error } = await supabaseAdmin
+      .from('patients')
+      .update({
+        primary_payer_id: payerId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', patientId)
+
+    if (error) {
+      console.error(`❌ [Payer Update] Failed to update patient ${patientId}:`, error)
+    } else {
+      console.log(`✅ [Payer Update] Updated patient ${patientId} with payer ${payerId}`)
+    }
   }
 }
 
