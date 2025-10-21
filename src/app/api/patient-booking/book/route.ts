@@ -545,6 +545,33 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             payer_id: payerId
         })
 
+        // Step 4.5: Auto-assign primary provider if not already set
+        // This ensures every patient has a "home" provider based on their first booking
+        console.log('👤 Checking if patient needs primary provider assignment...')
+        const { data: patientData, error: patientCheckError } = await supabaseAdmin
+            .from('patients')
+            .select('primary_provider_id')
+            .eq('id', patientId)
+            .single()
+
+        if (patientCheckError) {
+            console.error('⚠️ Could not check patient primary_provider_id:', patientCheckError)
+        } else if (!patientData.primary_provider_id) {
+            console.log(`📌 Patient has no primary provider, assigning provider ${providerId}...`)
+            const { error: updateError } = await supabaseAdmin
+                .from('patients')
+                .update({ primary_provider_id: providerId })
+                .eq('id', patientId)
+
+            if (updateError) {
+                console.error('⚠️ Failed to assign primary provider:', updateError)
+            } else {
+                console.log(`✅ Assigned primary provider ${providerId} to patient ${patientId}`)
+            }
+        } else {
+            console.log(`✅ Patient already has primary provider: ${patientData.primary_provider_id}`)
+        }
+
         // Step 5: IntakeQ mappings already resolved earlier (before appointment creation)
         // Skip this section - mappings are in intakeqClientId, practitionerExternalId, serviceExternalId
 

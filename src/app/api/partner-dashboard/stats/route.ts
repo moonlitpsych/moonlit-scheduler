@@ -11,7 +11,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 export async function GET(request: NextRequest) {
   try {
     // Get authenticated user
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
@@ -88,17 +88,13 @@ export async function GET(request: NextRequest) {
       appointmentsThisWeek = count || 0
     }
 
-    // TODO: Pending changes (placeholder for now)
-    const pendingChanges = 0
-
     return NextResponse.json({
       success: true,
       data: {
         organization_stats: {
           total_patients: totalPatients || 0,
           active_patients: activePatients,
-          appointments_this_week: appointmentsThisWeek,
-          pending_changes: pendingChanges
+          appointments_this_week: appointmentsThisWeek
         }
       }
     })

@@ -1,6 +1,6 @@
 /**
- * Transfer Patient Modal Component
- * Allows case managers to transfer patient ownership
+ * Assign Provider Modal Component
+ * Allows admins to assign or change a patient's primary provider
  */
 
 'use client'
@@ -8,74 +8,70 @@
 import { useState, useEffect } from 'react'
 import { X, UserCheck, AlertCircle } from 'lucide-react'
 
-interface TeamMember {
+interface Provider {
   id: string
-  full_name: string
-  email: string
-  role: string
-  active_patient_count: number
+  first_name: string
+  last_name: string
+  title?: string
+  is_active: boolean
 }
 
 interface Patient {
   id: string
   first_name: string
   last_name: string
-  current_assignment?: {
-    partner_user_id: string
-    partner_users?: {
-      full_name: string
-    }
+  primary_provider?: {
+    id: string
+    first_name: string
+    last_name: string
   }
 }
 
-interface TransferPatientModalProps {
+interface AssignProviderModalProps {
   patient: Patient
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
 }
 
-export function TransferPatientModal({
+export function AssignProviderModal({
   patient,
   isOpen,
   onClose,
   onSuccess
-}: TransferPatientModalProps) {
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<string>('')
-  const [notes, setNotes] = useState<string>('')
+}: AssignProviderModalProps) {
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
-      fetchTeamMembers()
+      fetchProviders()
     }
   }, [isOpen])
 
-  const fetchTeamMembers = async () => {
+  const fetchProviders = async () => {
     try {
-      const response = await fetch('/api/partner-dashboard/team')
+      // Fetch all providers directly from the database (not filtered by bookability)
+      // For admin assignment, we want to see ALL providers
+      const response = await fetch('/api/partner-dashboard/providers')
       const data = await response.json()
 
       if (data.success) {
-        // Filter out the currently assigned user
-        const availableMembers = data.data.team_members.filter(
-          (member: TeamMember) => member.id !== patient.current_assignment?.partner_user_id
-        )
-        setTeamMembers(availableMembers)
+        setProviders(data.data)
       } else {
-        setError('Failed to load team members')
+        setError('Failed to load providers')
       }
     } catch (err) {
-      console.error('Error fetching team members:', err)
-      setError('Failed to load team members')
+      console.error('Error fetching providers:', err)
+      setError('Failed to load providers')
     }
   }
 
-  const handleTransfer = async () => {
-    if (!selectedUserId) {
-      setError('Please select a team member')
+  const handleAssign = async () => {
+    if (!selectedProviderId) {
+      setError('Please select a provider')
       return
     }
 
@@ -83,14 +79,11 @@ export function TransferPatientModal({
     setError(null)
 
     try {
-      const response = await fetch('/api/partner-dashboard/patients/transfer', {
+      const response = await fetch(`/api/partner-dashboard/patients/${patient.id}/assign-provider`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          patient_id: patient.id,
-          from_user_id: patient.current_assignment?.partner_user_id || null,
-          to_user_id: selectedUserId,
-          notes: notes || null
+          provider_id: selectedProviderId
         })
       })
 
@@ -99,14 +92,13 @@ export function TransferPatientModal({
       if (data.success) {
         onSuccess()
         onClose()
-        setSelectedUserId('')
-        setNotes('')
+        setSelectedProviderId('')
       } else {
-        setError(data.error || 'Failed to transfer patient')
+        setError(data.error || 'Failed to assign provider')
       }
     } catch (err: any) {
-      console.error('Error transferring patient:', err)
-      setError('Failed to transfer patient')
+      console.error('Error assigning provider:', err)
+      setError('Failed to assign provider')
     } finally {
       setLoading(false)
     }
@@ -114,7 +106,9 @@ export function TransferPatientModal({
 
   if (!isOpen) return null
 
-  const currentAssignee = patient.current_assignment?.partner_users?.full_name || 'Unassigned'
+  const currentProvider = patient.primary_provider
+    ? `Dr. ${patient.primary_provider.first_name} ${patient.primary_provider.last_name}`
+    : 'Not assigned'
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -131,7 +125,7 @@ export function TransferPatientModal({
           <div className="flex items-start justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-900 font-['Newsreader']">
-                Transfer Patient
+                Assign Primary Provider
               </h3>
               <p className="text-sm text-gray-600 mt-1">
                 {patient.first_name} {patient.last_name}
@@ -145,10 +139,10 @@ export function TransferPatientModal({
             </button>
           </div>
 
-          {/* Current Assignment */}
+          {/* Current Provider */}
           <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-500 mb-1">Case management currently assigned to</p>
-            <p className="text-sm font-medium text-gray-900">{currentAssignee}</p>
+            <p className="text-xs text-gray-500 mb-1">Current primary provider</p>
+            <p className="text-sm font-medium text-gray-900">{currentProvider}</p>
           </div>
 
           {/* Error Message */}
@@ -159,45 +153,36 @@ export function TransferPatientModal({
             </div>
           )}
 
-          {/* Team Member Select */}
+          {/* Provider Select */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Transfer to
+              Assign to provider
             </label>
             <select
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
+              value={selectedProviderId}
+              onChange={(e) => setSelectedProviderId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={loading}
             >
-              <option value="">Select a team member...</option>
-              {teamMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.full_name} ({member.active_patient_count} patients)
+              <option value="">Select a provider...</option>
+              {providers.map((provider) => (
+                <option
+                  key={provider.id}
+                  value={provider.id}
+                  disabled={provider.id === patient.primary_provider?.id}
+                >
+                  Dr. {provider.first_name} {provider.last_name}
+                  {provider.title ? ` (${provider.title})` : ''}
+                  {provider.id === patient.primary_provider?.id ? ' (Current)' : ''}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Notes */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Notes (optional)
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Reason for transfer..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              disabled={loading}
-            />
-          </div>
-
-          {/* Case Manager Responsibility Note */}
+          {/* Info Note */}
           <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-800">
-              <span className="font-medium">Note:</span> The assigned case manager will receive all updates, appointments, and forms for this patient.
+              <span className="font-medium">Note:</span> The primary provider is the main clinician responsible for this patient's care.
             </p>
           </div>
 
@@ -211,16 +196,16 @@ export function TransferPatientModal({
               Cancel
             </button>
             <button
-              onClick={handleTransfer}
-              disabled={loading || !selectedUserId}
+              onClick={handleAssign}
+              disabled={loading || !selectedProviderId}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
             >
               {loading ? (
-                <span>Transferring...</span>
+                <span>Assigning...</span>
               ) : (
                 <>
                   <UserCheck className="w-4 h-4" />
-                  <span>Transfer Patient</span>
+                  <span>Assign Provider</span>
                 </>
               )}
             </button>

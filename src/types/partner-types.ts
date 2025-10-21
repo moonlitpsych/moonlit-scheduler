@@ -348,7 +348,6 @@ export interface PartnerDashboardData {
     total_patients: number
     active_patients: number
     appointments_this_week: number
-    pending_changes: number
   }
 }
 

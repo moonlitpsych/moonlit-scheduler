@@ -75,8 +75,7 @@ export default function PartnerDashboardPage() {
               organization_stats: {
                 total_patients: 0,
                 active_patients: 0,
-                appointments_this_week: 0,
-                pending_changes: 0
+                appointments_this_week: 0
               }
             })
           }
@@ -209,8 +208,7 @@ export default function PartnerDashboardPage() {
             stats={dashboardData?.organization_stats || {
               total_patients: 0,
               active_patients: 0,
-              appointments_this_week: 0,
-              pending_changes: 0
+              appointments_this_week: 0
             }}
             loading={loading}
           />

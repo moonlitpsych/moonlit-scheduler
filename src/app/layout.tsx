@@ -1,8 +1,7 @@
 // src/app/layout.tsx
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ProviderModalProvider } from '@/contexts/ProviderModalContext'
-import Header from '@/components/layout/Header'
-import Footer from '@/components/layout/Footer'
+import { ConditionalLayout } from '@/components/layout/ConditionalLayout'
 import ProviderModal from '@/components/shared/ProviderModal'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
@@ -26,11 +25,9 @@ export default function RootLayout({
                 <AuthProvider>
                     <ProviderModalProvider>
                         <div className="min-h-screen flex flex-col">
-                            <Header />
-                            <main className="flex-grow pt-16">
+                            <ConditionalLayout>
                                 {children}
-                            </main>
-                            <Footer />
+                            </ConditionalLayout>
                         </div>
                         <ProviderModal />
                     </ProviderModalProvider>

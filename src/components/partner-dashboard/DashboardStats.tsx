@@ -1,12 +1,13 @@
 // Partner Dashboard Statistics Component
 'use client'
 
+import Link from 'next/link'
+
 interface DashboardStatsProps {
   stats: {
     total_patients: number
     active_patients: number
     appointments_this_week: number
-    pending_changes: number
   }
   loading?: boolean
 }
@@ -19,15 +20,17 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
       icon: '👥',
       description: 'Patients affiliated with your organization',
       color: 'bg-moonlit-cream border-moonlit-brown/20',
-      textColor: 'text-moonlit-navy'
+      textColor: 'text-moonlit-navy',
+      link: '/partner-dashboard/patients'
     },
     {
       title: 'Active Patients',
       value: stats.active_patients,
       icon: '✅',
-      description: 'Currently active patient relationships',
+      description: 'Patients with valid ROI consent',
       color: 'bg-moonlit-peach/20 border-moonlit-peach/40',
-      textColor: 'text-moonlit-navy'
+      textColor: 'text-moonlit-navy',
+      link: '/partner-dashboard/patients'
     },
     {
       title: 'This Week\'s Appointments',
@@ -35,22 +38,15 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
       icon: '📅',
       description: 'Appointments scheduled this week',
       color: 'bg-moonlit-brown/10 border-moonlit-brown/30',
-      textColor: 'text-moonlit-brown'
-    },
-    {
-      title: 'Pending Changes',
-      value: stats.pending_changes,
-      icon: '⏳',
-      description: 'Change requests awaiting approval',
-      color: 'bg-moonlit-orange/10 border-moonlit-orange/30',
-      textColor: 'text-moonlit-orange'
+      textColor: 'text-moonlit-brown',
+      link: '/partner-dashboard/patients'
     }
   ]
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[...Array(4)].map((_, index) => (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {[...Array(3)].map((_, index) => (
           <div key={index} className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="animate-pulse">
               <div className="flex items-center justify-between mb-4">
@@ -67,11 +63,12 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {statCards.map((stat, index) => (
-        <div 
+        <Link
           key={index}
-          className={`bg-white rounded-lg border-2 ${stat.color} p-6 transition-all hover:shadow-md`}
+          href={stat.link}
+          className={`bg-white rounded-lg border-2 ${stat.color} p-6 transition-all hover:shadow-lg cursor-pointer block`}
         >
           <div className="flex items-center justify-between mb-4">
             <span className="text-2xl">{stat.icon}</span>
@@ -106,13 +103,7 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
             </div>
           )}
 
-          {/* Alert for pending changes */}
-          {stat.title === 'Pending Changes' && stats.pending_changes > 0 && (
-            <div className="mt-3 text-xs text-moonlit-orange bg-moonlit-orange/10 rounded-full px-3 py-1 text-center font-['Newsreader']">
-              {stats.pending_changes > 5 ? 'High priority' : 'Review needed'}
-            </div>
-          )}
-        </div>
+        </Link>
       ))}
     </div>
   )
