@@ -80,13 +80,26 @@ interface V2BookingResponse {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<V2BookingResponse>> {
-  // V2.0: Strong identity matching without ON CONFLICT - FRESH COMPILE TEST
-  console.log('🔵 V2.0 BOOK-V2 ENDPOINT - FRESH COMPILATION ACTIVE')
+  // V2.1: Enhanced error logging and rollback mechanisms
+  const requestId = crypto.randomUUID().substring(0, 8) // Short ID for logging
+  console.log(`[${requestId}] 🔵 V2.1 BOOKING REQUEST STARTED`)
+
   const startTime = Date.now()
   const warnings: string[] = []
 
+  // Track what we've created for potential rollback
+  let createdPatientId: string | null = null
+  let wasNewPatient = false
+
   try {
     const body = await request.json() as V2BookingRequest
+    console.log(`[${requestId}] Request payload received:`, {
+      hasPatientId: !!body.patientId,
+      hasPatientData: !!body.patient,
+      providerId: body.providerId,
+      payerId: body.payerId,
+      start: body.start
+    })
 
     // DEV: Warn if address fields present (should never happen)
     if (process.env.NODE_ENV === 'development') {
@@ -103,7 +116,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
       }
     }
 
-    // Check idempotency
+    // STEP 0: Check idempotency
+    console.log(`[${requestId}] STEP 0: Checking idempotency...`)
     const idempotencyKey = body.idempotencyKey || request.headers.get('Idempotency-Key')
     if (idempotencyKey) {
       const { data: existing } = await supabaseAdmin
@@ -113,17 +127,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
         .single()
 
       if (existing) {
-        console.log(`✅ V2.0: Idempotent request detected, returning cached response`)
+        console.log(`[${requestId}] STEP 0: ✅ Duplicate request detected, returning cached response`)
         return NextResponse.json(existing.response_data as V2BookingResponse)
       }
     }
+    console.log(`[${requestId}] STEP 0: ✅ Idempotency check passed`)
 
-    // Step 1: Ensure patient exists (V2.0: Strong matching logic)
+    // STEP 1: Ensure patient exists (V2.1: Strong matching logic + tracking)
+    console.log(`[${requestId}] STEP 1: Resolving patient...`)
     const { patientId, patient } = body
     let resolvedPatientId: string
     let matchType: 'strong' | 'fallback' | 'none' = 'none'
 
     if (patientId) {
+      console.log(`[${requestId}] STEP 1: Using existing patient ID: ${patientId}`)
       resolvedPatientId = patientId
       matchType = 'strong' // Existing patient ID is strongest match
 
@@ -241,7 +258,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
 
         // No match found - create new patient
         if (!resolvedPatientId) {
-          console.log(`📝 V2.0: Creating new patient with email: ${normalizedEmail}`)
+          console.log(`[${requestId}] STEP 1: Creating new patient with email: ${normalizedEmail}`)
           const { data: newPatient, error: insertError } = await supabaseAdmin
             .from('patients')
             .insert({
@@ -260,6 +277,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
             .single()
 
           if (insertError || !newPatient) {
+            console.error(`[${requestId}] STEP 1: ❌ Failed to create patient:`, {
+              error: insertError?.message,
+              code: (insertError as any)?.code,
+              hint: (insertError as any)?.hint
+            })
             // Log to audit trail
             await logIntakeqSync({
               action: 'create_client',
@@ -293,10 +315,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
 
           resolvedPatientId = newPatient.id
           matchType = 'none'
-          console.log(`✅ V2.0: Created new patient: ${resolvedPatientId}`)
+          wasNewPatient = true
+          createdPatientId = resolvedPatientId
+          console.log(`[${requestId}] STEP 1: ✅ Created new patient: ${resolvedPatientId}`)
         }
 
       } catch (error: any) {
+        console.error(`[${requestId}] STEP 1: ❌ Unexpected error in patient resolution:`, {
+          error: error.message,
+          stack: error.stack
+        })
+
         // Log unexpected errors
         await logIntakeqSync({
           action: 'create_client',
@@ -310,7 +339,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
           success: false,
           code: 'PATIENT_UPSERT_FAILED',
           message: `Patient matching failed: ${error.message}`,
-          details: {
+          debug: {
+            requestId,
+            step: 'patient_resolution',
+            timestamp: new Date().toISOString(),
             pgCode: error.code,
             pgHint: error.hint
           }
@@ -332,33 +364,69 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
       }, { status: 400 })
     }
 
-    console.log(`🚀 V2.0 Booking: Patient ${resolvedPatientId}, Provider ${body.providerId}, Payer ${body.payerId}`)
+    console.log(`[${requestId}] STEP 1: ✅ Patient resolution complete - ${matchType} match, ID: ${resolvedPatientId}`)
 
-    // Step 2: Trust the UI's bookability logic
+    // STEP 2: Trust the UI's bookability logic
     // If a provider was shown for this payer, they ARE bookable
     // The UI uses v_bookable_provider_payer which includes all supply/supervision rules
     // No additional validation needed here - the UI is the source of truth
+    console.log(`[${requestId}] STEP 2: ✅ Skipping bookability validation (trusted UI)`)
 
-    // Step 3: Resolve service instance and duration
-    // The resolver handles cash payment correctly - returns real UUID for cash service instance
-    const intakeInstance = await resolveIntakeServiceInstance(body.payerId)
-    const isCashPayment = body.payerId === 'cash-payment'
-    const serviceInstanceId = intakeInstance.serviceInstanceId // Always use resolver value (no override)
-    const durationMinutes = intakeInstance.durationMinutes
+    // STEP 3: Resolve service instance and duration
+    console.log(`[${requestId}] STEP 3: Resolving service instance for payer ${body.payerId}...`)
+    let intakeInstance
+    let isCashPayment
+    let serviceInstanceId
+    let durationMinutes
 
-    console.log(`🔍 V2.0: Resolved service instance:`, {
-      payerId: body.payerId,
-      isCashPayment,
-      serviceInstanceId,
-      serviceInstanceType: typeof serviceInstanceId,
-      durationMinutes
-    })
+    try {
+      // The resolver handles cash payment correctly - returns real UUID for cash service instance
+      intakeInstance = await resolveIntakeServiceInstance(body.payerId)
+      isCashPayment = body.payerId === 'cash-payment'
+      serviceInstanceId = intakeInstance.serviceInstanceId // Always use resolver value (no override)
+      durationMinutes = intakeInstance.durationMinutes
+
+      console.log(`[${requestId}] STEP 3: ✅ Service instance resolved:`, {
+        payerId: body.payerId,
+        isCashPayment,
+        serviceInstanceId,
+        serviceInstanceType: typeof serviceInstanceId,
+        durationMinutes
+      })
+    } catch (error: any) {
+      console.error(`[${requestId}] STEP 3: ❌ Service instance resolution failed:`, {
+        error: error.message,
+        code: error.code,
+        payerId: body.payerId
+      })
+
+      // Rollback: Delete orphaned patient if we created one
+      if (wasNewPatient && createdPatientId) {
+        console.log(`[${requestId}] ROLLBACK: Deleting orphaned patient ${createdPatientId}`)
+        await supabaseAdmin
+          .from('patients')
+          .delete()
+          .eq('id', createdPatientId)
+      }
+
+      return NextResponse.json({
+        success: false,
+        code: error.code || 'SERVICE_INSTANCE_RESOLUTION_FAILED',
+        message: error.message || 'Failed to resolve service instance',
+        debug: {
+          requestId,
+          step: 'service_instance_resolution',
+          timestamp: new Date().toISOString(),
+          payerId: body.payerId
+        }
+      }, { status: error.status || 500 })
+    }
 
     const startDate = new Date(body.start)
     const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000)
 
-    // Step 4: Check for conflicts
-    console.log(`🔍 V2.0: Checking conflicts for provider ${body.providerId}, patient ${resolvedPatientId}`)
+    // STEP 4: Check for conflicts
+    console.log(`[${requestId}] STEP 4: Checking conflicts for provider ${body.providerId}...`)
     const { data: conflicts } = await supabaseAdmin
       .from('appointments')
       .select('id, start_time, end_time, patient_id, created_at, status')
@@ -432,7 +500,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
               duration: durationMinutes,
               provider: {
                 id: body.providerId,
-                name: providerName
+                name: 'Provider' // Will be fetched later if needed
               },
               isDuplicate: true,
               message: 'Found your existing appointment'
@@ -1010,7 +1078,26 @@ This booking was created through the Moonlit Scheduler widget.
     })
 
   } catch (error: any) {
-    console.error('❌ V2.0 Booking error:', error)
+    console.error(`[${requestId}] ❌ BOOKING FAILED - Unexpected error:`, {
+      error: error.message,
+      stack: error.stack,
+      code: error.code
+    })
+
+    // V2.1: Rollback orphaned patient if created
+    if (wasNewPatient && createdPatientId) {
+      try {
+        console.log(`[${requestId}] ROLLBACK: Cleaning up orphaned patient ${createdPatientId}`)
+        await supabaseAdmin
+          .from('patients')
+          .delete()
+          .eq('id', createdPatientId)
+        console.log(`[${requestId}] ROLLBACK: ✅ Orphaned patient deleted`)
+      } catch (rollbackError: any) {
+        console.error(`[${requestId}] ROLLBACK: ❌ Failed to delete orphaned patient:`, rollbackError.message)
+        // Don't fail the error response due to rollback failure
+      }
+    }
 
     // Log error
     await logIntakeqSync({
@@ -1023,7 +1110,11 @@ This booking was created through the Moonlit Scheduler widget.
     return NextResponse.json({
       success: false,
       error: error.message,
-      code: error.code || 'BOOKING_FAILED'
+      code: error.code || 'BOOKING_FAILED',
+      debug: {
+        requestId,
+        timestamp: new Date().toISOString()
+      }
     }, { status: error.status || 500 })
   }
 }

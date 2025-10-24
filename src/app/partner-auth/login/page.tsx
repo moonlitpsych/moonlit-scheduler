@@ -12,8 +12,11 @@ export default function PartnerLoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingMagicLink, setLoadingMagicLink] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+  const [magicLinkSent, setMagicLinkSent] = useState(false)
+  const [loginMethod, setLoginMethod] = useState<'password' | 'magiclink'>('password')
+
   const router = useRouter()
   const supabase = createClientComponentClient<Database>()
 
@@ -45,6 +48,33 @@ export default function PartnerLoginPage() {
     checkPartnerAuth()
   }, [])
 
+  const handleMagicLink = async () => {
+    setLoadingMagicLink(true)
+    setError(null)
+    setMagicLinkSent(false)
+
+    try {
+      const response = await fetch('/api/partner-auth/magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setMagicLinkSent(true)
+      } else {
+        setError(data.error || 'Failed to send magic link')
+      }
+    } catch (err: any) {
+      console.error('Magic link error:', err)
+      setError('An unexpected error occurred')
+    } finally {
+      setLoadingMagicLink(false)
+    }
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -67,16 +97,16 @@ export default function PartnerLoginPage() {
 
       if (data.user) {
         console.log('Authentication successful, checking partner access...')
-        
+
         // Check if this user has partner access
         const partnerResponse = await fetch('/api/partner/me', {
           headers: {
             'x-partner-user-id': data.user.id
           }
         })
-        
+
         const partnerResult = await partnerResponse.json()
-        
+
         if (partnerResult.success) {
           console.log('Partner access confirmed, redirecting to dashboard...')
           router.replace('/partner-dashboard')
@@ -131,6 +161,19 @@ export default function PartnerLoginPage() {
             </div>
           )}
 
+          {/* Magic Link Success Message */}
+          {magicLinkSent && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-green-800 text-sm font-['Newsreader'] font-medium mb-1">
+                Check your email!
+              </p>
+              <p className="text-green-700 text-xs font-['Newsreader'] font-light">
+                We've sent a magic link to <strong>{email}</strong>. Click the link in the email to sign in.
+                The link will expire in 60 minutes.
+              </p>
+            </div>
+          )}
+
           {/* Info Message */}
           <div className="mb-6 p-4 bg-moonlit-cream/50 border border-moonlit-brown/20 rounded-lg">
             <div className="flex items-start space-x-3">
@@ -140,81 +183,149 @@ export default function PartnerLoginPage() {
                   Partner Access Required
                 </p>
                 <p className="text-moonlit-brown/80 text-xs mt-1 font-['Newsreader'] font-light">
-                  This portal is for treatment centers, therapy practices, and case management organizations 
+                  This portal is for treatment centers, therapy practices, and case management organizations
                   that refer patients to Moonlit Psychiatry.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-moonlit-navy mb-2 font-['Newsreader']">
-                Organization Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-moonlit-brown focus:border-transparent transition-colors font-['Newsreader']"
-                placeholder="Enter your organization email"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-moonlit-navy mb-2 font-['Newsreader']">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-moonlit-brown focus:border-transparent transition-colors font-['Newsreader']"
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    setShowPassword(!showPassword)
-                  }}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer z-10"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
+          {/* Login Method Toggle */}
+          <div className="mb-4 flex space-x-2 p-1 bg-gray-100 rounded-lg">
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-moonlit-brown hover:bg-moonlit-brown/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors font-['Newsreader'] flex items-center justify-center"
+              type="button"
+              onClick={() => setLoginMethod('password')}
+              className={`flex-1 py-2 px-3 text-sm font-['Newsreader'] rounded-md transition-colors ${
+                loginMethod === 'password'
+                  ? 'bg-white text-moonlit-navy shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
             >
-              {loading ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Signing In...
-                </div>
-              ) : (
-                <>
-                  <Building2 className="w-5 h-5 mr-2" />
-                  Access Partner Dashboard
-                </>
-              )}
+              Password
             </button>
-          </form>
+            <button
+              type="button"
+              onClick={() => setLoginMethod('magiclink')}
+              className={`flex-1 py-2 px-3 text-sm font-['Newsreader'] rounded-md transition-colors ${
+                loginMethod === 'magiclink'
+                  ? 'bg-white text-moonlit-navy shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Magic Link
+            </button>
+          </div>
+
+          {/* Login Form */}
+          {loginMethod === 'password' ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-moonlit-navy mb-2 font-['Newsreader']">
+                  Organization Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-moonlit-brown focus:border-transparent transition-colors font-['Newsreader']"
+                  placeholder="Enter your organization email"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-moonlit-navy mb-2 font-['Newsreader']">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-moonlit-brown focus:border-transparent transition-colors font-['Newsreader']"
+                    placeholder="Enter your password"
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setShowPassword(!showPassword)
+                    }}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer z-10"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-moonlit-brown hover:bg-moonlit-brown/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors font-['Newsreader'] flex items-center justify-center"
+              >
+                {loading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Signing In...
+                  </div>
+                ) : (
+                  <>
+                    <Building2 className="w-5 h-5 mr-2" />
+                    Access Partner Dashboard
+                  </>
+                )}
+              </button>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="email-magic" className="block text-sm font-medium text-moonlit-navy mb-2 font-['Newsreader']">
+                  Organization Email
+                </label>
+                <input
+                  id="email-magic"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-moonlit-brown focus:border-transparent transition-colors font-['Newsreader']"
+                  placeholder="Enter your organization email"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleMagicLink}
+                disabled={loadingMagicLink || !email}
+                className="w-full bg-moonlit-brown hover:bg-moonlit-brown/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors font-['Newsreader'] flex items-center justify-center"
+              >
+                {loadingMagicLink ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Sending Magic Link...
+                  </div>
+                ) : (
+                  <>
+                    <Building2 className="w-5 h-5 mr-2" />
+                    Send Magic Link
+                  </>
+                )}
+              </button>
+
+              <p className="text-xs text-gray-500 text-center font-['Newsreader'] font-light">
+                We'll send you a secure link to sign in without a password
+              </p>
+            </div>
+          )}
 
           {/* Forgot Password */}
           <div className="mt-6 text-center">

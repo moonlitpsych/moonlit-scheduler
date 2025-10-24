@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq('auth_user_id', authData.user.id)
-      .eq('status', 'active')
+      .eq('is_active', true)
       .single()
 
     if (partnerUserError || !partnerUser) {
@@ -124,8 +124,7 @@ export async function POST(request: NextRequest) {
       user: {
         id: partnerUser.id,
         email: partnerUser.email,
-        first_name: partnerUser.first_name,
-        last_name: partnerUser.last_name,
+        full_name: partnerUser.full_name,
         role: partnerUser.role,
         permissions: partnerUser.permissions,
         organization: partnerUser.organization,
@@ -187,14 +186,14 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('auth_user_id', session.user.id)
-      .eq('status', 'active')
+      .eq('is_active', true)
       .single()
 
     if (partnerUserError || !partnerUser) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Partner user not found' 
+        {
+          success: false,
+          error: 'Partner user not found'
         },
         { status: 404 }
       )
@@ -206,8 +205,7 @@ export async function GET(request: NextRequest) {
         user: {
           id: partnerUser.id,
           email: partnerUser.email,
-          first_name: partnerUser.first_name,
-          last_name: partnerUser.last_name,
+          full_name: partnerUser.full_name,
           role: partnerUser.role,
           permissions: partnerUser.permissions,
           organization: partnerUser.organization,

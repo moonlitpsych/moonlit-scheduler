@@ -83,18 +83,26 @@ export async function GET(request: NextRequest) {
         // Get appointment count for this organization (last 30 days)
         const thirtyDaysAgo = new Date()
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-        
-        const { count: appointmentCount } = await supabaseAdmin
-          .from('appointments')
-          .select('*', { count: 'exact', head: true })
-          .gte('start_time', thirtyDaysAgo.toISOString())
-          .in('patient_id', 
-            supabaseAdmin
-              .from('patient_affiliations')
-              .select('patient_id')
-              .eq('organization_id', partnerUser.organization_id)
-              .eq('status', 'active')
-          )
+
+        // First get patient IDs for this organization
+        const { data: orgAffiliations } = await supabaseAdmin
+          .from('patient_organization_affiliations')
+          .select('patient_id')
+          .eq('organization_id', partnerUser.organization_id)
+          .eq('status', 'active')
+
+        const patientIds = orgAffiliations?.map(a => a.patient_id) || []
+
+        let appointmentCount = 0
+        if (patientIds.length > 0) {
+          const { count } = await supabaseAdmin
+            .from('appointments')
+            .select('*', { count: 'exact', head: true })
+            .gte('start_time', thirtyDaysAgo.toISOString())
+            .in('patient_id', patientIds)
+
+          appointmentCount = count || 0
+        }
 
         orgStats = {
           affiliated_patients: patientCount || 0,
@@ -136,7 +144,7 @@ export async function GET(request: NextRequest) {
       organization: partnerUser.organization?.name
     })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         id: partnerUser.id,
@@ -157,6 +165,12 @@ export async function GET(request: NextRequest) {
         organization_stats: orgStats
       }
     })
+
+    // Cache partner user data for 5 minutes (changes infrequently)
+    // Allow stale data for up to 1 hour while revalidating
+    response.headers.set('Cache-Control', 'private, s-maxage=300, stale-while-revalidate=3600')
+
+    return response
 
   } catch (error: any) {
     console.error('❌ Partner user authentication error:', error)

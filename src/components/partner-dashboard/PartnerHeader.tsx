@@ -6,18 +6,23 @@ import Link from 'next/link'
 import { PartnerUser } from '@/types/partner-types'
 
 interface PartnerHeaderProps {
-  partnerUser: PartnerUser
+  partnerUser: PartnerUser | null
   currentPage?: string
 }
 
 export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
+  const getInitials = (fullName?: string) => {
+    if (!fullName) return 'PU'
+    const parts = fullName.trim().split(' ')
+    if (parts.length >= 2) {
+      return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase()
+    }
+    return fullName.substring(0, 2).toUpperCase()
   }
 
-  const isAdmin = partnerUser.role === 'partner_admin'
+  const isAdmin = partnerUser?.role === 'partner_admin'
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
@@ -31,7 +36,7 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
               </div>
               <div>
                 <div className="text-lg font-semibold text-moonlit-navy font-['Newsreader']">
-                  {partnerUser.organization?.name}
+                  {partnerUser?.organization?.name || 'Loading...'}
                 </div>
                 <div className="text-xs text-gray-500">
                   Partner Dashboard
@@ -42,15 +47,36 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
 
           {/* Navigation - Only functional pages */}
           <nav className="hidden md:flex items-center space-x-6">
-            <Link 
+            <Link
               href="/partner-dashboard"
               className={`px-3 py-2 text-sm font-medium font-['Newsreader'] rounded-md transition-colors ${
-                currentPage === 'dashboard' 
-                  ? 'bg-moonlit-cream text-moonlit-brown' 
+                currentPage === 'dashboard'
+                  ? 'bg-moonlit-cream text-moonlit-brown'
                   : 'text-gray-600 hover:text-moonlit-navy'
               }`}
             >
               Dashboard
+            </Link>
+
+            <Link
+              href="/partner-dashboard/patients"
+              className={`px-3 py-2 text-sm font-medium font-['Newsreader'] rounded-md transition-colors ${
+                currentPage === 'patients'
+                  ? 'bg-moonlit-cream text-moonlit-brown'
+                  : 'text-gray-600 hover:text-moonlit-navy'
+              }`}
+            >
+              Patients
+            </Link>
+            <Link
+              href="/partner-dashboard/calendar"
+              className={`px-3 py-2 text-sm font-medium font-['Newsreader'] rounded-md transition-colors ${
+                currentPage === 'calendar'
+                  ? 'bg-moonlit-cream text-moonlit-brown'
+                  : 'text-gray-600 hover:text-moonlit-navy'
+              }`}
+            >
+              Calendar
             </Link>
           </nav>
 
@@ -63,15 +89,15 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
               >
                 <div className="w-8 h-8 bg-moonlit-navy rounded-full flex items-center justify-center">
                   <span className="text-white font-medium text-sm">
-                    {getInitials(partnerUser.first_name, partnerUser.last_name)}
+                    {getInitials(partnerUser?.full_name)}
                   </span>
                 </div>
                 <div className="hidden sm:block text-left">
                   <div className="text-sm font-medium text-gray-900 font-['Newsreader']">
-                    {partnerUser.first_name} {partnerUser.last_name}
+                    {partnerUser?.full_name || partnerUser?.email || 'Loading...'}
                   </div>
                   <div className="text-xs text-gray-500 capitalize">
-                    {partnerUser.role.replace('partner_', '').replace('_', ' ')}
+                    {partnerUser?.role?.replace('partner_', '').replace('_', ' ') || ''}
                   </div>
                 </div>
                 <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,31 +107,7 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
 
               {isUserMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                  <Link 
-                    href="/partner-dashboard/profile"
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={() => setIsUserMenuOpen(false)}
-                  >
-                    Profile & Settings
-                  </Link>
-                  <Link 
-                    href="/partner-dashboard/notifications"
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={() => setIsUserMenuOpen(false)}
-                  >
-                    Notifications
-                  </Link>
-                  {isAdmin && (
-                    <Link 
-                      href="/partner-dashboard/organization"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      onClick={() => setIsUserMenuOpen(false)}
-                    >
-                      Organization Settings
-                    </Link>
-                  )}
-                  <div className="border-t border-gray-100 my-2"></div>
-                  <Link 
+                  <Link
                     href="/partner-auth/logout"
                     className="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-['Newsreader']"
                     onClick={() => setIsUserMenuOpen(false)}
@@ -122,15 +124,26 @@ export function PartnerHeader({ partnerUser, currentPage }: PartnerHeaderProps) 
       {/* Mobile Navigation - Only functional pages */}
       <div className="md:hidden border-t border-gray-200 bg-gray-50 px-4 py-2">
         <div className="flex space-x-4 overflow-x-auto">
-          <Link 
+          <Link
             href="/partner-dashboard"
             className={`px-3 py-1 text-sm font-medium font-['Newsreader'] rounded-md whitespace-nowrap ${
-              currentPage === 'dashboard' 
-                ? 'bg-moonlit-brown text-white' 
+              currentPage === 'dashboard'
+                ? 'bg-moonlit-brown text-white'
                 : 'text-gray-600'
             }`}
           >
             Dashboard
+          </Link>
+
+          <Link
+            href="/partner-dashboard/patients"
+            className={`px-3 py-1 text-sm font-medium font-['Newsreader'] rounded-md whitespace-nowrap ${
+              currentPage === 'patients'
+                ? 'bg-moonlit-brown text-white'
+                : 'text-gray-600'
+            }`}
+          >
+            Patients
           </Link>
         </div>
       </div>

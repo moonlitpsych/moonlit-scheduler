@@ -1,0 +1,5 @@
+first_name,last_name,email,phone,date_of_birth,roi_consent,consent_expires,pq_client_id
+Sarah,Johnson,sarah.johnson@example.com,801-555-0101,1992-05-15,true,2026-01-15,
+Michael,Chen,michael.chen@example.com,801-555-0102,1988-11-20,true,2025-12-31,
+Emily,Rodriguez,emily.rodriguez@example.com,801-555-0103,1995-03-08,false,,
+David,Thompson,david.thompson@example.com,801-555-0104,1990-07-22,true,2026-06-30,

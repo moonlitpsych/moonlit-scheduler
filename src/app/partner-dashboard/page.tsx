@@ -54,20 +54,32 @@ export default function PartnerDashboardPage() {
         }
         
         setPartnerUser(userData.data)
-        
-        // Fetch dashboard data (if needed)
-        // For now, we'll use empty dashboard data since the API needs more work
-        setDashboardData({
-          upcoming_appointments: [],
-          my_assigned_patients: [],
-          recent_changes: [],
-          organization_stats: {
-            total_patients: 0,
-            active_patients: 0,
-            appointments_this_week: 0,
-            pending_changes: 0
+
+        // Fetch dashboard stats
+        const statsResponse = await fetch('/api/partner-dashboard/stats')
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json()
+          if (statsData.success) {
+            setDashboardData({
+              upcoming_appointments: [],
+              my_assigned_patients: [],
+              recent_changes: [],
+              organization_stats: statsData.data.organization_stats
+            })
+          } else {
+            // Fallback to empty stats if API fails
+            setDashboardData({
+              upcoming_appointments: [],
+              my_assigned_patients: [],
+              recent_changes: [],
+              organization_stats: {
+                total_patients: 0,
+                active_patients: 0,
+                appointments_this_week: 0
+              }
+            })
           }
-        })
+        }
         
       } catch (err: any) {
         console.error('Error loading dashboard:', err)
@@ -135,18 +147,18 @@ export default function PartnerDashboardPage() {
               )}
               
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <button 
+                <button
                   onClick={() => window.location.reload()}
                   className="px-6 py-3 bg-moonlit-brown hover:bg-moonlit-brown/90 text-white rounded-lg font-medium font-['Newsreader'] transition-colors"
                 >
                   Check Again
                 </button>
-                <a 
-                  href="mailto:hello@trymoonlit.com"
+                <button
+                  onClick={() => window.location.href = '/partner-auth/login'}
                   className="px-6 py-3 border border-gray-300 hover:border-moonlit-brown text-gray-700 hover:text-moonlit-brown rounded-lg font-medium font-['Newsreader'] transition-colors"
                 >
-                  Contact Support
-                </a>
+                  Partner Login
+                </button>
               </div>
             </div>
           </div>
@@ -183,7 +195,7 @@ export default function PartnerDashboardPage() {
         {/* Page header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
-            Welcome back, {partnerUser.first_name}!
+            Welcome back{partnerUser.full_name ? `, ${partnerUser.full_name.split(' ')[0]}` : ''}!
           </h1>
           <p className="text-gray-600 font-['Newsreader'] font-light">
             Here's what's happening with your patients and appointments today.
@@ -196,8 +208,7 @@ export default function PartnerDashboardPage() {
             stats={dashboardData?.organization_stats || {
               total_patients: 0,
               active_patients: 0,
-              appointments_this_week: 0,
-              pending_changes: 0
+              appointments_this_week: 0
             }}
             loading={loading}
           />

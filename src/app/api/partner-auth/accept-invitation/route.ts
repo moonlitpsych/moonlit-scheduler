@@ -5,8 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 interface AcceptInvitationRequest {
   token: string
   password: string
-  first_name?: string
-  last_name?: string
+  full_name?: string
   phone?: string
   timezone?: string
 }
@@ -14,7 +13,7 @@ interface AcceptInvitationRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: AcceptInvitationRequest = await request.json()
-    const { token, password, first_name, last_name, phone, timezone } = body
+    const { token, password, full_name, phone, timezone } = body
 
     if (!token || !password) {
       return NextResponse.json(
@@ -46,7 +45,7 @@ export async function POST(request: NextRequest) {
         organization:organizations(*)
       `)
       .eq('invitation_token', token)
-      .eq('status', 'pending_invitation')
+      .is('auth_user_id', null) // User hasn't accepted invitation yet
       .single()
 
     if (userError || !partnerUser) {
@@ -90,8 +89,7 @@ export async function POST(request: NextRequest) {
       password: password,
       email_confirm: true, // Auto-confirm email since invitation was sent to this email
       user_metadata: {
-        first_name: first_name || partnerUser.first_name,
-        last_name: last_name || partnerUser.last_name,
+        full_name: full_name || partnerUser.full_name,
         role: 'partner_user',
         organization_id: partnerUser.organization_id
       }
@@ -125,10 +123,9 @@ export async function POST(request: NextRequest) {
       .from('partner_users')
       .update({
         auth_user_id: authUser.user.id,
-        status: 'active',
+        is_active: true, // Activate the account
         email_verified: true,
-        first_name: first_name || partnerUser.first_name,
-        last_name: last_name || partnerUser.last_name,
+        full_name: full_name || partnerUser.full_name,
         phone: phone || partnerUser.phone,
         timezone: timezone || partnerUser.timezone || 'America/Denver',
         invitation_token: null, // Clear invitation token
@@ -223,8 +220,7 @@ export async function GET(request: NextRequest) {
       .select(`
         id,
         email,
-        first_name,
-        last_name,
+        full_name,
         role,
         invitation_expires,
         organization:organizations(
@@ -234,14 +230,14 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('invitation_token', token)
-      .eq('status', 'pending_invitation')
+      .is('auth_user_id', null) // User hasn't accepted invitation yet
       .single()
 
     if (userError || !partnerUser) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid invitation token' 
+        {
+          success: false,
+          error: 'Invalid invitation token'
         },
         { status: 404 }
       )
@@ -250,12 +246,12 @@ export async function GET(request: NextRequest) {
     // Check if invitation has expired
     const now = new Date()
     const expirationDate = new Date(partnerUser.invitation_expires!)
-    
+
     if (now > expirationDate) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invitation has expired' 
+        {
+          success: false,
+          error: 'Invitation has expired'
         },
         { status: 410 }
       )
@@ -265,8 +261,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         email: partnerUser.email,
-        first_name: partnerUser.first_name,
-        last_name: partnerUser.last_name,
+        full_name: partnerUser.full_name,
         role: partnerUser.role,
         organization: partnerUser.organization,
         expires_at: partnerUser.invitation_expires
