@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Search, Plus, Edit, Eye, FileText, Users, Calendar } from 'lucide-react'
 import PayerDetailModal from '@/components/admin/PayerDetailModal'
-import PayerEditorModal from '@/components/admin/PayerEditorModal'
+import PayerEditorModalEnhanced from '@/components/admin/PayerEditorModalEnhanced'
 
 interface Payer {
   id: string
@@ -302,7 +302,7 @@ export default function PayersPage() {
 
       {/* Payer Editor Modal */}
       {editingPayer && (
-        <PayerEditorModal
+        <PayerEditorModalEnhanced
           payer={editingPayer}
           isOpen={!!editingPayer}
           onClose={() => setEditingPayer(null)}
