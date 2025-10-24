@@ -13,10 +13,13 @@ import { TransferPatientModal } from '@/components/partner-dashboard/TransferPat
 import { SendNotificationModal } from '@/components/partner-dashboard/SendNotificationModal'
 import { UploadROIModal } from '@/components/partner-dashboard/UploadROIModal'
 import { AssignProviderModal } from '@/components/partner-dashboard/AssignProviderModal'
+import { EngagementStatusChip } from '@/components/partner-dashboard/EngagementStatusChip'
+import { AppointmentStatusIndicator } from '@/components/partner-dashboard/AppointmentStatusIndicator'
+import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
 import SyncAppointmentsButton from '@/components/partner-dashboard/SyncAppointmentsButton'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
-import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText } from 'lucide-react'
+import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity } from 'lucide-react'
 import Link from 'next/link'
 
 // SWR fetcher function
@@ -82,7 +85,8 @@ interface PatientWithDetails {
 
 export default function PatientRosterPage() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterType, setFilterType] = useState<'all' | 'assigned' | 'roi_missing'>('all')
+  const [filterType, setFilterType] = useState<'all' | 'assigned' | 'roi_missing' | 'active_only' | 'no_future_appt'>('all')
+  const [engagementStatusFilter, setEngagementStatusFilter] = useState<string>('active')
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -133,6 +137,10 @@ export default function PatientRosterPage() {
   const [assignProviderModalOpen, setAssignProviderModalOpen] = useState(false)
   const [assignProviderPatient, setAssignProviderPatient] = useState<PatientWithDetails | null>(null)
 
+  // Change engagement status modal state
+  const [changeStatusModalOpen, setChangeStatusModalOpen] = useState(false)
+  const [changeStatusPatient, setChangeStatusPatient] = useState<PatientWithDetails | null>(null)
+
   // Function to refresh patient data (used by sync button)
   const refreshPatientData = async () => {
     setPage(1)
@@ -176,6 +184,13 @@ export default function PatientRosterPage() {
     // Apply type filter
     if (filterType === 'assigned' && !p.is_assigned_to_me) return false
     if (filterType === 'roi_missing' && p.affiliation.consent_status === 'active') return false
+    if (filterType === 'active_only' && p.status !== 'active') return false
+    if (filterType === 'no_future_appt' && p.next_appointment) return false
+
+    // Apply engagement status filter (if not 'all')
+    if (engagementStatusFilter && engagementStatusFilter !== 'all' && p.status !== engagementStatusFilter) {
+      return false
+    }
 
     // Apply search filter
     if (searchTerm) {
@@ -268,6 +283,22 @@ export default function PatientRosterPage() {
     await refreshPatientData()
   }
 
+  // Change engagement status modal handlers
+  const handleOpenChangeStatusModal = (patient: PatientWithDetails) => {
+    setChangeStatusPatient(patient)
+    setChangeStatusModalOpen(true)
+  }
+
+  const handleCloseChangeStatusModal = () => {
+    setChangeStatusModalOpen(false)
+    setChangeStatusPatient(null)
+  }
+
+  const handleChangeStatusSuccess = async () => {
+    // Refresh patient list using SWR cache invalidation
+    await refreshPatientData()
+  }
+
   if (error) {
     return (
       <div className="min-h-screen bg-moonlit-cream">
@@ -310,7 +341,7 @@ export default function PatientRosterPage() {
         </div>
 
         {/* Stats cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -324,24 +355,36 @@ export default function PatientRosterPage() {
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 font-['Newsreader']">Assigned to Me</p>
+                <p className="text-sm font-medium text-gray-600 font-['Newsreader']">Active</p>
                 <p className="text-2xl font-bold text-moonlit-navy mt-1">
-                  {patients.filter(p => p.is_assigned_to_me).length}
+                  {patients.filter(p => p.status === 'active').length}
                 </p>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-600" />
+              <Activity className="w-8 h-8 text-green-600" />
             </div>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 font-['Newsreader']">ROI Missing</p>
+                <p className="text-sm font-medium text-gray-600 font-['Newsreader']">No Future Appt</p>
                 <p className="text-2xl font-bold text-moonlit-navy mt-1">
-                  {patients.filter(p => p.affiliation.consent_status !== 'active').length}
+                  {patients.filter(p => !p.next_appointment).length}
                 </p>
               </div>
-              <AlertCircle className="w-8 h-8 text-yellow-600" />
+              <Calendar className="w-8 h-8 text-orange-600" />
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 font-['Newsreader']">Assigned to Me</p>
+                <p className="text-2xl font-bold text-moonlit-navy mt-1">
+                  {patients.filter(p => p.is_assigned_to_me).length}
+                </p>
+              </div>
+              <CheckCircle className="w-8 h-8 text-blue-600" />
             </div>
           </div>
         </div>
@@ -359,10 +402,10 @@ export default function PatientRosterPage() {
               />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setFilterType('all')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
                   filterType === 'all'
                     ? 'bg-moonlit-brown text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -371,8 +414,28 @@ export default function PatientRosterPage() {
                 All
               </button>
               <button
+                onClick={() => setFilterType('active_only')}
+                className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  filterType === 'active_only'
+                    ? 'bg-moonlit-brown text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Active Only
+              </button>
+              <button
+                onClick={() => setFilterType('no_future_appt')}
+                className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  filterType === 'no_future_appt'
+                    ? 'bg-moonlit-brown text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                No Future Appt
+              </button>
+              <button
                 onClick={() => setFilterType('assigned')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
                   filterType === 'assigned'
                     ? 'bg-moonlit-brown text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -382,7 +445,7 @@ export default function PatientRosterPage() {
               </button>
               <button
                 onClick={() => setFilterType('roi_missing')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
                   filterType === 'roi_missing'
                     ? 'bg-moonlit-brown text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -412,19 +475,16 @@ export default function PatientRosterPage() {
                       Patient
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Last Seen / Next Appt
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Provider
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Previous Appointment
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Next Appointment
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Sync
+                      Contact
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions

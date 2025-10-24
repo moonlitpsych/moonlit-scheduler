@@ -101,6 +101,7 @@ export default function DashboardLayout({
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home, show: isPractitioner },
+    { name: 'My Patients', href: '/dashboard/patients', icon: Users, show: isPractitioner },
     { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner, beta: true },
     { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
     { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },

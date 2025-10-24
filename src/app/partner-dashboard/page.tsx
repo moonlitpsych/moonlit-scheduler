@@ -147,18 +147,18 @@ export default function PartnerDashboardPage() {
               )}
               
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <button 
+                <button
                   onClick={() => window.location.reload()}
                   className="px-6 py-3 bg-moonlit-brown hover:bg-moonlit-brown/90 text-white rounded-lg font-medium font-['Newsreader'] transition-colors"
                 >
                   Check Again
                 </button>
-                <a 
-                  href="mailto:hello@trymoonlit.com"
+                <button
+                  onClick={() => window.location.href = '/partner-auth/login'}
                   className="px-6 py-3 border border-gray-300 hover:border-moonlit-brown text-gray-700 hover:text-moonlit-brown rounded-lg font-medium font-['Newsreader'] transition-colors"
                 >
-                  Contact Support
-                </a>
+                  Partner Login
+                </button>
               </div>
             </div>
           </div>

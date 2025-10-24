@@ -118,6 +118,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Admin Navigation */}
         <nav className="p-4 space-y-2">
           <Link
+            href="/admin/patients"
+            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+          >
+            <Users className="h-4 w-4" />
+            <span>All Patients</span>
+          </Link>
+
+          <Link
             href="/admin/partners"
             className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
           >
@@ -125,12 +133,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <span>Partner CRM</span>
             <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
           </Link>
-          
+
           <Link
             href="/admin/organizations"
             className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
           >
-            <Users className="h-4 w-4" />
+            <Building2 className="h-4 w-4" />
             <span>Organizations</span>
             <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
           </Link>
