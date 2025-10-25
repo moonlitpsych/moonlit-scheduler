@@ -17,6 +17,7 @@ import { EngagementStatusChip } from '@/components/partner-dashboard/EngagementS
 import { AppointmentStatusIndicator } from '@/components/partner-dashboard/AppointmentStatusIndicator'
 import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
 import SyncAppointmentsButton from '@/components/partner-dashboard/SyncAppointmentsButton'
+import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
 import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity } from 'lucide-react'
@@ -331,13 +332,16 @@ export default function PatientRosterPage() {
 
       <div className="container mx-auto px-4 py-8">
         {/* Page header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
-            Patient Roster
-          </h1>
-          <p className="text-gray-600 font-['Newsreader'] font-light">
-            View and manage patients from your organization
-          </p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
+              Patient Roster
+            </h1>
+            <p className="text-gray-600 font-['Newsreader'] font-light">
+              View and manage patients from your organization
+            </p>
+          </div>
+          <BulkSyncButton onSyncComplete={refreshPatientData} />
         </div>
 
         {/* Stats cards */}

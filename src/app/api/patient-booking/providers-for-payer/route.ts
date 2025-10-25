@@ -144,16 +144,27 @@ export async function POST(request: NextRequest) {
                 }
             })
         } else {
-            // CANONICAL: Use v_bookable_provider_payer view exclusively
-            console.log('📡 Using canonical v_bookable_provider_payer view...')
-            // Get bookable relationships from canonical view
-            const result = await supabaseAdmin
-                .from(BOOKABILITY_VIEWS.BOOKABLE)
-                .select(BOOKABLE_PROVIDER_SELECT)
-                .eq('payer_id', payer_id)
+            // FIX: Use RPC function with future date to get all bookable providers
+            // View has CURRENT_DATE filter which excludes providers with future bookable_from_date
+            console.log('📡 Using RPC function fn_bookable_provider_payer_asof...')
 
-            relationships = result.data
-            relationshipError = result.error
+            // Query for 60 days from now to include all currently bookable providers
+            const futureDate = new Date()
+            futureDate.setDate(futureDate.getDate() + 60)
+            const serviceDateStr = futureDate.toISOString().split('T')[0]
+
+            console.log(`🔍 Querying bookability as of: ${serviceDateStr}`)
+
+            const { data: rpcData, error: rpcError } = await supabaseAdmin
+                .rpc('fn_bookable_provider_payer_asof', {
+                    svc_date: serviceDateStr
+                })
+
+            // Filter to this payer
+            relationships = rpcData?.filter((row: any) => row.payer_id === payer_id) || []
+            relationshipError = rpcError
+
+            console.log(`✅ RPC returned ${relationships.length} relationships for payer`)
         }
 
         if (relationshipError) {
@@ -289,6 +300,7 @@ export async function POST(request: NextRequest) {
                     ]
                 } else {
                     // Fetch real service instances for insurance payers
+                    // Try payer-specific instances first
                     const result = await supabaseAdmin
                         .from('service_instances')
                         .select(`
@@ -301,9 +313,33 @@ export async function POST(request: NextRequest) {
                             )
                         `)
                         .eq('payer_id', payer_id)
+                        .eq('active', true)
 
                     serviceInstances = result.data
                     serviceError = result.error
+
+                    // FALLBACK: If no payer-specific instances, use global defaults
+                    if (!serviceError && (!serviceInstances || serviceInstances.length === 0)) {
+                        console.log(`📦 No payer-specific instances, falling back to global defaults...`)
+                        const globalResult = await supabaseAdmin
+                            .from('service_instances')
+                            .select(`
+                                id,
+                                service_id,
+                                services!inner(
+                                    id,
+                                    name,
+                                    duration_minutes
+                                )
+                            `)
+                            .is('payer_id', null)
+                            .eq('active', true)
+                            .eq('location', 'Telehealth')
+
+                        serviceInstances = globalResult.data
+                        serviceError = globalResult.error
+                        console.log(`📦 Found ${globalResult.data?.length || 0} global service instances`)
+                    }
                 }
 
                 if (serviceError) {

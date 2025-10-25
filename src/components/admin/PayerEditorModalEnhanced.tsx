@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Save, AlertTriangle, Plus, Trash2, FileText, Users, Settings, Shield, CheckCircle } from 'lucide-react'
+import { X, Save, AlertTriangle, Plus, Trash2, FileText, Users, Settings, Shield, CheckCircle, Package } from 'lucide-react'
 import ConfirmationModal from './ConfirmationModal'
 import SupervisionSetupPanel from './SupervisionSetupPanel'
 import PracticeQMappingForm, { PracticeQMapping } from './PracticeQMappingForm'
+import ServiceInstancesPanel, { ServiceInstance } from './ServiceInstancesPanel'
 import ContractValidationSummary from './ContractValidationSummary'
 import { SanityCheckResults } from '@/lib/services/payerSanityCheckService'
 
@@ -72,7 +73,7 @@ const US_STATES = [
   'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
 ]
 
-type TabType = 'basic' | 'contracts' | 'supervision' | 'practiceq'
+type TabType = 'basic' | 'contracts' | 'supervision' | 'service_instances' | 'practiceq'
 
 export default function PayerEditorModalEnhanced({
   payer,
@@ -86,6 +87,8 @@ export default function PayerEditorModalEnhanced({
   const [providers, setProviders] = useState<Array<{ id: string, name: string }>>([])
   const [supervisionMappings, setSupervisionMappings] = useState<SupervisionMapping[]>([])
   const [initialSupervisionCount, setInitialSupervisionCount] = useState<number>(0)
+  const [serviceInstances, setServiceInstances] = useState<ServiceInstance[]>([])
+  const [initialServiceInstanceCount, setInitialServiceInstanceCount] = useState<number>(0)
   const [practiceQMapping, setPracticeQMapping] = useState<PracticeQMapping | null>(null)
   const [validationResults, setValidationResults] = useState<SanityCheckResults | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>('basic')
@@ -166,6 +169,18 @@ export default function PayerEditorModalEnhanced({
         if (supervisionResult.success && supervisionResult.data) {
           setInitialSupervisionCount(supervisionResult.data.length)
           console.log(`📊 Loaded ${supervisionResult.data.length} existing supervision relationships`)
+        }
+      }
+
+      // Fetch existing service instances
+      const instancesResponse = await fetch(`/api/admin/payers/${payer.id}/service-instances`, {
+        credentials: 'include'
+      })
+      if (instancesResponse.ok) {
+        const instancesResult = await instancesResponse.json()
+        if (instancesResult.success && instancesResult.data) {
+          setInitialServiceInstanceCount(instancesResult.data.length)
+          console.log(`📊 Loaded ${instancesResult.data.length} existing service instances`)
         }
       }
 
@@ -260,6 +275,7 @@ export default function PayerEditorModalEnhanced({
           payerUpdates: cleanPayerUpdates,
           providerContracts: contracts.filter(c => c.provider_id),
           supervisionSetup: supervisionMappings,
+          serviceInstances: serviceInstances.filter(si => si.service_id),
           practiceQMapping,
           auditNote: note,
           runValidation: true
@@ -298,6 +314,7 @@ export default function PayerEditorModalEnhanced({
       case 'basic': return <Settings className="h-4 w-4" />
       case 'contracts': return <FileText className="h-4 w-4" />
       case 'supervision': return <Users className="h-4 w-4" />
+      case 'service_instances': return <Package className="h-4 w-4" />
       case 'practiceq': return <Shield className="h-4 w-4" />
     }
   }
@@ -307,6 +324,7 @@ export default function PayerEditorModalEnhanced({
       case 'basic': return 'Basic Info'
       case 'contracts': return 'Provider Contracts'
       case 'supervision': return 'Supervision'
+      case 'service_instances': return 'Service Instances'
       case 'practiceq': return 'PracticeQ'
     }
   }
@@ -333,7 +351,7 @@ export default function PayerEditorModalEnhanced({
           {/* Tab Navigation */}
           <div className="border-b border-gray-200">
             <nav className="flex space-x-1 px-6">
-              {(['basic', 'contracts', 'supervision', 'practiceq'] as TabType[]).map(tab => (
+              {(['basic', 'contracts', 'supervision', 'service_instances', 'practiceq'] as TabType[]).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -618,6 +636,17 @@ export default function PayerEditorModalEnhanced({
               </div>
             )}
 
+            {/* Service Instances Tab */}
+            {activeTab === 'service_instances' && (
+              <div className="p-6">
+                <ServiceInstancesPanel
+                  payerId={payer.id || 'new'}
+                  onInstancesChange={setServiceInstances}
+                  existingInstances={serviceInstances}
+                />
+              </div>
+            )}
+
             {/* PracticeQ Tab */}
             {activeTab === 'practiceq' && (
               <div className="p-6">
@@ -647,7 +676,7 @@ export default function PayerEditorModalEnhanced({
               {activeTab !== 'practiceq' && (
                 <button
                   onClick={() => {
-                    const tabs: TabType[] = ['basic', 'contracts', 'supervision', 'practiceq']
+                    const tabs: TabType[] = ['basic', 'contracts', 'supervision', 'service_instances', 'practiceq']
                     const currentIndex = tabs.indexOf(activeTab)
                     if (currentIndex < tabs.length - 1) {
                       setActiveTab(tabs[currentIndex + 1])
@@ -679,7 +708,7 @@ export default function PayerEditorModalEnhanced({
           onClose={() => setShowConfirmation(false)}
           onConfirm={handleConfirmSave}
           title={`Apply Payer Contract`}
-          description={`You are about to apply a comprehensive contract configuration for ${formData.name}. This will update the payer, create/update ${contracts.length} provider contracts, and ${supervisionMappings.length} supervision relationships.`}
+          description={`You are about to apply a comprehensive contract configuration for ${formData.name}. This will update the payer, create/update ${contracts.length} provider contracts, ${supervisionMappings.length} supervision relationships, and ${serviceInstances.length} service instances.`}
           changes={[
             {
               field: 'Payer Status',
@@ -695,6 +724,11 @@ export default function PayerEditorModalEnhanced({
               field: 'Supervision Relationships',
               oldValue: `${initialSupervisionCount} relationship(s)`,
               newValue: `${supervisionMappings.length} relationship(s)`
+            },
+            {
+              field: 'Service Instances',
+              oldValue: `${initialServiceInstanceCount} instance(s)`,
+              newValue: `${serviceInstances.length} instance(s)`
             },
             {
               field: 'PracticeQ Mapping',
