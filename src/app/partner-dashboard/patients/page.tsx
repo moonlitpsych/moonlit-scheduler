@@ -17,6 +17,8 @@ import { EngagementStatusChip } from '@/components/partner-dashboard/EngagementS
 import { AppointmentStatusIndicator } from '@/components/partner-dashboard/AppointmentStatusIndicator'
 import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
 import SyncAppointmentsButton from '@/components/partner-dashboard/SyncAppointmentsButton'
+import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
+import AppointmentLocationDisplay from '@/components/partner-dashboard/AppointmentLocationDisplay'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
 import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity } from 'lucide-react'
@@ -75,6 +77,8 @@ interface PatientWithDetails {
     id: string
     start_time: string
     status: string
+    meeting_url?: string | null
+    location_info?: any
     providers?: {
       first_name: string
       last_name: string
@@ -331,13 +335,16 @@ export default function PatientRosterPage() {
 
       <div className="container mx-auto px-4 py-8">
         {/* Page header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
-            Patient Roster
-          </h1>
-          <p className="text-gray-600 font-['Newsreader'] font-light">
-            View and manage patients from your organization
-          </p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
+              Patient Roster
+            </h1>
+            <p className="text-gray-600 font-['Newsreader'] font-light">
+              View and manage patients from your organization
+            </p>
+          </div>
+          <BulkSyncButton onSyncComplete={refreshPatientData} />
         </div>
 
         {/* Stats cards */}
@@ -551,15 +558,17 @@ export default function PatientRosterPage() {
                           <span className="text-sm text-gray-500">—</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4">
                         {patient.next_appointment ? (
-                          <div>
-                            <div className="text-sm text-gray-900 flex items-center">
-                              <Calendar className="w-4 h-4 mr-1" />
-                              {formatDate(patient.next_appointment.start_time)}
-                            </div>
+                          <div className="space-y-1">
+                            <AppointmentLocationDisplay
+                              meetingUrl={patient.next_appointment.meeting_url}
+                              locationInfo={patient.next_appointment.location_info}
+                              startTime={patient.next_appointment.start_time}
+                              compact={true}
+                            />
                             {patient.next_appointment.providers && (
-                              <div className="text-sm text-gray-500">
+                              <div className="text-xs text-gray-500">
                                 Dr. {patient.next_appointment.providers.last_name}
                               </div>
                             )}

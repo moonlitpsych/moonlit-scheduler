@@ -209,6 +209,8 @@ export async function GET(request: NextRequest) {
           patient_id,
           start_time,
           status,
+          meeting_url,
+          location_info,
           providers!appointments_provider_id_fkey (
             id,
             first_name,
@@ -228,6 +230,8 @@ export async function GET(request: NextRequest) {
           patient_id,
           start_time,
           status,
+          meeting_url,
+          location_info,
           providers!appointments_provider_id_fkey (
             id,
             first_name,

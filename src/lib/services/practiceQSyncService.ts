@@ -29,6 +29,13 @@ interface IntakeQAppointment {
   PractitionerEmail: string
   ServiceId: string
   LocationId: string
+  LocationName?: string
+  PlaceOfService?: string
+  TelehealthInfo?: {
+    Url?: string
+    MeetingUrl?: string
+    VideoUrl?: string
+  } | null
   Status: 'Confirmed' | 'Canceled' | 'WaitingConfirmation' | 'Declined' | 'Missed'
   StartDate: number // Unix timestamp in milliseconds
   EndDate: number
@@ -234,6 +241,10 @@ class PracticeQSyncService {
     const startTime = new Date(intakeqAppt.StartDateIso).toISOString()
     const endTime = new Date(intakeqAppt.EndDateIso).toISOString()
 
+    // 4.5. Extract meeting URL and location info
+    const meetingUrl = this.extractMeetingUrl(intakeqAppt)
+    const locationInfo = this.extractLocationInfo(intakeqAppt)
+
     // 5. Create or update appointment
     if (existing) {
       // Check if anything changed
@@ -261,6 +272,8 @@ class PracticeQSyncService {
           start_time: startTime,
           end_time: endTime,
           provider_id: providerId,
+          meeting_url: meetingUrl,
+          location_info: locationInfo,
           updated_at: new Date().toISOString()
         })
         .eq('id', existing.id)
@@ -289,6 +302,8 @@ class PracticeQSyncService {
           status,
           appointment_type: 'initial', // Default, can be updated later
           pq_appointment_id: intakeqAppt.Id,
+          meeting_url: meetingUrl,
+          location_info: locationInfo,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -455,6 +470,71 @@ class PracticeQSyncService {
     } else {
       console.log(`✅ [Payer Update] Updated patient ${patientId} with payer ${payerId}`)
     }
+  }
+
+  /**
+   * Extract meeting URL from IntakeQ TelehealthInfo
+   */
+  private extractMeetingUrl(appointment: IntakeQAppointment): string | null {
+    if (!appointment.TelehealthInfo) {
+      return null
+    }
+
+    // Try different possible field names
+    const url = appointment.TelehealthInfo.Url ||
+                appointment.TelehealthInfo.MeetingUrl ||
+                appointment.TelehealthInfo.VideoUrl
+
+    if (url && typeof url === 'string') {
+      console.log(`📹 [Meeting URL] Extracted: ${url}`)
+      return url
+    }
+
+    // If TelehealthInfo is not null but has no URL, log for debugging
+    if (appointment.TelehealthInfo) {
+      console.log(`⚠️ [Meeting URL] TelehealthInfo present but no URL found:`, appointment.TelehealthInfo)
+    }
+
+    return null
+  }
+
+  /**
+   * Extract location information from IntakeQ appointment
+   */
+  private extractLocationInfo(appointment: IntakeQAppointment): any {
+    const locationInfo: any = {}
+
+    if (appointment.LocationId) {
+      locationInfo.locationId = appointment.LocationId
+    }
+
+    if (appointment.LocationName) {
+      locationInfo.locationName = appointment.LocationName
+    }
+
+    if (appointment.PlaceOfService) {
+      locationInfo.placeOfService = appointment.PlaceOfService
+      // Determine location type from place of service code
+      // 02 = Telehealth provided other than in patient's home
+      // 10 = Telehealth provided in patient's home
+      // 11 = Office
+      // 12 = Home
+      if (appointment.PlaceOfService === '02' || appointment.PlaceOfService === '10') {
+        locationInfo.locationType = 'telehealth'
+      } else if (appointment.PlaceOfService === '11') {
+        locationInfo.locationType = 'office'
+      } else if (appointment.PlaceOfService === '12') {
+        locationInfo.locationType = 'home'
+      }
+    }
+
+    // If we have any location data, return it
+    if (Object.keys(locationInfo).length > 0) {
+      console.log(`📍 [Location] Extracted:`, locationInfo)
+      return locationInfo
+    }
+
+    return null
   }
 }
 

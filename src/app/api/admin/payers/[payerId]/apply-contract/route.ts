@@ -26,6 +26,14 @@ interface ProviderContract {
   status: string
 }
 
+interface ServiceInstance {
+  id?: string
+  service_id: string
+  location: string
+  pos_code: string
+  active: boolean
+}
+
 interface ApplyContractRequest {
   payerUpdates: {
     status_code?: string
@@ -37,6 +45,7 @@ interface ApplyContractRequest {
   }
   providerContracts: ProviderContract[]
   supervisionSetup: SupervisionSetup[]
+  serviceInstances?: ServiceInstance[]
   practiceQMapping: PracticeQMapping | null
   auditNote: string
   runValidation?: boolean
@@ -67,6 +76,9 @@ export async function POST(
       contractsCreated: 0,
       contractsUpdated: 0,
       supervisionCreated: 0,
+      serviceInstancesCreated: 0,
+      serviceInstancesUpdated: 0,
+      serviceInstancesDeleted: 0,
       practiceQMapped: false,
       validationResults: null as any,
       warnings: [] as string[]
@@ -324,7 +336,130 @@ export async function POST(
       }
     }
 
-    // 4. STORE PRACTICEQ MAPPING
+    // 4. MANAGE SERVICE INSTANCES (CREATE, UPDATE, DELETE)
+    if (body.serviceInstances && body.serviceInstances.length >= 0) {
+      console.log(`📦 Processing service instances...`)
+
+      // First, get existing service instances
+      const { data: existingInstances } = await supabase
+        .from('service_instances')
+        .select('*')
+        .eq('payer_id', payerId)
+
+      if (existingInstances && existingInstances.length > 0) {
+        console.log(`📋 Found ${existingInstances.length} existing service instances`)
+
+        // Find instances to delete (exist in DB but not in new list)
+        for (const existing of existingInstances) {
+          const stillExists = body.serviceInstances.find(
+            si => si.id === existing.id ||
+                  (si.service_id === existing.service_id &&
+                   si.location === existing.location &&
+                   si.pos_code === existing.pos_code)
+          )
+
+          if (!stillExists) {
+            console.log(`🗑️ Deleting service instance: ${existing.id}`)
+            const { error: deleteError } = await supabase
+              .from('service_instances')
+              .delete()
+              .eq('id', existing.id)
+
+            if (!deleteError) {
+              results.serviceInstancesDeleted++
+              auditEntries.push({
+                actorUserId: 'admin',
+                action: 'delete_service_instance',
+                entity: 'service_instances',
+                entityId: existing.id,
+                before: existing,
+                after: null,
+                note: `Service instance deleted via payer contract: ${body.auditNote}`
+              })
+            }
+          }
+        }
+      }
+
+      // Now create/update service instances from the new list
+      for (const instance of body.serviceInstances) {
+        if (!instance.service_id) continue
+
+        // Check if instance already exists
+        const { data: existing } = await supabase
+          .from('service_instances')
+          .select('*')
+          .eq('service_id', instance.service_id)
+          .eq('payer_id', payerId)
+          .eq('location', instance.location)
+          .eq('pos_code', instance.pos_code)
+          .maybeSingle()
+
+        if (existing) {
+          // Update existing instance
+          const { data: updated, error: updateError } = await supabase
+            .from('service_instances')
+            .update({
+              active: instance.active,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existing.id)
+            .select()
+            .single()
+
+          if (!updateError) {
+            results.serviceInstancesUpdated++
+            auditEntries.push({
+              actorUserId: 'admin',
+              action: 'update_service_instance',
+              entity: 'service_instances',
+              entityId: existing.id,
+              before: existing,
+              after: updated,
+              note: `Service instance update via payer contract: ${body.auditNote}`
+            })
+          } else {
+            console.error('❌ Failed to update service instance:', updateError)
+            results.warnings.push(`Failed to update service instance for service ${instance.service_id}`)
+          }
+        } else {
+          // Create new service instance
+          const instanceData = {
+            payer_id: payerId,
+            service_id: instance.service_id,
+            location: instance.location,
+            pos_code: instance.pos_code,
+            active: instance.active,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+
+          const { data: created, error: createError } = await supabase
+            .from('service_instances')
+            .insert(instanceData)
+            .select()
+            .single()
+
+          if (createError) {
+            console.error('❌ Failed to create service instance:', createError)
+            results.warnings.push(`Failed to create service instance for service ${instance.service_id}`)
+          } else {
+            results.serviceInstancesCreated++
+            auditEntries.push({
+              actorUserId: 'admin',
+              action: 'create_service_instance',
+              entity: 'service_instances',
+              entityId: created.id,
+              before: null,
+              after: created,
+              note: `Service instance created via payer contract: ${body.auditNote}`
+            })
+          }
+        }
+      }
+    }
+
+    // 5. STORE PRACTICEQ MAPPING
     if (body.practiceQMapping) {
       console.log('📝 Storing PracticeQ mappings...')
 
@@ -399,7 +534,7 @@ export async function POST(
       }
     }
 
-    // 5. RUN SANITY CHECKS
+    // 6. RUN SANITY CHECKS
     if (body.runValidation !== false) {
       console.log('🔍 Running sanity checks...')
       const validationResults = await payerSanityCheck.runAllChecks(
@@ -427,7 +562,7 @@ export async function POST(
       }
     }
 
-    // 6. LOG ALL AUDIT ENTRIES
+    // 7. LOG ALL AUDIT ENTRIES
     for (const entry of auditEntries) {
       try {
         await logAdminAudit(entry)

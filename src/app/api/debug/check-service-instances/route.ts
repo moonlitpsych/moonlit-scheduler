@@ -1,69 +1,51 @@
-/**
- * Debug endpoint to check current service_instances configuration
- */
-import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { NextResponse } from 'next/server'
 
 export async function GET() {
-    try {
-        // Get all service instances with their service and payer info
-        const { data: instances, error } = await supabaseAdmin
-            .from('service_instances')
-            .select(`
-                id,
-                service_id,
-                payer_id,
-                services (
-                    id,
-                    name
-                ),
-                payers (
-                    id,
-                    name,
-                    payer_type
-                ),
-                service_instance_integrations (
-                    id,
-                    system,
-                    external_id
-                )
-            `)
-            .order('payer_id')
+  try {
+    const payerId = 'b9e556b7-1070-47b8-8467-ef1ee5c68e4e' // Regence BCBS
 
-        if (error) {
-            return NextResponse.json({
-                success: false,
-                error: error.message
-            }, { status: 500 })
-        }
+    // Check service instances for this payer
+    const { data: instances, error } = await supabaseAdmin
+      .from('service_instances')
+      .select(`
+        *,
+        services (
+          id,
+          name,
+          duration_minutes
+        )
+      `)
+      .eq('payer_id', payerId)
 
-        // Group by payer
-        const byPayer = instances.reduce((acc: any, inst: any) => {
-            const payerName = inst.payers?.name || 'Unknown'
-            if (!acc[payerName]) {
-                acc[payerName] = []
-            }
-            acc[payerName].push({
-                instance_id: inst.id,
-                service: inst.services?.name,
-                intakeq_mapping: inst.service_instance_integrations?.[0]?.external_id || null
-            })
-            return acc
-        }, {})
+    // Also check if there are any service instances at all
+    const { data: allInstances, error: allError } = await supabaseAdmin
+      .from('service_instances')
+      .select(`
+        *,
+        services (name),
+        payers (name)
+      `)
+      .limit(10)
 
-        return NextResponse.json({
-            success: true,
-            total_instances: instances.length,
-            payers_with_instances: Object.keys(byPayer).length,
-            instances_by_payer: byPayer,
-            all_instances: instances
-        })
+    return NextResponse.json({
+      success: true,
+      regenceBCBS: {
+        count: instances?.length || 0,
+        data: instances,
+        error: error?.message
+      },
+      sampleInstances: {
+        count: allInstances?.length || 0,
+        data: allInstances,
+        error: allError?.message
+      }
+    })
 
-    } catch (error: any) {
-        console.error('❌ Error checking service instances:', error)
-        return NextResponse.json({
-            success: false,
-            error: error.message
-        }, { status: 500 })
-    }
+  } catch (error: any) {
+    return NextResponse.json({
+      success: false,
+      error: error.message
+    }, { status: 500 })
+  }
 }
