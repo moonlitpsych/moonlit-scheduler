@@ -1,17 +1,20 @@
 // Partner User Information API - Who am I, which organization
 import { NextRequest, NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   try {
-    // Get partner user ID from headers or auth token
-    // For now, using a header-based approach (replace with actual auth)
-    const partnerUserId = request.headers.get('x-partner-user-id')
-    
-    if (!partnerUserId) {
+    // Get authenticated user from Supabase session
+    const cookieStore = await cookies()
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+    if (sessionError || !session) {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'Partner user authentication required',
           code: 'AUTH_REQUIRED'
         },
@@ -19,7 +22,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('👤 Fetching partner user info:', { partnerUserId })
+    console.log('👤 Fetching partner user info for auth user:', session.user.id)
 
     // Get partner user with organization details
     const { data: partnerUser, error } = await supabaseAdmin
@@ -42,7 +45,7 @@ export async function GET(request: NextRequest) {
           created_at
         )
       `)
-      .eq('auth_user_id', partnerUserId)
+      .eq('auth_user_id', session.user.id)
       .eq('is_active', true)
       .single()
 
