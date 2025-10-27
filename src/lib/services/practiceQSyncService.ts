@@ -7,6 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { intakeQService } from './intakeQService'
+import { googleMeetService } from './googleMeetService'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!
@@ -242,13 +243,41 @@ class PracticeQSyncService {
     const endTime = new Date(intakeqAppt.EndDateIso).toISOString()
 
     // 4.5. Extract meeting URL and location info
-    const meetingUrl = this.extractMeetingUrl(intakeqAppt)
+    let meetingUrl = this.extractMeetingUrl(intakeqAppt)
     const locationInfo = this.extractLocationInfo(intakeqAppt)
 
     // Debug log what we extracted
     if (process.env.INTEGRATIONS_DEBUG_HTTP === 'true') {
       console.log(`📍 [Appointment ${intakeqAppt.Id}] Meeting URL: ${meetingUrl || 'none'}`)
       console.log(`📍 [Appointment ${intakeqAppt.Id}] Location Info:`, locationInfo)
+    }
+
+    // 4.6. Generate Google Meet link if this is a telehealth appointment without a meeting URL
+    if (!meetingUrl && this.isTelehealthAppointment(locationInfo)) {
+      console.log(`🔗 [Appointment ${intakeqAppt.Id}] Generating Google Meet link for telehealth appointment`)
+
+      // Get patient info for meeting creation
+      const { data: patient } = await supabaseAdmin
+        .from('patients')
+        .select('first_name, last_name')
+        .eq('id', patientId)
+        .single()
+
+      if (patient) {
+        const generatedUrl = await googleMeetService.generateMeetingLink(
+          intakeqAppt.Id, // Use IntakeQ appointment ID as unique identifier
+          `${patient.first_name} ${patient.last_name}`,
+          intakeqAppt.PractitionerName,
+          new Date(startTime)
+        )
+
+        if (generatedUrl) {
+          meetingUrl = generatedUrl
+          console.log(`✅ [Appointment ${intakeqAppt.Id}] Generated Google Meet link: ${meetingUrl}`)
+        } else {
+          console.warn(`⚠️ [Appointment ${intakeqAppt.Id}] Failed to generate Google Meet link`)
+        }
+      }
     }
 
     // 5. Create or update appointment
@@ -478,6 +507,28 @@ class PracticeQSyncService {
     } else {
       console.log(`✅ [Payer Update] Updated patient ${patientId} with payer ${payerId}`)
     }
+  }
+
+  /**
+   * Check if this is a telehealth appointment based on location info
+   */
+  private isTelehealthAppointment(locationInfo: any): boolean {
+    if (!locationInfo) return false
+
+    // PlaceOfService codes:
+    // 02 = Telehealth provided other than in patient's home
+    // 10 = Telehealth provided in patient's home
+    const placeOfService = locationInfo.placeOfService
+    if (placeOfService === '02' || placeOfService === '10') {
+      return true
+    }
+
+    // Also check locationType if it was set
+    if (locationInfo.locationType === 'telehealth') {
+      return true
+    }
+
+    return false
   }
 
   /**
