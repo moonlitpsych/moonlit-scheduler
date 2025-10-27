@@ -21,8 +21,10 @@ import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
 import AppointmentLocationDisplay from '@/components/partner-dashboard/AppointmentLocationDisplay'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
-import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity } from 'lucide-react'
+import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity, Download, RotateCcw } from 'lucide-react'
 import Link from 'next/link'
+import { useResizableColumns } from '@/hooks/useResizableColumns'
+import { exportToCSV, formatDateForCSV, formatRelativeTime } from '@/utils/csvExport'
 
 // SWR fetcher function
 const fetcher = (url: string) => fetch(url).then(res => res.json())
@@ -124,6 +126,61 @@ export default function PatientRosterPage() {
   const hasMore = patientsData?.data?.pagination?.hasMore || false
   const loading = !patientsData && !patientsError
   const error = partnerError || patientsError
+
+  // Resizable columns
+  const { columnWidths, handleMouseDown, resetWidths } = useResizableColumns('partner-patient-roster', {
+    patient: 200,
+    status: 120,
+    previous: 160,
+    next: 180,
+    provider: 150,
+    contact: 200,
+    actions: 180
+  })
+
+  // CSV Export function
+  const handleExportCSV = () => {
+    const csvData = filteredPatients.map(patient => ({
+      name: `${patient.first_name} ${patient.last_name}`,
+      email: patient.email || '',
+      phone: patient.phone || '',
+      roiStatus: patient.affiliation.consent_status,
+      previousAppointment: patient.previous_appointment
+        ? formatDateForCSV(patient.previous_appointment.start_time)
+        : '',
+      previousAppointmentRelative: patient.previous_appointment
+        ? formatRelativeTime(patient.previous_appointment.start_time, false)
+        : '',
+      previousAppointmentStatus: patient.previous_appointment?.status || '',
+      nextAppointment: patient.next_appointment
+        ? formatDateForCSV(patient.next_appointment.start_time)
+        : '',
+      nextAppointmentRelative: patient.next_appointment
+        ? formatRelativeTime(patient.next_appointment.start_time, true)
+        : '',
+      provider: patient.primary_provider
+        ? `Dr. ${patient.primary_provider.last_name}`
+        : '',
+      insurance: patient.primary_insurance_payer?.name || ''
+    }))
+
+    const columnMapping = {
+      name: 'Patient Name',
+      email: 'Email',
+      phone: 'Phone',
+      roiStatus: 'ROI Status',
+      previousAppointment: 'Previous Appointment',
+      previousAppointmentRelative: 'Days Since',
+      previousAppointmentStatus: 'Previous Appt Status',
+      nextAppointment: 'Next Appointment',
+      nextAppointmentRelative: 'Days Until',
+      provider: 'Provider',
+      insurance: 'Insurance'
+    }
+
+    const timestamp = new Date().toISOString().split('T')[0]
+    exportToCSV(csvData, `partner-patients-${timestamp}.csv`, columnMapping)
+  }
 
   // Transfer modal state
   const [transferModalOpen, setTransferModalOpen] = useState(false)
@@ -344,7 +401,24 @@ export default function PatientRosterPage() {
               View and manage patients from your organization
             </p>
           </div>
-          <BulkSyncButton onSyncComplete={refreshPatientData} />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportCSV}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-moonlit-brown"
+              title="Export current view to CSV"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </button>
+            <button
+              onClick={resetWidths}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-moonlit-brown"
+              title="Reset column widths"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+            <BulkSyncButton onSyncComplete={refreshPatientData} />
+          </div>
         </div>
 
         {/* Stats cards */}
@@ -474,34 +548,66 @@ export default function PatientRosterPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th style={{ width: columnWidths.patient }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Patient
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('patient', e)}
+                      />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th style={{ width: columnWidths.status }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('status', e)}
+                      />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last Seen / Next Appt
+                    <th style={{ width: columnWidths.previous }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Previous Appointment
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('previous', e)}
+                      />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th style={{ width: columnWidths.next }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Next Appointment
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('next', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.provider }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Provider
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('provider', e)}
+                      />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th style={{ width: columnWidths.contact }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contact
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('contact', e)}
+                      />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th style={{ width: columnWidths.actions }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('actions', e)}
+                      />
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredPatients.map((patient) => (
                     <tr key={patient.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      {/* 1. Patient */}
+                      <td style={{ width: columnWidths.patient }} className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div>
                             <Link
@@ -523,11 +629,83 @@ export default function PatientRosterPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{patient.email || '—'}</div>
-                        <div className="text-sm text-gray-500">{patient.phone || '—'}</div>
+                      {/* 2. Status (ROI Consent) */}
+                      <td style={{ width: columnWidths.status }} className="px-6 py-4 whitespace-nowrap">
+                        {patient.affiliation.consent_status === 'active' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                            ROI Active
+                          </span>
+                        ) : patient.affiliation.consent_status === 'expired' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                            ROI Expired
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                            No ROI
+                          </span>
+                        )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      {/* 3. Previous Appointment */}
+                      <td style={{ width: columnWidths.previous }} className="px-6 py-4">
+                        {patient.previous_appointment ? (
+                          <div className="flex flex-col space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-900">
+                                {new Date(patient.previous_appointment.start_time).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </span>
+                              {patient.previous_appointment.status === 'no_show' && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                                  No-show
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-500">
+                              {(() => {
+                                const diffMs = new Date().getTime() - new Date(patient.previous_appointment.start_time).getTime()
+                                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+                                return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`
+                              })()}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">—</span>
+                        )}
+                      </td>
+                      {/* 4. Next Appointment */}
+                      <td style={{ width: columnWidths.next }} className="px-6 py-4">
+                        {patient.next_appointment ? (
+                          <div className="space-y-1">
+                            <div className="flex flex-col space-y-0.5">
+                              <AppointmentLocationDisplay
+                                meetingUrl={patient.next_appointment.meeting_url}
+                                locationInfo={patient.next_appointment.location_info}
+                                startTime={patient.next_appointment.start_time}
+                                compact={true}
+                              />
+                              <span className="text-xs text-gray-500">
+                                {(() => {
+                                  const diffMs = new Date(patient.next_appointment.start_time).getTime() - new Date().getTime()
+                                  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+                                  return `in ${diffDays} ${diffDays === 1 ? 'day' : 'days'}`
+                                })()}
+                              </span>
+                            </div>
+                            {patient.next_appointment.providers && (
+                              <div className="text-xs text-gray-500">
+                                Dr. {patient.next_appointment.providers.last_name}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">No upcoming</span>
+                        )}
+                      </td>
+                      {/* 5. Provider */}
+                      <td style={{ width: columnWidths.provider }} className="px-6 py-4 whitespace-nowrap">
                         {patient.primary_provider ? (
                           <button
                             onClick={() => handleOpenAssignProviderModal(patient)}
@@ -545,86 +723,64 @@ export default function PatientRosterPage() {
                           </button>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {patient.previous_appointment ? (
-                          <div className="text-sm text-gray-500">
-                            {new Date(patient.previous_appointment.start_time).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-500">—</span>
-                        )}
+                      {/* 6. Contact */}
+                      <td style={{ width: columnWidths.contact }} className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{patient.email || '—'}</div>
+                        <div className="text-sm text-gray-500">{patient.phone || '—'}</div>
                       </td>
-                      <td className="px-6 py-4">
-                        {patient.next_appointment ? (
-                          <div className="space-y-1">
-                            <AppointmentLocationDisplay
-                              meetingUrl={patient.next_appointment.meeting_url}
-                              locationInfo={patient.next_appointment.location_info}
-                              startTime={patient.next_appointment.start_time}
-                              compact={true}
+                      {/* 7. Actions */}
+                      <td style={{ width: columnWidths.actions }} className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex flex-col space-y-2">
+                          {/* Sync Button */}
+                          <div>
+                            <SyncAppointmentsButton
+                              patientId={patient.id}
+                              patientName={`${patient.first_name} ${patient.last_name}`}
+                              lastSyncAt={patient.affiliation.last_practiceq_sync_at}
+                              onSyncComplete={refreshPatientData}
                             />
-                            {patient.next_appointment.providers && (
-                              <div className="text-xs text-gray-500">
-                                Dr. {patient.next_appointment.providers.last_name}
-                              </div>
+                          </div>
+                          {/* Other Actions */}
+                          <div className="flex items-center space-x-3">
+                            {/* ROI Upload Button - only show if no ROI on file */}
+                            {!patient.affiliation.consent_on_file && (
+                              <>
+                                <button
+                                  onClick={() => handleOpenROIModal(patient)}
+                                  className="text-moonlit-brown hover:text-moonlit-brown/80 flex items-center space-x-1"
+                                  title="Upload ROI"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span>Upload ROI</span>
+                                </button>
+                                {canTransferPatients && <span className="text-gray-300">|</span>}
+                              </>
+                            )}
+
+                            {canTransferPatients && (
+                              <>
+                                {patient.current_assignment && (
+                                  <>
+                                    <button
+                                      onClick={() => handleOpenTransferModal(patient)}
+                                      className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                                    >
+                                      <UserCheck className="w-4 h-4" />
+                                      <span>Transfer</span>
+                                    </button>
+                                    <span className="text-gray-300">|</span>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => handleOpenNotificationModal(patient)}
+                                  className="text-green-600 hover:text-green-800 flex items-center space-x-1"
+                                >
+                                  <Bell className="w-4 h-4" />
+                                  <span>Notify</span>
+                                </button>
+                              </>
                             )}
                           </div>
-                        ) : (
-                          <span className="text-sm text-gray-500">No upcoming</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <SyncAppointmentsButton
-                          patientId={patient.id}
-                          patientName={`${patient.first_name} ${patient.last_name}`}
-                          lastSyncAt={patient.affiliation.last_practiceq_sync_at}
-                          onSyncComplete={refreshPatientData}
-                        />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-3">
-                          {/* ROI Upload Button - only show if no ROI on file */}
-                          {!patient.affiliation.consent_on_file && (
-                            <>
-                              <button
-                                onClick={() => handleOpenROIModal(patient)}
-                                className="text-moonlit-brown hover:text-moonlit-brown/80 flex items-center space-x-1"
-                                title="Upload ROI"
-                              >
-                                <FileText className="w-4 h-4" />
-                                <span>Upload ROI</span>
-                              </button>
-                              {canTransferPatients && <span className="text-gray-300">|</span>}
-                            </>
-                          )}
-
-                          {canTransferPatients && (
-                            <>
-                              {patient.current_assignment && (
-                                <>
-                                  <button
-                                    onClick={() => handleOpenTransferModal(patient)}
-                                    className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
-                                  >
-                                    <UserCheck className="w-4 h-4" />
-                                    <span>Transfer</span>
-                                  </button>
-                                  <span className="text-gray-300">|</span>
-                                </>
-                              )}
-                              <button
-                                onClick={() => handleOpenNotificationModal(patient)}
-                                className="text-green-600 hover:text-green-800 flex items-center space-x-1"
-                              >
-                                <Bell className="w-4 h-4" />
-                                <span>Notify</span>
-                              </button>
-                            </>
-                          )}
                         </div>
                       </td>
                     </tr>

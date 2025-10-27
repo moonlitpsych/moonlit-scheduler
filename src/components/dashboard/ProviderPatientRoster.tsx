@@ -12,11 +12,13 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { Users, Calendar, Activity, Building2 } from 'lucide-react'
+import { Users, Calendar, Activity, Building2, Download, RotateCcw } from 'lucide-react'
 import { EngagementStatusChip } from '@/components/partner-dashboard/EngagementStatusChip'
 import { AppointmentStatusIndicator } from '@/components/partner-dashboard/AppointmentStatusIndicator'
 import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
 import SyncAppointmentsButton from '@/components/dashboard/SyncAppointmentsButton'
+import { useResizableColumns } from '@/hooks/useResizableColumns'
+import { exportToCSV, formatDateForCSV, formatRelativeTime } from '@/utils/csvExport'
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
@@ -28,6 +30,7 @@ interface Patient {
   phone?: string
   engagement_status: string
   last_seen_date?: string | null
+  last_appointment_status?: string | null
   next_appointment_date?: string | null
   has_future_appointment: boolean
   shared_with_org_ids: string[]
@@ -64,6 +67,60 @@ export default function ProviderPatientRoster({ providerId }: ProviderPatientRos
   const [changeStatusModalOpen, setChangeStatusModalOpen] = useState(false)
   const [changeStatusPatient, setChangeStatusPatient] = useState<Patient | null>(null)
   const [userEmail, setUserEmail] = useState('provider@trymoonlit.com')
+
+  // Resizable columns
+  const { columnWidths, handleMouseDown, resetWidths } = useResizableColumns('provider-patient-roster', {
+    patient: 200,
+    status: 120,
+    previous: 160,
+    next: 180,
+    payer: 150,
+    organization: 150,
+    caseManager: 150,
+    contact: 200,
+    practiceq: 140,
+    actions: 160
+  })
+
+  // CSV Export
+  const handleExportCSV = () => {
+    const csvData = filteredPatients.map((patient: Patient) => ({
+      name: `${patient.first_name} ${patient.last_name}`,
+      email: patient.email || '',
+      phone: patient.phone || '',
+      status: patient.engagement_status,
+      previousAppointment: patient.last_seen_date
+        ? formatDateForCSV(patient.last_seen_date)
+        : '',
+      previousAppointmentStatus: patient.last_appointment_status || '',
+      nextAppointment: patient.next_appointment_date
+        ? formatDateForCSV(patient.next_appointment_date)
+        : '',
+      payer: patient.payer_name || '',
+      organization: patient.affiliation_details?.map(a => a.org_name).join('; ') || '',
+      caseManager: patient.case_manager_name || '',
+      lastSync: patient.last_intakeq_sync
+        ? formatDateForCSV(patient.last_intakeq_sync)
+        : ''
+    }))
+
+    const columnMapping = {
+      name: 'Patient Name',
+      email: 'Email',
+      phone: 'Phone',
+      status: 'Status',
+      previousAppointment: 'Previous Appointment',
+      previousAppointmentStatus: 'Previous Appt Status',
+      nextAppointment: 'Next Appointment',
+      payer: 'Payer',
+      organization: 'Organization',
+      caseManager: 'Case Manager',
+      lastSync: 'Last PracticeQ Sync'
+    }
+
+    const timestamp = new Date().toISOString().split('T')[0]
+    exportToCSV(csvData, `provider-patients-${timestamp}.csv`, columnMapping)
+  }
 
   // Build API URL with filters
   const buildApiUrl = () => {
@@ -184,13 +241,32 @@ export default function ProviderPatientRoster({ providerId }: ProviderPatientRos
     <div className="min-h-screen bg-moonlit-cream">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
-            My Patients
-          </h1>
-          <p className="text-gray-600 font-['Newsreader'] font-light">
-            View and manage your assigned patients
-          </p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
+              My Patients
+            </h1>
+            <p className="text-gray-600 font-['Newsreader'] font-light">
+              View and manage your assigned patients
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportCSV}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              title="Export current view to CSV"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </button>
+            <button
+              onClick={resetWidths}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              title="Reset column widths"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -351,47 +427,146 @@ export default function ProviderPatientRoster({ providerId }: ProviderPatientRos
               <p className="text-gray-600">No patients found</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[calc(100vh-350px)] overflow-y-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Seen / Next Appt</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payer</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Organization</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Case Manager</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PracticeQ Sync</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    <th style={{ width: columnWidths.patient }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Patient
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('patient', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.status }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Status
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('status', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.previous }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Previous Appointment
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('previous', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.next }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Next Appointment
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('next', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.payer }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Payer
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('payer', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.organization }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Organization
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('organization', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.caseManager }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Case Manager
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('caseManager', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.contact }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Contact
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('contact', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.practiceq }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      PracticeQ Sync
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('practiceq', e)}
+                      />
+                    </th>
+                    <th style={{ width: columnWidths.actions }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Actions
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
+                        onMouseDown={(e) => handleMouseDown('actions', e)}
+                      />
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredPatients.map((patient: Patient) => (
                     <tr key={patient.patient_id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
+                      <td style={{ width: columnWidths.patient }} className="px-6 py-4">
                         <div className="text-sm font-medium text-moonlit-navy">
                           {patient.first_name} {patient.last_name}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td style={{ width: columnWidths.status }} className="px-6 py-4">
                         <EngagementStatusChip status={patient.engagement_status as any} />
                       </td>
-                      <td className="px-6 py-4">
-                        <AppointmentStatusIndicator
-                          hasFutureAppointment={patient.has_future_appointment}
-                          nextAppointmentDate={patient.next_appointment_date}
-                          lastSeenDate={patient.last_seen_date}
-                        />
+                      <td style={{ width: columnWidths.previous }} className="px-6 py-4">
+                        {patient.last_seen_date ? (
+                          <div className="flex flex-col space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-900">
+                                {new Date(patient.last_seen_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </span>
+                              {patient.last_appointment_status === 'no_show' && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                                  No-show
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-500">
+                              {(() => {
+                                const diffMs = new Date().getTime() - new Date(patient.last_seen_date).getTime()
+                                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+                                return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`
+                              })()}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">—</span>
+                        )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td style={{ width: columnWidths.next }} className="px-6 py-4">
+                        {patient.has_future_appointment && patient.next_appointment_date ? (
+                          <div className="flex flex-col space-y-0.5">
+                            <span className="text-sm text-gray-900">
+                              {new Date(patient.next_appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {(() => {
+                                const diffMs = new Date(patient.next_appointment_date).getTime() - new Date().getTime()
+                                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+                                if (diffDays === 0) return 'Today'
+                                if (diffDays === 1) return 'Tomorrow'
+                                return `in ${diffDays} days`
+                              })()}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td style={{ width: columnWidths.payer }} className="px-6 py-4 whitespace-nowrap">
                         {patient.payer_name ? (
                           <div className="text-sm text-gray-900">{patient.payer_name}</div>
                         ) : (
                           <span className="text-sm text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
+                      <td style={{ width: columnWidths.organization }} className="px-6 py-4">
                         {patient.affiliation_details && patient.affiliation_details.length > 0 ? (
                           <div className="flex flex-col gap-1">
                             {patient.affiliation_details.map((aff, idx) => (
@@ -404,18 +579,18 @@ export default function ProviderPatientRoster({ providerId }: ProviderPatientRos
                           <span className="text-sm text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td style={{ width: columnWidths.caseManager }} className="px-6 py-4 whitespace-nowrap">
                         {patient.case_manager_name ? (
                           <div className="text-sm text-gray-900">{patient.case_manager_name}</div>
                         ) : (
                           <span className="text-sm text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
+                      <td style={{ width: columnWidths.contact }} className="px-6 py-4">
                         <div className="text-sm text-gray-900">{patient.email || '—'}</div>
                         <div className="text-sm text-gray-500">{patient.phone || '—'}</div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td style={{ width: columnWidths.practiceq }} className="px-6 py-4">
                         <SyncAppointmentsButton
                           patientId={patient.patient_id}
                           patientName={`${patient.first_name} ${patient.last_name}`}
@@ -424,7 +599,7 @@ export default function ProviderPatientRoster({ providerId }: ProviderPatientRos
                           userType="provider"
                         />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td style={{ width: columnWidths.actions }} className="px-6 py-4 whitespace-nowrap">
                         <button
                           onClick={() => handleOpenChangeStatusModal(patient)}
                           className="text-moonlit-brown hover:text-moonlit-brown/80 text-sm font-medium"
