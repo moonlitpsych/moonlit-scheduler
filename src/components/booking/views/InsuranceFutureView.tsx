@@ -18,19 +18,28 @@ export default function InsuranceFutureView({
     onWaitForEffectiveDate,
     onBookAnyway
 }: InsuranceFutureViewProps) {
-    // Safe effective date handling with null checks
+    // Safe effective date handling with null checks and timezone fix
     const getEffectiveDate = () => {
         if (!selectedPayer) return 'soon'
-        
+
         const effectiveDate = selectedPayer.effective_date || selectedPayer.projected_effective_date
         if (!effectiveDate) return 'soon'
-        
+
         try {
-            return new Date(effectiveDate).toLocaleDateString('en-US', {
+            // FIX: Parse date in Mountain Time to avoid UTC midnight causing day shift
+            // '2025-11-01' should display as Nov 1, not Oct 31
+            const dateStr = effectiveDate.split('T')[0] // Get YYYY-MM-DD part only
+            const [year, month, day] = dateStr.split('-').map(Number)
+
+            // Create date at noon Mountain Time to avoid timezone shifts
+            const date = new Date(year, month - 1, day, 12, 0, 0) // Month is 0-indexed
+
+            return date.toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
-                day: 'numeric'
+                day: 'numeric',
+                timeZone: 'America/Denver' // Explicitly use Mountain Time
             })
         } catch (error) {
             console.error('Error formatting date:', error)
@@ -38,18 +47,24 @@ export default function InsuranceFutureView({
         }
     }
 
-    // Check if effective date is within 3 weeks
+    // Check if effective date is within 3 weeks (timezone-aware)
     const isWithinThreeWeeks = () => {
         if (!selectedPayer) return false
-        
+
         const effectiveDate = selectedPayer.effective_date || selectedPayer.projected_effective_date
         if (!effectiveDate) return false
-        
+
         try {
-            const effective = new Date(effectiveDate)
+            // FIX: Parse date in Mountain Time to avoid timezone shifts
+            const dateStr = effectiveDate.split('T')[0] // Get YYYY-MM-DD part only
+            const [year, month, day] = dateStr.split('-').map(Number)
+
+            // Create date at noon Mountain Time
+            const effective = new Date(year, month - 1, day, 12, 0, 0)
+
             const threeWeeksFromNow = new Date()
             threeWeeksFromNow.setDate(threeWeeksFromNow.getDate() + 21) // 3 weeks = 21 days
-            
+
             return effective <= threeWeeksFromNow
         } catch (error) {
             console.error('Error checking date proximity:', error)
