@@ -490,7 +490,16 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                     </div>
                                     {state.results.map((payer) => {
                                         const now = new Date()
-                                        const effectiveDate = payer.effective_date ? new Date(payer.effective_date) : null
+
+                                        // FIX: Parse effective_date in Mountain Time to avoid timezone shifts
+                                        // '2025-11-01' should display as Nov 1, not Oct 31
+                                        let effectiveDate: Date | null = null
+                                        if (payer.effective_date) {
+                                            const dateStr = payer.effective_date.split('T')[0]
+                                            const [year, month, day] = dateStr.split('-').map(Number)
+                                            effectiveDate = new Date(year, month - 1, day, 12, 0, 0) // Month is 0-indexed, noon MT
+                                        }
+
                                         const statusCode = payer.status_code
 
                                         // Determine display status
@@ -568,10 +577,10 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                             {!payer.isMedicalOnly && !payer.isBehavioralOption && (
                                                                 <p className="text-sm text-slate-500">
                                                                     {isActive && 'We accept this insurance'}
-                                                                    {isFuture && `Available starting ${effectiveDate?.toLocaleDateString()}`}
+                                                                    {isFuture && effectiveDate && `Available starting ${effectiveDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })}`}
                                                                     {isWaitlist && statusCode === 'approved' && !effectiveDate && 'We will be in network soon - timing uncertain'}
                                                                     {isWaitlist && statusCode === 'approved' && effectiveDate && effectiveDate > now &&
-                                                                        `Available starting ${effectiveDate.toLocaleDateString()}`}
+                                                                        `Available starting ${effectiveDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })}`}
                                                                     {isWaitlist && ['waiting_on_them', 'in_progress', 'not_started'].includes(statusCode || '') &&
                                                                         'Credentialing in progress - join waitlist'}
                                                                     {isNotAccepted && 'We cannot accept this insurance'}

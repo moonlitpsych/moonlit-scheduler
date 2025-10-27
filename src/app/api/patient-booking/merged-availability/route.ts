@@ -163,11 +163,21 @@ export async function POST(request: NextRequest) {
 
             console.log(`💵 Found ${bookableProviders.length} providers for cash payment`)
         } else {
-            // Use canonical view for insurance payers
-            const { data: bookableRelationships, error: networkError } = await supabaseAdmin
-                .from('v_bookable_provider_payer')
-                .select('*')
-                .eq('payer_id', payer_id)
+            // FIX: Use RPC function instead of view to avoid CURRENT_DATE filtering
+            // View excludes providers with future bookable_from_date
+            console.log('📡 Using RPC function fn_bookable_provider_payer_asof for insurance payers...')
+
+            // Query for 60 days from now to include all currently bookable providers
+            const futureDate = new Date()
+            futureDate.setDate(futureDate.getDate() + 60)
+            const serviceDateStr = futureDate.toISOString().split('T')[0]
+
+            console.log(`🔍 Querying bookability as of: ${serviceDateStr}`)
+
+            const { data: rpcData, error: networkError } = await supabaseAdmin
+                .rpc('fn_bookable_provider_payer_asof', {
+                    svc_date: serviceDateStr
+                })
 
             if (networkError) {
                 console.error('❌ Error fetching bookable provider relationships:', networkError)
@@ -177,8 +187,12 @@ export async function POST(request: NextRequest) {
                 )
             }
 
-            // Transform canonical view data to expected format
-            bookableProviders = bookableRelationships?.map(rel => ({
+            // Filter to this payer
+            const relationships = rpcData?.filter((row: any) => row.payer_id === payer_id) || []
+            console.log(`✅ RPC returned ${relationships.length} relationships for payer`)
+
+            // Transform RPC data to expected format
+            bookableProviders = relationships.map((rel: any) => ({
                 provider_id: rel.provider_id,
                 payer_id: rel.payer_id,
                 via: rel.network_status === 'in_network' ? 'direct' : 'supervised',
@@ -194,7 +208,7 @@ export async function POST(request: NextRequest) {
                 provider_type: rel.provider_type,
                 is_active: rel.is_active,
                 is_bookable: rel.is_bookable
-            })) || []
+            }))
         }
 
         if (provider_id) {
@@ -349,9 +363,31 @@ export async function POST(request: NextRequest) {
         allSlots.sort((a, b) => a.time.localeCompare(b.time))
         console.log(`✅ Generated ${allSlots.length} total time slots from bookable providers`)
 
+        // CRITICAL: Filter out slots before payer's effective date
+        // Each provider may have different bookable_from_date based on their contract
+        const slotsAfterEffectiveDate = allSlots.filter(slot => {
+            const provider = bookableProviders.find(bp => bp.provider_id === slot.providerId)
+            if (!provider || !provider.bookable_from_date) {
+                return true // No effective date restriction
+            }
+
+            // Compare slot date with provider's bookable_from_date (effective_date)
+            const slotDate = new Date(slot.date + 'T00:00:00')
+            const effectiveDate = new Date(provider.bookable_from_date + 'T00:00:00')
+
+            if (slotDate < effectiveDate) {
+                console.log(`🚫 Filtered slot ${slot.date} ${slot.time} for ${slot.providerName} (before effective date ${provider.bookable_from_date})`)
+                return false
+            }
+
+            return true
+        })
+
+        console.log(`📅 Effective date filter: ${allSlots.length} → ${slotsAfterEffectiveDate.length} slots (removed ${allSlots.length - slotsAfterEffectiveDate.length} before effective date)`)
+
         // DEV: Log serviceInstanceId presence for debugging
-        if (process.env.NODE_ENV === 'development' && allSlots.length > 0) {
-            const sampleSlot = allSlots[0]
+        if (process.env.NODE_ENV === 'development' && slotsAfterEffectiveDate.length > 0) {
+            const sampleSlot = slotsAfterEffectiveDate[0]
             console.log('🔧 DEV: Sample slot with serviceInstanceId:', {
                 time: sampleSlot.time,
                 provider: sampleSlot.providerName,
@@ -361,14 +397,14 @@ export async function POST(request: NextRequest) {
         }
 
         // Step 6: Filter out appointment conflicts (both local and IntakeQ)
-        let finalSlots = allSlots
-        let conflictStats = { removedByLocal: 0, removedByPQ: 0, kept: allSlots.length }
+        let finalSlots = slotsAfterEffectiveDate
+        let conflictStats = { removedByLocal: 0, removedByPQ: 0, kept: slotsAfterEffectiveDate.length }
 
         if (debugBypassConflicts) {
             console.log(`⚠️ DEBUG: Bypassing conflict filter (debug_bypass_conflicts=1)`)
             // Still compute stats but don't filter
             const { slots: filteredSlots, stats } = await filterIntakeConflictingAppointmentsWithStats(
-                allSlots,
+                slotsAfterEffectiveDate,
                 requestDate,
                 serviceInstanceId,
                 durationMinutes
@@ -376,7 +412,7 @@ export async function POST(request: NextRequest) {
             conflictStats = stats
         } else {
             const { slots: filteredSlots, stats } = await filterIntakeConflictingAppointmentsWithStats(
-                allSlots,
+                slotsAfterEffectiveDate,
                 requestDate,
                 serviceInstanceId,
                 durationMinutes
@@ -385,7 +421,7 @@ export async function POST(request: NextRequest) {
             conflictStats = stats
         }
 
-        console.log(`🔍 Final result: ${finalSlots.length} available slots (removed ${allSlots.length - finalSlots.length} conflicts)`)
+        console.log(`🔍 Final result: ${finalSlots.length} available slots (removed ${slotsAfterEffectiveDate.length - finalSlots.length} conflicts)`)
 
         const slotsByDate = finalSlots.reduce((acc, slot) => {
             if (!acc[slot.date]) {
