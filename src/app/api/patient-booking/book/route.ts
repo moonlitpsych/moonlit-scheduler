@@ -9,6 +9,7 @@ import { getIntakeqPractitionerId } from '@/lib/integrations/providerMap'
 import { getIntakeqServiceId } from '@/lib/integrations/serviceInstanceMap'
 import { ensureClient, syncClientInsurance, createAppointment } from '@/lib/intakeq/client'
 import { emailService } from '@/lib/services/emailService'
+import { googleMeetService } from '@/lib/services/googleMeetService'
 
 /**
  * Normalization helpers for identity matching
@@ -671,6 +672,71 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         if (updateError) {
             console.error('❌ Error updating appointment with PQ ID:', updateError)
             throw new Error(`Failed to update appointment: ${updateError.message}`)
+        }
+
+        // Step 8.5: Generate Google Meet link for telehealth appointments
+        // This runs in PARALLEL with IntakeQ's Google Meet integration (both create links)
+        // Our link is stored in database and visible in all dashboards
+        // IntakeQ's link is visible in IntakeQ UI only
+        if (locationType === 'telehealth') {
+            console.log('🔗 Generating Google Meet link for telehealth appointment...')
+            try {
+                // Get patient name for meeting title
+                const { data: patientInfo } = await supabaseAdmin
+                    .from('patients')
+                    .select('first_name, last_name')
+                    .eq('id', patientId)
+                    .single()
+
+                const patientName = patientInfo ? `${patientInfo.first_name} ${patientInfo.last_name}` : 'Patient'
+
+                // Get provider name for meeting title
+                const { data: providerInfo } = await supabaseAdmin
+                    .from('providers')
+                    .select('first_name, last_name')
+                    .eq('id', providerId)
+                    .single()
+
+                const providerName = providerInfo ? `Dr. ${providerInfo.last_name}` : 'Provider'
+
+                // Generate Google Meet link (organized by hello@trymoonlit.com, OPEN access)
+                const meetingUrl = await googleMeetService.generateMeetingLink(
+                    appointmentId,
+                    patientName,
+                    providerName,
+                    startDate
+                )
+
+                if (meetingUrl) {
+                    console.log(`✅ Google Meet link created: ${meetingUrl}`)
+
+                    // Update appointment with meeting URL
+                    const { error: meetingUrlError } = await supabaseAdmin
+                        .from('appointments')
+                        .update({
+                            meeting_url: meetingUrl,
+                            location_info: {
+                                locationType: 'telehealth',
+                                placeOfService: '02',
+                                meetingUrl: meetingUrl
+                            }
+                        })
+                        .eq('id', appointmentId)
+
+                    if (meetingUrlError) {
+                        console.error('⚠️ Failed to save meeting URL to database:', meetingUrlError)
+                    } else {
+                        console.log('✅ Meeting URL saved to database')
+                    }
+                } else {
+                    console.warn('⚠️ Google Meet link generation returned null (check service configuration)')
+                }
+
+            } catch (meetError: any) {
+                // Don't fail the booking if Google Meet link generation fails
+                console.error('⚠️ Google Meet link generation failed (non-blocking):', meetError.message)
+                console.error('   Appointment still created successfully, just without our meeting link')
+            }
         }
 
         // Get provider name for response

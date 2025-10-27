@@ -91,6 +91,11 @@ class GoogleMeetService {
   /**
    * Generate a persistent Google Meet link for an appointment
    *
+   * NOTE: All meetings are created as OPEN access (anyone with link can join).
+   * This allows providers to use their personal Google accounts and patients
+   * to join without any account. The meeting is organized by hello@trymoonlit.com
+   * but accessible to everyone with the link.
+   *
    * @param appointmentId - Unique identifier for the appointment
    * @param patientName - Name of the patient (for meeting title)
    * @param providerName - Name of the provider
@@ -126,7 +131,7 @@ class GoogleMeetService {
       const [space] = await this.client.createSpace({
         space: {
           config: {
-            accessType: 'TRUSTED', // Only users in the domain can join
+            accessType: 'OPEN', // Anyone with link can join (providers + patients)
             entryPointAccess: 'ALL', // Allow joining from any device
           }
         }
