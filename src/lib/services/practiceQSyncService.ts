@@ -221,7 +221,7 @@ class PracticeQSyncService {
     // 1. Check if appointment already exists
     const { data: existing } = await supabaseAdmin
       .from('appointments')
-      .select('id, status, start_time, provider_id')
+      .select('id, status, start_time, provider_id, meeting_url, location_info')
       .eq('pq_appointment_id', intakeqAppt.Id)
       .single()
 
@@ -245,13 +245,21 @@ class PracticeQSyncService {
     const meetingUrl = this.extractMeetingUrl(intakeqAppt)
     const locationInfo = this.extractLocationInfo(intakeqAppt)
 
+    // Debug log what we extracted
+    if (process.env.INTEGRATIONS_DEBUG_HTTP === 'true') {
+      console.log(`📍 [Appointment ${intakeqAppt.Id}] Meeting URL: ${meetingUrl || 'none'}`)
+      console.log(`📍 [Appointment ${intakeqAppt.Id}] Location Info:`, locationInfo)
+    }
+
     // 5. Create or update appointment
     if (existing) {
-      // Check if anything changed
+      // Check if anything changed (including meeting URL and location)
       const hasChanges =
         existing.status !== status ||
         new Date(existing.start_time).getTime() !== new Date(startTime).getTime() ||
-        existing.provider_id !== providerId
+        existing.provider_id !== providerId ||
+        existing.meeting_url !== meetingUrl ||
+        JSON.stringify(existing.location_info) !== JSON.stringify(locationInfo)
 
       if (!hasChanges) {
         return {
