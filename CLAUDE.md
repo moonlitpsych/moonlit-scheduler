@@ -511,6 +511,131 @@ Track appointment creation rate in appointments table.
 
 Use debug endpoints (/api/debug/...) for provider-payer relationships, availability, and bookability explanations.
 
+---
+
+## ⏸️ TEMPORARILY DISABLED: ROI Contacts / Extra Contact Persons (Oct 27, 2025)
+
+**STATUS:** ⏸️ DISABLED - Feature temporarily removed from booking flow
+
+### Why Disabled:
+
+The ROI (Release of Information) contacts feature was collecting user data but **not saving it to the database or IntakeQ**. To avoid misleading users, this step has been removed from the booking flow until the backend implementation is complete.
+
+### What Was Built (UI Only):
+
+**Frontend Components:**
+- ✅ `/src/components/booking/views/ROIView.tsx` - Fully functional UI for collecting multiple contacts
+- ✅ React state management in `BookingFlow.tsx` - Data flows correctly through components
+- ✅ User can add name, email, relationship, organization for each contact
+- ✅ ROI agreement checkbox and validation
+
+**Database Schema:**
+- ✅ `appointments.roi_contacts` JSONB column exists and ready to use (see `src/types/database.ts:32`)
+
+**What's Missing (Backend):**
+- ❌ BookingFlow.tsx doesn't send `roiContacts` in API payload
+- ❌ `/api/patient-booking/book/route.ts` doesn't accept or save ROI contacts
+- ❌ IntakeQ integration can only handle ONE contact via scalar fields, not an array
+
+### Current State of Booking Flow:
+
+```
+Insurance Info → ⏭️ ROI (SKIPPED) → Appointment Summary → Confirmation
+```
+
+**Modified file:** `src/components/booking/BookingFlow.tsx:193-196`
+- Changed `goToStep('roi')` to `goToStep('appointment-summary')`
+- Added comment explaining temporary disable
+- ROIView.tsx component still exists but is not rendered
+
+### How to Re-Enable:
+
+**See full implementation guide:** `ROI_CONTACTS_ANALYSIS_REPORT.md`
+
+**Quick Steps (2-6 hours):**
+
+1. **BookingFlow.tsx:196** - Change back to `goToStep('roi')`
+
+2. **BookingFlow.tsx:233-254** - Add to payload:
+   ```typescript
+   roiContacts: state.roiContacts
+   ```
+
+3. **book/route.ts:27-50** - Add to interface:
+   ```typescript
+   interface IntakeBookingRequest {
+     // ... existing fields ...
+     roiContacts?: ROIContact[]
+   }
+   ```
+
+4. **book/route.ts:212** - Extract from body:
+   ```typescript
+   const { roiContacts = [], ... } = body
+   ```
+
+5. **book/route.ts:495-516** - Add to appointment insert:
+   ```typescript
+   roi_contacts: roiContacts || []
+   ```
+
+6. **OPTIONAL (IntakeQ sync)** - Refactor `intakeqClientUpsert.ts` to handle contact arrays
+
+### Files to Review for Re-Implementation:
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `src/components/booking/views/ROIView.tsx` | UI for collecting contacts | ✅ Ready to use |
+| `src/components/booking/BookingFlow.tsx:193-196` | Re-enable step navigation | ⏸️ Commented out |
+| `src/app/api/patient-booking/book/route.ts` | Add backend persistence | ❌ Not implemented |
+| `src/lib/services/intakeqClientUpsert.ts:34-36` | IntakeQ sync (optional) | ⚠️ Only handles one contact |
+| `ROI_CONTACTS_ANALYSIS_REPORT.md` | Full technical analysis | ✅ Complete reference |
+
+### Database Schema (Ready to Use):
+
+```sql
+-- appointments table already has this column
+appointments.roi_contacts JSONB NULL
+
+-- Example data structure:
+[
+  {
+    "name": "John Smith",
+    "email": "john@example.com",
+    "relationship": "Case Manager",
+    "organization": "First Step House"
+  },
+  {
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "relationship": "Mother",
+    "organization": null
+  }
+]
+```
+
+### IntakeQ Integration Notes:
+
+The `intakeqClientUpsert.ts` service currently supports ONE contact via:
+- `contactName` (string)
+- `contactEmail` (string)
+- `contactPhone` (string)
+
+These get saved to IntakeQ's `AdditionalInformation` field and a pinned note.
+
+To sync multiple ROI contacts to IntakeQ, refactor to loop through array and concatenate all contacts into the `AdditionalInformation` field. See `ROI_CONTACTS_ANALYSIS_REPORT.md` Option 2 for details.
+
+### Testing Checklist (When Re-Enabled):
+
+- [ ] Book with 0 contacts (skip button works)
+- [ ] Book with 1 contact
+- [ ] Book with 3 contacts
+- [ ] Verify data saves to `appointments.roi_contacts` in Supabase
+- [ ] Verify IntakeQ sync (if implemented)
+- [ ] Confirmation email includes contacts (if implemented)
+
+---
+
 📝 For Future Developers
 
 Use canonical view v_bookable_provider_payer for provider-payer relationships.
@@ -521,4 +646,4 @@ Keep role separation clear: admin, provider, partner each have distinct routes a
 
 All production data must be real; confirm with Miriam before seeding.
 
-Last updated: Oct 5, 2025
+Last updated: Oct 27, 2025

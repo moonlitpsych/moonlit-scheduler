@@ -219,8 +219,12 @@ export default function InsuranceInfoView({
                 </div>
             </div>
 
-            {/* Third-Party Booking Detection */}
-            <div className="bg-stone-50 border border-stone-200 rounded-xl p-6 mb-8">
+            {/* TEMPORARILY DISABLED (Oct 27, 2025): Third-Party Booking Detection
+                This checkbox was part of the ROI contacts feature. Since ROI step is now
+                skipped (see BookingFlow.tsx:193-196), this checkbox is non-functional.
+                To re-enable: uncomment this section AND re-enable ROI step in BookingFlow.tsx
+            */}
+            {/* <div className="bg-stone-50 border border-stone-200 rounded-xl p-6 mb-8">
                 <div className="flex items-center space-x-3 mb-4">
                     <input
                         type="checkbox"
@@ -271,7 +275,7 @@ export default function InsuranceInfoView({
                         </div>
                     </div>
                 )}
-            </div>
+            </div> */}
 
             {/* Patient Information Form */}
             <form onSubmit={handleSubmit} className="space-y-6">

@@ -183,14 +183,17 @@ export default function BookingFlow({
             newScenario = thirdPartyType === 'case-manager' ? 'case-manager' : 'third-party'
         }
 
-        updateState({ 
+        updateState({
             insuranceInfo,
             bookingForSomeoneElse,
             thirdPartyType,
             bookingScenario: newScenario
         })
-        
-        goToStep('roi')
+
+        // TEMPORARILY DISABLED (Oct 27, 2025): ROI contacts feature
+        // UI collects data but backend doesn't persist it - see ROI_CONTACTS_ANALYSIS_REPORT.md
+        // To re-enable: change 'appointment-summary' back to 'roi' and implement backend save
+        goToStep('appointment-summary')  // Skip ROI step until backend is ready
     }
 
     const handleROISubmitted = async (roiContacts: ROIContact[]) => {
