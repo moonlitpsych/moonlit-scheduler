@@ -3,6 +3,9 @@
  *
  * Fetches appointments from IntakeQ API and syncs to our database
  * Handles deduplication, provider matching, status mapping
+ *
+ * Default service_instance_id: 12191f44-a09c-426f-8e22-0c5b8e57b3b7
+ * Used when syncing appointments from IntakeQ that don't have a service instance.
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -156,7 +159,7 @@ class PracticeQSyncService {
 
     for (const intakeqAppt of intakeqAppointments) {
       try {
-        const result = await this.syncSingleAppointment(intakeqAppt, patientId, warnings)
+        const result = await this.syncSingleAppointment(intakeqAppt, patientId, warnings, patient)
         appointments.push(result)
 
         if (result.syncAction === 'created') summary.new++
@@ -202,6 +205,13 @@ class PracticeQSyncService {
         .eq('id', patientId)
     }
 
+    // 7. Refresh materialized view to reflect updated appointments
+    // This ensures last_seen_date and next_appointment_date are current
+    if (summary.new > 0 || summary.updated > 0) {
+      console.log(`🔄 [PracticeQ Sync] Refreshing materialized view v_patient_activity_summary`)
+      await supabaseAdmin.rpc('refresh_patient_activity_summary')
+    }
+
     console.log(`✅ [PracticeQ Sync] Complete: ${summary.new} new, ${summary.updated} updated, ${summary.unchanged} unchanged, ${summary.errors} errors`)
 
     return {
@@ -222,12 +232,13 @@ class PracticeQSyncService {
   private async syncSingleAppointment(
     intakeqAppt: IntakeQAppointment,
     patientId: string,
-    warnings: string[]
+    warnings: string[],
+    patient: { first_name: string; last_name: string; email: string; phone?: string; date_of_birth?: string }
   ): Promise<SyncResult['appointments'][0]> {
     // 1. Check if appointment already exists
     const { data: existing } = await supabaseAdmin
       .from('appointments')
-      .select('id, status, start_time, provider_id, meeting_url, location_info')
+      .select('id, status, start_time, provider_id, meeting_url, location_info, service_instance_id')
       .eq('pq_appointment_id', intakeqAppt.Id)
       .single()
 
@@ -241,11 +252,30 @@ class PracticeQSyncService {
     }
 
     // 3. Map status
-    const status = this.mapStatus(intakeqAppt.Status)
+    let status = this.mapStatus(intakeqAppt.Status)
 
     // 4. Convert ISO date to timestamptz (IntakeQ returns UTC, convert to Mountain Time)
     const startTime = new Date(intakeqAppt.StartDateIso).toISOString()
     const endTime = new Date(intakeqAppt.EndDateIso).toISOString()
+
+    // 4.1. Mark past confirmed appointments as completed
+    // IntakeQ doesn't automatically change status after appointment happens
+    const now = new Date()
+    const appointmentEndTime = new Date(endTime)
+
+    // Debug log for troubleshooting
+    console.log(`📅 [Appointment ${intakeqAppt.Id}] Status check:`)
+    console.log(`   - Current time: ${now.toISOString()}`)
+    console.log(`   - Appointment end: ${appointmentEndTime.toISOString()}`)
+    console.log(`   - Status from IntakeQ: ${intakeqAppt.Status} → mapped to: ${status}`)
+    console.log(`   - Is past? ${appointmentEndTime < now}`)
+
+    if (appointmentEndTime < now && status === 'confirmed') {
+      status = 'completed'
+      console.log(`   ✅ Changed status to: completed`)
+    } else {
+      console.log(`   ⏭️  No status change needed`)
+    }
 
     // 4.5. Extract meeting URL and location info
     let meetingUrl = this.extractMeetingUrl(intakeqAppt)
@@ -306,18 +336,36 @@ class PracticeQSyncService {
         }
       }
 
-      // Update existing appointment
+      // Update existing appointment (add service_instance_id and patient_info if missing)
+      const updateData: any = {
+        status,
+        start_time: startTime,
+        end_time: endTime,
+        provider_id: providerId,
+        meeting_url: meetingUrl,
+        location_info: locationInfo,
+        patient_info: {
+          first_name: patient.first_name,
+          last_name: patient.last_name,
+          email: patient.email,
+          phone: patient.phone || null,
+          date_of_birth: patient.date_of_birth || null
+        },
+        insurance_info: {
+          source: 'intakeq_sync',
+          synced_at: new Date().toISOString()
+        },
+        updated_at: new Date().toISOString()
+      }
+
+      // Add service_instance_id if it's missing in the existing appointment
+      if (!existing.service_instance_id) {
+        updateData.service_instance_id = '12191f44-a09c-426f-8e22-0c5b8e57b3b7' // Default service instance
+      }
+
       const { data: updated, error } = await supabaseAdmin
         .from('appointments')
-        .update({
-          status,
-          start_time: startTime,
-          end_time: endTime,
-          provider_id: providerId,
-          meeting_url: meetingUrl,
-          location_info: locationInfo,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', existing.id)
         .select('id')
         .single()
@@ -342,10 +390,22 @@ class PracticeQSyncService {
           start_time: startTime,
           end_time: endTime,
           status,
-          appointment_type: 'initial', // Default, can be updated later
+          appointment_type: meetingUrl || locationInfo?.type === 'telehealth' ? 'telehealth' : null, // Only 'telehealth' or NULL allowed
           pq_appointment_id: intakeqAppt.Id,
           meeting_url: meetingUrl,
           location_info: locationInfo,
+          service_instance_id: '12191f44-a09c-426f-8e22-0c5b8e57b3b7', // Default service instance for IntakeQ syncs
+          patient_info: {
+            first_name: patient.first_name,
+            last_name: patient.last_name,
+            email: patient.email,
+            phone: patient.phone || null,
+            date_of_birth: patient.date_of_birth || null
+          },
+          insurance_info: {
+            source: 'intakeq_sync',
+            synced_at: new Date().toISOString()
+          },
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
