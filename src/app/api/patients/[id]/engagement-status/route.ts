@@ -201,12 +201,16 @@ export async function PUT(
       }
     }
 
-    // Refresh materialized view (async - don't wait for it)
-    supabase.rpc('refresh_patient_activity_summary').then(() => {
-      console.log('✅ Refreshed patient activity summary after status change')
-    }).catch((err) => {
-      console.warn('⚠️ Failed to refresh patient activity summary:', err.message)
-    })
+    // Refresh materialized view (WAIT for it to complete to ensure UI shows updated data)
+    console.log('🔄 Refreshing patient_activity_summary materialized view...')
+    const { error: refreshError } = await supabase.rpc('refresh_patient_activity_summary')
+
+    if (refreshError) {
+      console.error('⚠️ Failed to refresh patient activity summary:', refreshError.message)
+      // Don't fail the entire request, but warn about it
+    } else {
+      console.log('✅ Successfully refreshed patient activity summary')
+    }
 
     return NextResponse.json({
       message: 'Engagement status updated successfully',
