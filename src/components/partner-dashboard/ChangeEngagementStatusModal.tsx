@@ -73,19 +73,31 @@ export function ChangeEngagementStatusModal({
           effective_date: new Date(effectiveDate).toISOString(),
           change_reason: changeReason.trim() || null,
           changed_by_email: userEmail,
-          changed_by_type: 'partner_user'
+          changed_by_type: userType === 'admin' ? 'admin' : 'partner_user'
         })
       })
 
       const data = await response.json()
 
       if (!response.ok) {
+        console.error('Status update failed:', data)
         throw new Error(data.error || 'Failed to update engagement status')
       }
 
-      // Show notification if admin will be notified
-      if (data.needs_admin_notification) {
+      console.log('✅ Status update successful:', {
+        patient_id: patient.id,
+        previous_status: data.previous_status,
+        new_status: data.new_status,
+        changed: data.changed,
+        needs_admin_notification: data.needs_admin_notification
+      })
+
+      // Show notification if admin will be notified (only for partner users)
+      if (data.needs_admin_notification && userType === 'partner') {
         alert('Status updated. Moonlit admin has been notified of this change.')
+      } else if (userType === 'admin') {
+        // For admin users, just show a simple success message
+        alert(`Status updated successfully to "${STATUS_OPTIONS.find(o => o.value === selectedStatus)?.label}".`)
       }
 
       onSuccess()

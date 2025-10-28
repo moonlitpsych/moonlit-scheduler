@@ -151,7 +151,9 @@ export default function AdminPatientRoster() {
   }
 
   const handleChangeStatusSuccess = async () => {
+    console.log('🔄 Refreshing patient list after status change...')
     await mutate()
+    console.log('✅ Patient list refreshed')
   }
 
   // Get unique organizations for filter
