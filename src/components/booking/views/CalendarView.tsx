@@ -1097,7 +1097,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                                 </div>
                             ) : providers.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {providers.filter(p => p.is_bookable !== false).slice(0, 4).map((provider) => (
+                                    {providers.filter(p => p.is_bookable !== false).map((provider) => (
                                         <ProviderCard
                                             key={provider.id}
                                             provider={provider as Provider}

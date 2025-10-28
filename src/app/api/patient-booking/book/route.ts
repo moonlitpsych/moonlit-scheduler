@@ -10,6 +10,7 @@ import { getIntakeqServiceId } from '@/lib/integrations/serviceInstanceMap'
 import { ensureClient, syncClientInsurance, createAppointment } from '@/lib/intakeq/client'
 import { emailService } from '@/lib/services/emailService'
 import { googleMeetService } from '@/lib/services/googleMeetService'
+import { sendIntakeQuestionnaire } from '@/lib/services/intakeqQuestionnaire'
 
 /**
  * Normalization helpers for identity matching
@@ -674,7 +675,42 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             throw new Error(`Failed to update appointment: ${updateError.message}`)
         }
 
-        // Step 8.5: Generate Google Meet link for telehealth appointments
+        // Step 8.5: Send intake questionnaire to patient (NEW - Production Fix)
+        console.log('📋 Sending intake questionnaire to patient...')
+        try {
+            // Get patient info for questionnaire
+            const { data: patientInfo } = await supabaseAdmin
+                .from('patients')
+                .select('first_name, last_name, email')
+                .eq('id', patientId)
+                .single()
+
+            if (patientInfo && intakeqClientId) {
+                const questionnaireResult = await sendIntakeQuestionnaire({
+                    intakeqClientId,
+                    clientEmail: patientInfo.email,
+                    clientName: `${patientInfo.first_name} ${patientInfo.last_name}`,
+                    payerId,
+                    appointmentId,
+                    practitionerId: practitionerExternalId
+                })
+
+                if (questionnaireResult.success) {
+                    console.log(`✅ ${questionnaireResult.questionnaireName} questionnaire sent successfully`)
+                } else {
+                    console.error(`⚠️ Questionnaire send failed: ${questionnaireResult.error}`)
+                    // Non-blocking: continue with booking even if questionnaire fails
+                    // The sendIntakeQuestionnaire function already sends failure notification email
+                }
+            } else {
+                console.warn('⚠️ Cannot send questionnaire: missing patient info or IntakeQ client ID')
+            }
+        } catch (questionnaireError: any) {
+            // Non-blocking error: log but don't fail the booking
+            console.error('⚠️ Questionnaire sending error (non-blocking):', questionnaireError.message)
+        }
+
+        // Step 8.6: Generate Google Meet link for telehealth appointments
         // This runs in PARALLEL with IntakeQ's Google Meet integration (both create links)
         // Our link is stored in database and visible in all dashboards
         // IntakeQ's link is visible in IntakeQ UI only

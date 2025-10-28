@@ -219,8 +219,9 @@ export default function BookingFlow({
             const slot = state.selectedTimeSlot
             const patient = state.insuranceInfo
 
-            // Build ISO timestamp from slot date + time
-            const startDateTime = `${slot?.date}T${slot?.time}:00`
+            // Use the slot's pre-formatted ISO timestamp (includes timezone)
+            // FIXED: Previously reconstructed from date+time without timezone, causing wrong appointment times
+            const startDateTime = slot?.start_time || `${slot?.date}T${slot?.time}:00`
 
             // Generate stable idempotency key from booking intent
             const idempotencyData = {
