@@ -46,6 +46,24 @@ interface PayerSelectionStats {
   already_credentialing: boolean    // Provider has application in progress
   already_contracted: boolean       // Provider has active contract
   is_recommended: boolean           // Highlighted for attendings if requires_attending=true
+
+  // Contract details (provider-specific)
+  existing_contract: {
+    id: string
+    status: string
+    effective_date: string | null
+    expiration_date: string | null
+    notes: string | null
+  } | null
+
+  // Bookability status (provider-specific)
+  bookability_status: {
+    is_currently_bookable: boolean
+    network_status: 'in_network' | 'supervised' | null
+    bookable_from_date: string | null
+    effective_date: string | null
+    expiration_date: string | null
+  }
 }
 
 /**
@@ -128,45 +146,37 @@ export async function GET(request: NextRequest) {
     })
 
     // Step 4: Get current patient census (patients with this as active payer)
-    // Using subquery to get latest appointment per patient
-    const { data: censusCounts, error: censusError } = await supabaseAdmin
-      .rpc('get_current_payer_census')
-      .catch(async () => {
-        // If RPC doesn't exist, fall back to direct query
-        console.log('📊 Using fallback census query...')
+    // Using fallback query since RPC might not exist
+    console.log('📊 Using fallback census query...')
 
-        const { data, error } = await supabaseAdmin.from('appointments').select(`
-          patient_id,
-          payer_id,
-          start_datetime
-        `).not('payer_id', 'is', null)
-        .order('start_datetime', { ascending: false })
+    const { data: appointmentsData, error: appointmentsError } = await supabaseAdmin
+      .from('appointments')
+      .select('patient_id, payer_id, start_datetime')
+      .not('payer_id', 'is', null)
+      .order('start_datetime', { ascending: false })
 
-        if (error) throw error
-
-        // Get latest appointment per patient in memory
-        const latestByPatient = new Map<string, string>()
-        data?.forEach(apt => {
-          if (!latestByPatient.has(apt.patient_id) && apt.payer_id) {
-            latestByPatient.set(apt.patient_id, apt.payer_id)
-          }
-        })
-
-        // Count patients per payer
-        const censusByPayer = new Map<string, number>()
-        latestByPatient.forEach((payerId) => {
-          censusByPayer.set(payerId, (censusByPayer.get(payerId) || 0) + 1)
-        })
-
-        return Array.from(censusByPayer.entries()).map(([payer_id, census]) => ({
-          payer_id,
-          census
-        }))
-      })
-
-    if (censusError) {
-      console.error('❌ Error fetching patient census:', censusError)
+    if (appointmentsError) {
+      console.error('❌ Error fetching appointments for census:', appointmentsError)
     }
+
+    // Get latest appointment per patient in memory
+    const latestByPatient = new Map<string, string>()
+    appointmentsData?.forEach(apt => {
+      if (!latestByPatient.has(apt.patient_id) && apt.payer_id) {
+        latestByPatient.set(apt.patient_id, apt.payer_id)
+      }
+    })
+
+    // Count patients per payer
+    const censusByPayer = new Map<string, number>()
+    latestByPatient.forEach((payerId) => {
+      censusByPayer.set(payerId, (censusByPayer.get(payerId) || 0) + 1)
+    })
+
+    const censusCounts = Array.from(censusByPayer.entries()).map(([payer_id, census]) => ({
+      payer_id,
+      census
+    }))
 
     const censusCountMap = new Map<string, number>()
     if (Array.isArray(censusCounts)) {
@@ -196,6 +206,8 @@ export async function GET(request: NextRequest) {
     let providerApplications = new Set<string>()
     let providerContracts = new Set<string>()
     let providerIsAttending = false
+    const providerContractDetails = new Map<string, any>()
+    const providerBookabilityMap = new Map<string, any>()
 
     if (providerId) {
       // Check if provider is attending (role-based)
@@ -217,20 +229,48 @@ export async function GET(request: NextRequest) {
 
       applications?.forEach(app => providerApplications.add(app.payer_id))
 
-      // Get provider contracts
+      // Get provider contracts with full details
       const { data: contracts } = await supabaseAdmin
         .from('provider_payer_networks')
-        .select('payer_id')
+        .select('id, payer_id, status, effective_date, expiration_date, notes')
         .eq('provider_id', providerId)
-        .eq('status', 'in_network')
 
-      contracts?.forEach(contract => providerContracts.add(contract.payer_id))
+      contracts?.forEach(contract => {
+        if (contract.status === 'in_network') {
+          providerContracts.add(contract.payer_id)
+        }
+        providerContractDetails.set(contract.payer_id, {
+          id: contract.id,
+          status: contract.status,
+          effective_date: contract.effective_date,
+          expiration_date: contract.expiration_date,
+          notes: contract.notes
+        })
+      })
+
+      // Get bookability status from canonical view
+      const { data: bookabilityRecords } = await supabaseAdmin
+        .from('v_bookable_provider_payer')
+        .select('payer_id, network_status, bookable_from_date, effective_date, expiration_date')
+        .eq('provider_id', providerId)
+
+      bookabilityRecords?.forEach(record => {
+        providerBookabilityMap.set(record.payer_id, {
+          is_bookable: true,
+          network_status: record.network_status,
+          bookable_from_date: record.bookable_from_date,
+          effective_date: record.effective_date,
+          expiration_date: record.expiration_date
+        })
+      })
     }
 
     // Step 7: Combine all data
     const stats: PayerSelectionStats[] = payers?.map(payer => {
       const workflow = workflowMap.get(payer.id)
       const bookableSet = bookableCountMap.get(payer.id)
+      const contract = providerContractDetails.get(payer.id)
+      const bookability = providerBookabilityMap.get(payer.id)
 
       return {
         id: payer.id,
@@ -252,7 +292,31 @@ export async function GET(request: NextRequest) {
 
         already_credentialing: providerApplications.has(payer.id),
         already_contracted: providerContracts.has(payer.id),
-        is_recommended: providerIsAttending && payer.requires_attending
+        is_recommended: providerIsAttending && payer.requires_attending,
+
+        // Contract details
+        existing_contract: contract ? {
+          id: contract.id,
+          status: contract.status,
+          effective_date: contract.effective_date,
+          expiration_date: contract.expiration_date,
+          notes: contract.notes
+        } : null,
+
+        // Bookability status
+        bookability_status: bookability ? {
+          is_currently_bookable: true,
+          network_status: bookability.network_status,
+          bookable_from_date: bookability.bookable_from_date,
+          effective_date: bookability.effective_date,
+          expiration_date: bookability.expiration_date
+        } : {
+          is_currently_bookable: false,
+          network_status: null,
+          bookable_from_date: null,
+          effective_date: null,
+          expiration_date: null
+        }
       }
     }) || []
 
@@ -260,7 +324,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: stats
+      data: stats,
+      provider: providerId ? {
+        id: providerId,
+        is_attending: providerIsAttending
+      } : null
     })
 
   } catch (error) {

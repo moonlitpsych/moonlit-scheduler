@@ -34,6 +34,24 @@ interface PayerStat {
   already_credentialing: boolean
   already_contracted: boolean
   is_recommended: boolean
+
+  // Contract details (provider-specific)
+  existing_contract?: {
+    id: string
+    status: string
+    effective_date: string | null
+    expiration_date: string | null
+    notes: string | null
+  } | null
+
+  // Bookability status (provider-specific)
+  bookability_status?: {
+    is_currently_bookable: boolean
+    network_status: 'in_network' | 'supervised' | null
+    bookable_from_date: string | null
+    effective_date: string | null
+    expiration_date: string | null
+  }
 }
 
 export default function PayerSelectionPanel({
@@ -49,6 +67,7 @@ export default function PayerSelectionPanel({
   const [sortBy, setSortBy] = useState<'name' | 'contracts' | 'census' | 'bookable'>('name')
   const [sortDesc, setSortDesc] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [providerIsAttending, setProviderIsAttending] = useState<boolean>(true) // Default to attending
 
   useEffect(() => {
     loadPayerStats()
@@ -70,6 +89,11 @@ export default function PayerSelectionPanel({
 
       const data = await res.json()
       setPayers(data.data || [])
+
+      // Extract provider info if available
+      if (data.provider) {
+        setProviderIsAttending(data.provider.is_attending)
+      }
     } catch (err: any) {
       console.error('Error loading payer stats:', err)
       setError(err.message || 'Failed to load payer statistics')
@@ -78,15 +102,35 @@ export default function PayerSelectionPanel({
     }
   }
 
+  // Check if payer is applicable for this provider
+  const isPayerApplicable = (payer: PayerStat) => {
+    // If provider is a resident and payer requires attending, not applicable
+    if (!providerIsAttending && payer.requires_attending) {
+      return false
+    }
+    return true
+  }
+
+  // Check if payer is selectable (applicable + not already contracted)
+  const isPayerSelectable = (payer: PayerStat) => {
+    return isPayerApplicable(payer) && !payer.already_contracted
+  }
+
   const handleSelectAll = () => {
-    if (selectedPayerIds.size === filteredPayers.length) {
+    const selectablePayers = filteredPayers.filter(isPayerSelectable)
+
+    if (selectedPayerIds.size === selectablePayers.length) {
       setSelectedPayerIds(new Set())
     } else {
-      const allIds = filteredPayers
-        .filter(p => !p.already_contracted)
-        .map(p => p.id)
+      const allIds = selectablePayers.map(p => p.id)
       setSelectedPayerIds(new Set(allIds))
     }
+  }
+
+  const handleSelectRecommended = () => {
+    const recommendedPayers = filteredPayers.filter(p => p.is_recommended && isPayerSelectable(p))
+    const recommendedIds = recommendedPayers.map(p => p.id)
+    setSelectedPayerIds(new Set(recommendedIds))
   }
 
   const handleTogglePayer = (payerId: string) => {
@@ -195,6 +239,60 @@ export default function PayerSelectionPanel({
     )
   }
 
+  const getContractStatusBadge = (payer: PayerStat) => {
+    const contract = payer.existing_contract
+    const bookability = payer.bookability_status
+
+    // Show bookability status first if available
+    if (bookability?.is_currently_bookable) {
+      const networkBadge = bookability.network_status === 'supervised'
+        ? { label: 'Active (Supervised)', color: 'bg-blue-100 text-blue-700 border-blue-300', icon: '👥' }
+        : { label: 'Active (Direct)', color: 'bg-green-100 text-green-700 border-green-300', icon: '✓' }
+
+      return (
+        <span className={`px-2 py-0.5 text-xs font-medium rounded border ${networkBadge.color} flex items-center gap-1`}>
+          <span>{networkBadge.icon}</span>
+          {networkBadge.label}
+        </span>
+      )
+    }
+
+    // Check contract status if no bookability
+    if (contract) {
+      if (contract.status === 'in_network') {
+        return (
+          <span className="px-2 py-0.5 text-xs font-medium rounded border bg-green-100 text-green-700 border-green-300">
+            ✓ Contract Active
+          </span>
+        )
+      } else if (contract.status === 'pending') {
+        return (
+          <span className="px-2 py-0.5 text-xs font-medium rounded border bg-yellow-100 text-yellow-700 border-yellow-300">
+            ⏳ Pending
+          </span>
+        )
+      } else {
+        return (
+          <span className="px-2 py-0.5 text-xs font-medium rounded border bg-gray-100 text-gray-700 border-gray-300">
+            {contract.status}
+          </span>
+        )
+      }
+    }
+
+    return (
+      <span className="px-2 py-0.5 text-xs font-medium rounded border bg-gray-100 text-gray-500 border-gray-300">
+        No Contract
+      </span>
+    )
+  }
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return null
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -281,6 +379,16 @@ export default function PayerSelectionPanel({
         >
           {selectedPayerIds.size === filteredPayers.length ? 'Deselect All' : 'Select All'}
         </button>
+
+        <button
+          onClick={handleSelectRecommended}
+          disabled={!providerIsAttending}
+          className="px-3 py-2 border border-yellow-300 bg-yellow-50 text-yellow-700 rounded-lg text-sm hover:bg-yellow-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+          title={providerIsAttending ? "Select payers that require attending physicians" : "Only available for attending physicians"}
+        >
+          <span>⭐</span>
+          Select Recommended
+        </button>
       </div>
 
       {/* Payer table */}
@@ -292,7 +400,10 @@ export default function PayerSelectionPanel({
                 <th className="px-4 py-3 text-left w-12">
                   <input
                     type="checkbox"
-                    checked={selectedPayerIds.size > 0 && selectedPayerIds.size === filteredPayers.filter(p => !p.already_contracted).length}
+                    checked={
+                      selectedPayerIds.size > 0 &&
+                      selectedPayerIds.size === filteredPayers.filter(isPayerSelectable).length
+                    }
                     onChange={handleSelectAll}
                     className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                   />
@@ -319,18 +430,24 @@ export default function PayerSelectionPanel({
                     Census
                   </div>
                 </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-900">Contract Status</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-900">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {sortedPayers.map((payer) => {
                 const isSelected = selectedPayerIds.has(payer.id)
-                const isDisabled = payer.already_contracted
+                const isApplicable = isPayerApplicable(payer)
+                const isDisabled = !isPayerSelectable(payer)
+                const hasActiveContract = payer.existing_contract || payer.bookability_status?.is_currently_bookable
 
                 return (
                   <tr
                     key={payer.id}
-                    className={`hover:bg-gray-50 ${isDisabled ? 'opacity-50' : ''} ${payer.is_recommended ? 'bg-yellow-50' : ''}`}
+                    className={`
+                      ${isDisabled ? 'opacity-50 bg-gray-50' : 'hover:bg-gray-50'}
+                      ${payer.is_recommended ? 'bg-yellow-50' : ''}
+                    `}
                   >
                     <td className="px-4 py-3">
                       <input
@@ -339,13 +456,20 @@ export default function PayerSelectionPanel({
                         disabled={isDisabled}
                         onChange={() => handleTogglePayer(payer.id)}
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                        title={!isApplicable ? 'Not applicable for this provider role' : ''}
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-col">
+                      <div className="flex flex-col gap-1">
                         <span className="font-medium text-gray-900">{payer.name}</span>
                         {payer.is_recommended && (
                           <span className="text-xs text-yellow-700 font-medium">⭐ Recommended for Attendings</span>
+                        )}
+                        {!isApplicable && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 border border-gray-300 rounded inline-flex items-center gap-1 w-fit">
+                            <AlertTriangle className="w-3 h-3" />
+                            Not Applicable - Requires Attending
+                          </span>
                         )}
                       </div>
                     </td>
@@ -390,6 +514,21 @@ export default function PayerSelectionPanel({
                     </td>
                     <td className="px-4 py-3 text-center font-medium text-gray-900">
                       {payer.current_census}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        {getContractStatusBadge(payer)}
+                        {payer.existing_contract?.effective_date && (
+                          <div className="text-xs text-gray-500">
+                            Effective: {formatDate(payer.existing_contract.effective_date)}
+                          </div>
+                        )}
+                        {payer.existing_contract?.expiration_date && (
+                          <div className="text-xs text-gray-500">
+                            Expires: {formatDate(payer.existing_contract.expiration_date)}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {payer.already_contracted ? (

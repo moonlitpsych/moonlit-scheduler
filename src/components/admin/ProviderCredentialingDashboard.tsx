@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, Loader2, AlertTriangle, CheckCircle2, Clock, TrendingUp } from 'lucide-react'
+import Link from 'next/link'
+import { User, Loader2, AlertTriangle, CheckCircle2, Clock, TrendingUp, ExternalLink } from 'lucide-react'
 import PayerSelectionPanel from './PayerSelectionPanel'
 import CredentialingTaskList from './CredentialingTaskList'
 
@@ -169,12 +170,21 @@ export default function ProviderCredentialingDashboard({
             </div>
           </div>
 
-          <button
-            onClick={loadDashboard}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin/bookability"
+              className="px-4 py-2 border border-indigo-300 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 text-sm font-medium flex items-center gap-2 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              View All Relationships
+            </Link>
+            <button
+              onClick={loadDashboard}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 

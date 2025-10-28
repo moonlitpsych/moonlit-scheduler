@@ -17,6 +17,17 @@ export interface BookabilityRow {
   expiration_date: string | null
   bookable_from_date: string | null
   requires_attending?: boolean
+
+  // Credentialing status
+  credentialing?: {
+    application_status: string | null
+    application_submitted_date: string | null
+    approval_date: string | null
+    total_tasks: number
+    completed_tasks: number
+    in_progress_tasks: number
+    completion_percentage: number
+  } | null
 }
 
 export async function GET() {
@@ -114,14 +125,86 @@ export async function GET() {
       console.error('❌ Error fetching payer data:', payerError)
     }
 
+    // Fetch credentialing application status
+    const { data: applications, error: applicationsError } = await supabaseAdmin
+      .from('provider_payer_applications')
+      .select('provider_id, payer_id, application_status, submitted_date, approval_date')
+
+    if (applicationsError) {
+      console.error('❌ Error fetching credentialing applications:', applicationsError)
+    }
+
+    // Fetch credentialing task counts per provider-payer
+    const { data: tasks, error: tasksError } = await supabaseAdmin
+      .from('provider_credentialing_tasks')
+      .select('provider_id, payer_id, task_status')
+
+    if (tasksError) {
+      console.error('❌ Error fetching credentialing tasks:', tasksError)
+    }
+
     // Create lookup maps
     const providerMap = new Map((providers || []).map(p => [p.id, p]))
     const payerMap = new Map((payers || []).map(p => [p.id, p]))
+
+    // Create credentialing lookup map (key: "providerId-payerId")
+    const credentialingMap = new Map<string, {
+      application_status: string | null
+      application_submitted_date: string | null
+      approval_date: string | null
+      total_tasks: number
+      completed_tasks: number
+      in_progress_tasks: number
+      completion_percentage: number
+    }>()
+
+    // Build application status map
+    const applicationMap = new Map<string, any>()
+    applications?.forEach(app => {
+      const key = `${app.provider_id}-${app.payer_id}`
+      applicationMap.set(key, app)
+    })
+
+    // Build task counts map
+    const taskCountsMap = new Map<string, { total: number, completed: number, in_progress: number }>()
+    tasks?.forEach(task => {
+      const key = `${task.provider_id}-${task.payer_id}`
+      const counts = taskCountsMap.get(key) || { total: 0, completed: 0, in_progress: 0 }
+      counts.total++
+      if (task.task_status === 'completed') counts.completed++
+      if (task.task_status === 'in_progress') counts.in_progress++
+      taskCountsMap.set(key, counts)
+    })
+
+    // Combine into credentialingMap
+    const allCredentialingKeys = new Set([
+      ...Array.from(applicationMap.keys()),
+      ...Array.from(taskCountsMap.keys())
+    ])
+
+    allCredentialingKeys.forEach(key => {
+      const app = applicationMap.get(key)
+      const taskCounts = taskCountsMap.get(key) || { total: 0, completed: 0, in_progress: 0 }
+
+      credentialingMap.set(key, {
+        application_status: app?.application_status || null,
+        application_submitted_date: app?.submitted_date || null,
+        approval_date: app?.approval_date || null,
+        total_tasks: taskCounts.total,
+        completed_tasks: taskCounts.completed,
+        in_progress_tasks: taskCounts.in_progress,
+        completion_percentage: taskCounts.total > 0
+          ? Math.round((taskCounts.completed / taskCounts.total) * 100)
+          : 0
+      })
+    })
 
     // Transform data to our interface
     const transformedData: BookabilityRow[] = viewData.map(row => {
       const provider = providerMap.get(row.provider_id)
       const payer = payerMap.get(row.payer_id)
+      const credentialingKey = `${row.provider_id}-${row.payer_id}`
+      const credentialing = credentialingMap.get(credentialingKey) || null
 
       return {
         provider_id: row.provider_id,
@@ -137,7 +220,8 @@ export async function GET() {
         effective_date: row.effective_date,
         expiration_date: row.expiration_date,
         bookable_from_date: row.bookable_from_date,
-        requires_attending: payer?.requires_attending || false
+        requires_attending: payer?.requires_attending || false,
+        credentialing
       }
     })
 

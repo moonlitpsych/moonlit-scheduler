@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, User, Building2, Calendar, ExternalLink, Shield, Network } from 'lucide-react'
+import Link from 'next/link'
+import { X, User, Building2, Calendar, ExternalLink, Shield, Network, FileText, CheckCircle2, Clock } from 'lucide-react'
 import { BookabilityRow } from './page'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
@@ -95,12 +96,35 @@ export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDe
     const today = new Date()
     const effectiveDate = row.effective_date ? new Date(row.effective_date) : null
     const expirationDate = row.expiration_date ? new Date(row.expiration_date) : null
-    
+
     if (!effectiveDate) return false
     if (effectiveDate > today) return false
     if (expirationDate && expirationDate < today) return false
-    
+
     return true
+  }
+
+  // Format application status for display
+  const formatApplicationStatus = (status: string | null) => {
+    if (!status) return 'Not Started'
+    const statusMap: { [key: string]: string } = {
+      'not_started': 'Not Started',
+      'in_progress': 'In Progress',
+      'submitted': 'Submitted',
+      'under_review': 'Under Review',
+      'approved': 'Approved',
+      'denied': 'Denied',
+      'on_hold': 'On Hold'
+    }
+    return statusMap[status] || status
+  }
+
+  // Get chip variant for application status
+  const getApplicationStatusVariant = (status: string | null): 'yes' | 'no' | 'active' | 'inactive' => {
+    if (!status || status === 'not_started') return 'no'
+    if (status === 'approved') return 'active'
+    if (status === 'denied') return 'inactive'
+    return 'yes' // in_progress, submitted, under_review
   }
 
   // Chip component
@@ -300,6 +324,56 @@ export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDe
             )}
           </div>
 
+          {/* Credentialing Status */}
+          {row.credentialing && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-[#091747] font-['Newsreader']">Credentialing Status</h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Application Status */}
+                <div className="bg-stone-50 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <FileText className="h-4 w-4 text-[#091747]/60" />
+                    <span className="text-sm font-medium text-[#091747]/70">Application Status</span>
+                  </div>
+                  <Chip variant={getApplicationStatusVariant(row.credentialing.application_status)}>
+                    {formatApplicationStatus(row.credentialing.application_status)}
+                  </Chip>
+                  {row.credentialing.application_submitted_date && (
+                    <p className="text-xs text-[#091747]/60 mt-2">
+                      Submitted: {formatDate(row.credentialing.application_submitted_date)}
+                    </p>
+                  )}
+                  {row.credentialing.approval_date && (
+                    <p className="text-xs text-[#091747]/60 mt-1">
+                      Approved: {formatDate(row.credentialing.approval_date)}
+                    </p>
+                  )}
+                </div>
+
+                {/* Task Progress */}
+                <div className="bg-stone-50 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CheckCircle2 className="h-4 w-4 text-[#091747]/60" />
+                    <span className="text-sm font-medium text-[#091747]/70">Task Progress</span>
+                  </div>
+                  <p className="text-[#091747] font-medium mb-2">
+                    {row.credentialing.completed_tasks} / {row.credentialing.total_tasks} Completed
+                  </p>
+                  <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-600 transition-all duration-300"
+                      style={{ width: `${row.credentialing.completion_percentage}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-[#091747]/60 mt-2">
+                    {row.credentialing.in_progress_tasks} task{row.credentialing.in_progress_tasks !== 1 ? 's' : ''} in progress
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Location */}
           {row.state && (
             <div className="bg-stone-50 rounded-lg p-4">
@@ -326,7 +400,14 @@ export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDe
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end p-6 border-t border-stone-200">
+        <div className="flex justify-between p-6 border-t border-stone-200">
+          <Link
+            href={`/admin/provider-credentialing/${row.provider_id}`}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium"
+          >
+            <FileText className="h-4 w-4" />
+            Manage Credentialing
+          </Link>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-white rounded-lg transition-colors"

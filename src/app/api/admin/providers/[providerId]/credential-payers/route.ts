@@ -172,6 +172,17 @@ export async function POST(
         // Use workflow-specific task templates
         const templates = workflow.task_templates as TaskTemplate[]
 
+        console.log(`🔍 DEBUG for ${payer.name}:`, {
+          workflow_id: workflow.id,
+          workflow_type: workflow.workflow_type,
+          templates_raw: workflow.task_templates,
+          templates_cast: templates,
+          first_template: templates[0],
+          has_title: templates[0]?.hasOwnProperty('title'),
+          title_value: templates[0]?.title,
+          title_type: typeof templates[0]?.title
+        })
+
         templates.forEach((template, index) => {
           const dueDate = template.estimated_days > 0
             ? new Date(Date.now() + template.estimated_days * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
