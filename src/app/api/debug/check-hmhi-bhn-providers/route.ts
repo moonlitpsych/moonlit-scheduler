@@ -25,7 +25,7 @@ export async function GET() {
     // Get all providers bookable for this payer (from canonical view)
     const { data: bookableProviders, error: bookableError } = await supabaseAdmin
       .from('v_bookable_provider_payer')
-      .select('provider_id, provider_name')
+      .select('provider_id')
       .eq('payer_id', payer.id)
 
     if (bookableError) {
@@ -79,8 +79,7 @@ export async function GET() {
         providersNotAcceptingNew: notAcceptingNew.length
       },
       bookableProvidersFromView: bookableProviders?.map(p => ({
-        provider_id: p.provider_id,
-        provider_name: p.provider_name
+        provider_id: p.provider_id
       })),
       providersWithDetails: providers?.map(p => ({
         id: p.id,
