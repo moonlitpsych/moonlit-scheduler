@@ -158,13 +158,6 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Debug Info - Remove in production */}
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-blue-800 text-xs">
-              🔧 Debug: Test credentials - practitioner@trymoonlit.com / testpassword123
-            </p>
-          </div>
-
           {isSignUp ? (
             /* Sign Up Form */
             <form onSubmit={handleSignUp} className="space-y-4">
