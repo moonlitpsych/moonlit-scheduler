@@ -44,9 +44,9 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 1000)
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    // Build query
+    // Build query - using regular view (not materialized) for real-time data
     let query = supabase
-      .from('v_patient_activity_summary')
+      .from('patient_activity_summary')
       .select('*', { count: 'exact' })
 
     // Apply filters

@@ -201,16 +201,7 @@ export async function PUT(
       }
     }
 
-    // Refresh materialized view (WAIT for it to complete to ensure UI shows updated data)
-    console.log('🔄 Refreshing patient_activity_summary materialized view...')
-    const { error: refreshError } = await supabase.rpc('refresh_patient_activity_summary')
-
-    if (refreshError) {
-      console.error('⚠️ Failed to refresh patient activity summary:', refreshError.message)
-      // Don't fail the entire request, but warn about it
-    } else {
-      console.log('✅ Successfully refreshed patient activity summary')
-    }
+    // No need to refresh view - using regular view (not materialized) for real-time data
 
     return NextResponse.json({
       message: 'Engagement status updated successfully',
