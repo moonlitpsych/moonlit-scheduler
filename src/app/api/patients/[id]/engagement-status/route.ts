@@ -28,10 +28,10 @@ const VALID_STATUSES = ['active', 'discharged', 'transferred', 'deceased', 'inac
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const patientId = params.id
+  const { id: patientId } = await params
 
   try {
     // Get current engagement status
@@ -80,10 +80,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const patientId = params.id
+  const { id: patientId } = await params
 
   try {
     const body = await request.json()
