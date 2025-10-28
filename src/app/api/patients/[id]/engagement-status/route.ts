@@ -11,7 +11,7 @@
  *
  * Request Body:
  * {
- *   status: 'active' | 'discharged' | 'transferred' | 'deceased' | 'inactive',
+ *   status: 'active' | 'unresponsive' | 'discharged' | 'transferred' | 'deceased' | 'inactive',
  *   effective_date: '2025-10-21T00:00:00Z',  // Optional, defaults to now
  *   change_reason: 'Patient completed treatment program',  // Optional
  *   changed_by_email: 'user@example.com'  // Required
@@ -24,7 +24,7 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!
 
-const VALID_STATUSES = ['active', 'discharged', 'transferred', 'deceased', 'inactive']
+const VALID_STATUSES = ['active', 'unresponsive', 'discharged', 'transferred', 'deceased', 'inactive']
 
 export async function GET(
   request: NextRequest,

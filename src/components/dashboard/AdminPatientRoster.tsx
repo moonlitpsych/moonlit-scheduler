@@ -14,7 +14,7 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { Users, Calendar, Activity, Building2, UserCheck, Download, RotateCcw } from 'lucide-react'
+import { Users, Calendar, Activity, Building2, UserCheck, Download, RotateCcw, Search } from 'lucide-react'
 import { EngagementStatusChip } from '@/components/partner-dashboard/EngagementStatusChip'
 import { AppointmentStatusIndicator } from '@/components/partner-dashboard/AppointmentStatusIndicator'
 import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
@@ -61,6 +61,7 @@ export default function AdminPatientRoster() {
   const [orgFilter, setOrgFilter] = useState<string>('all')
   const [providerFilter, setProviderFilter] = useState<string>('all')
   const [payerFilter, setPayerFilter] = useState<string>('all')
+  const [showTestPatients, setShowTestPatients] = useState(false)
   const [sortBy, setSortBy] = useState<string>('patient_name')
   const [page, setPage] = useState(1)
   const limit = 50
@@ -72,6 +73,7 @@ export default function AdminPatientRoster() {
     if (appointmentFilter === 'no_future') params.append('has_future_appointment', 'false')
     if (appointmentFilter === 'has_future') params.append('has_future_appointment', 'true')
     if (orgFilter && orgFilter !== 'all') params.append('organization_id', orgFilter)
+    if (!showTestPatients) params.append('exclude_test_patients', 'true')
     params.append('sort_by', sortBy)
     params.append('limit', limit.toString())
     params.append('offset', ((page - 1) * limit).toString())
@@ -145,6 +147,11 @@ export default function AdminPatientRoster() {
   const [changeStatusPatient, setChangeStatusPatient] = useState<Patient | null>(null)
   const [userEmail, setUserEmail] = useState('admin@trymoonlit.com')
 
+  // PracticeQ discovery
+  const [discoveryModalOpen, setDiscoveryModalOpen] = useState(false)
+  const [discoveryInProgress, setDiscoveryInProgress] = useState(false)
+  const [discoveryResults, setDiscoveryResults] = useState<any>(null)
+
   const handleOpenChangeStatusModal = (patient: Patient) => {
     setChangeStatusPatient(patient)
     setChangeStatusModalOpen(true)
@@ -154,6 +161,41 @@ export default function AdminPatientRoster() {
     console.log('🔄 Refreshing patient list after status change...')
     await mutate()
     console.log('✅ Patient list refreshed')
+  }
+
+  const handleDiscoverPatients = async () => {
+    setDiscoveryInProgress(true)
+    setDiscoveryResults(null)
+
+    try {
+      const response = await fetch('/api/admin/patients/discover-from-practiceq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          syncAppointments: true
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.details || data.error || 'Discovery failed')
+      }
+
+      setDiscoveryResults(data)
+      console.log('✅ Discovery complete:', data)
+
+      // Refresh patient list to show new patients
+      await mutate()
+    } catch (error: any) {
+      console.error('❌ Discovery failed:', error)
+      setDiscoveryResults({
+        success: false,
+        error: error.message
+      })
+    } finally {
+      setDiscoveryInProgress(false)
+    }
   }
 
   // Get unique organizations for filter
@@ -236,6 +278,14 @@ export default function AdminPatientRoster() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setDiscoveryModalOpen(true)}
+              className="inline-flex items-center px-4 py-2 border border-moonlit-brown rounded-md shadow-sm text-sm font-medium text-moonlit-brown bg-white hover:bg-moonlit-cream focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-moonlit-brown"
+              title="Discover new patients from PracticeQ"
+            >
+              <Search className="w-4 h-4 mr-2" />
+              Discover from PracticeQ
+            </button>
             <button
               onClick={handleExportCSV}
               className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-moonlit-brown"
@@ -327,6 +377,7 @@ export default function AdminPatientRoster() {
               >
                 <option value="all">All Statuses</option>
                 <option value="active">Active Only</option>
+                <option value="unresponsive">Unresponsive</option>
                 <option value="discharged">Discharged</option>
                 <option value="transferred">Transferred</option>
                 <option value="inactive">Inactive</option>
@@ -382,6 +433,17 @@ export default function AdminPatientRoster() {
                   ))}
                 </select>
               )}
+
+              {/* Test Patient Toggle */}
+              <label className="flex items-center px-3 py-2 border border-gray-300 rounded-lg text-sm cursor-pointer hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  checked={showTestPatients}
+                  onChange={(e) => setShowTestPatients(e.target.checked)}
+                  className="mr-2 h-4 w-4 text-moonlit-brown focus:ring-moonlit-brown border-gray-300 rounded"
+                />
+                <span className="text-gray-700">Show test patients</span>
+              </label>
 
               {/* Sort */}
               <select
@@ -602,6 +664,153 @@ export default function AdminPatientRoster() {
           userEmail={userEmail}
           userType="admin"
         />
+      )}
+
+      {/* PracticeQ Discovery Modal */}
+      {discoveryModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[80vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-moonlit-navy mb-4 font-['Newsreader']">
+              Discover New Patients from PracticeQ
+            </h2>
+
+            {!discoveryInProgress && !discoveryResults && (
+              <>
+                <p className="text-gray-700 mb-6">
+                  This will scan all patients in PracticeQ (IntakeQ) and import any that don't exist in your database yet.
+                </p>
+                <ul className="list-disc list-inside text-gray-700 mb-6 space-y-2">
+                  <li>Searches appointments from the last 90 days to 90 days in the future</li>
+                  <li>Creates patient records for any new patients found</li>
+                  <li>Automatically syncs their appointment history</li>
+                  <li>Does not modify existing patient records</li>
+                </ul>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setDiscoveryModalOpen(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleDiscoverPatients()}
+                    className="px-4 py-2 bg-moonlit-brown text-white rounded-md hover:bg-moonlit-brown/90"
+                  >
+                    Start Discovery
+                  </button>
+                </div>
+              </>
+            )}
+
+            {discoveryInProgress && (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-moonlit-brown mx-auto mb-4"></div>
+                <p className="text-gray-700 text-lg">Scanning PracticeQ for new patients...</p>
+                <p className="text-gray-500 text-sm mt-2">This may take up to 30 seconds</p>
+              </div>
+            )}
+
+            {discoveryResults && (
+              <>
+                {discoveryResults.success ? (
+                  <div className="space-y-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <p className="text-green-800 font-medium">
+                        ✅ Discovery Complete!
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">PracticeQ Clients Found</p>
+                        <p className="text-2xl font-bold text-moonlit-navy">{discoveryResults.stats.intakeq_clients}</p>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">Already in Database</p>
+                        <p className="text-2xl font-bold text-blue-700">{discoveryResults.stats.existing_patients}</p>
+                      </div>
+                      <div className="bg-green-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">New Patients Created</p>
+                        <p className="text-2xl font-bold text-green-700">{discoveryResults.stats.new_patients_created}</p>
+                      </div>
+                      <div className="bg-purple-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">Appointments Synced</p>
+                        <p className="text-2xl font-bold text-purple-700">{discoveryResults.stats.patients_synced}</p>
+                      </div>
+                    </div>
+
+                    {discoveryResults.created_patients && discoveryResults.created_patients.length > 0 && (
+                      <div className="mt-4">
+                        <h3 className="font-medium text-moonlit-navy mb-2">New Patients Added:</h3>
+                        <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                          <ul className="space-y-2">
+                            {discoveryResults.created_patients.map((patient: any, idx: number) => (
+                              <li key={idx} className="text-sm">
+                                <span className="font-medium">{patient.name}</span>
+                                <span className="text-gray-600"> ({patient.email})</span>
+                                {patient.syncResult && (
+                                  <span className="text-gray-500 text-xs ml-2">
+                                    • {patient.syncResult.new} new appt{patient.syncResult.new !== 1 ? 's' : ''}
+                                    {patient.syncResult.updated > 0 && `, ${patient.syncResult.updated} updated`}
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+
+                    {discoveryResults.stats.errors && discoveryResults.stats.errors.length > 0 && (
+                      <div className="mt-4">
+                        <h3 className="font-medium text-red-800 mb-2">Errors:</h3>
+                        <div className="bg-red-50 rounded-lg p-4 max-h-40 overflow-y-auto">
+                          <ul className="space-y-2">
+                            {discoveryResults.stats.errors.map((err: any, idx: number) => (
+                              <li key={idx} className="text-sm text-red-700">
+                                <span className="font-medium">{err.email}</span>: {err.error}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          setDiscoveryModalOpen(false)
+                          setDiscoveryResults(null)
+                        }}
+                        className="px-4 py-2 bg-moonlit-brown text-white rounded-md hover:bg-moonlit-brown/90"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-red-800 font-medium">❌ Discovery Failed</p>
+                      <p className="text-red-700 text-sm mt-2">{discoveryResults.error}</p>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          setDiscoveryModalOpen(false)
+                          setDiscoveryResults(null)
+                        }}
+                        className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

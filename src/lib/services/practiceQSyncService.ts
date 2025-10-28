@@ -755,6 +755,100 @@ class PracticeQSyncService {
 
     return null
   }
+
+  /**
+   * Assign primary provider for a patient based on their appointment history
+   * Uses same logic as migration 016-backfill-primary-provider-id.sql
+   *
+   * Logic:
+   * 1. Find provider they've seen most frequently
+   * 2. In case of tie, use provider from most recent appointment
+   * 3. Only updates if primary_provider_id is currently NULL
+   */
+  async assignPrimaryProvider(patientId: string): Promise<void> {
+    try {
+      // Calculate provider frequency and recency
+      const { data: providerStats, error: statsError } = await supabaseAdmin
+        .from('appointments')
+        .select('provider_id, start_time')
+        .eq('patient_id', patientId)
+        .not('provider_id', 'is', null)
+        .in('status', ['completed', 'confirmed', 'scheduled'])
+
+      if (statsError) {
+        console.error('❌ [Primary Provider] Failed to fetch appointment stats:', statsError.message)
+        return
+      }
+
+      if (!providerStats || providerStats.length === 0) {
+        console.log('ℹ️ [Primary Provider] No appointments with provider for patient')
+        return
+      }
+
+      // Group by provider_id and count appointments
+      const providerCounts = providerStats.reduce((acc: any, appt: any) => {
+        const providerId = appt.provider_id
+        if (!acc[providerId]) {
+          acc[providerId] = {
+            count: 0,
+            latestAppointment: appt.start_time
+          }
+        }
+        acc[providerId].count++
+        if (appt.start_time > acc[providerId].latestAppointment) {
+          acc[providerId].latestAppointment = appt.start_time
+        }
+        return acc
+      }, {})
+
+      // Find primary provider (most appointments, then most recent)
+      let primaryProviderId: string | null = null
+      let maxCount = 0
+      let latestDate = ''
+
+      for (const [providerId, stats] of Object.entries(providerCounts) as any) {
+        if (stats.count > maxCount ||
+            (stats.count === maxCount && stats.latestAppointment > latestDate)) {
+          maxCount = stats.count
+          latestDate = stats.latestAppointment
+          primaryProviderId = providerId
+        }
+      }
+
+      if (!primaryProviderId) {
+        console.log('ℹ️ [Primary Provider] Could not determine primary provider')
+        return
+      }
+
+      // Update patient's primary_provider_id (only if currently NULL)
+      const { error: updateError } = await supabaseAdmin
+        .from('patients')
+        .update({
+          primary_provider_id: primaryProviderId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', patientId)
+        .is('primary_provider_id', null)
+
+      if (updateError) {
+        console.error('❌ [Primary Provider] Failed to update patient:', updateError.message)
+        return
+      }
+
+      // Get provider name for logging
+      const { data: provider } = await supabaseAdmin
+        .from('providers')
+        .select('first_name, last_name')
+        .eq('id', primaryProviderId)
+        .single()
+
+      if (provider) {
+        console.log(`✅ [Primary Provider] Assigned ${provider.first_name} ${provider.last_name} (${maxCount} appointments)`)
+      }
+    } catch (error: any) {
+      console.error('❌ [Primary Provider] Error:', error.message)
+    }
+  }
 }
 
 export const practiceQSyncService = new PracticeQSyncService()
