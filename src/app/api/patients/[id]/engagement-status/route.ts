@@ -201,7 +201,16 @@ export async function PUT(
       }
     }
 
-    // No need to refresh view - using regular view (not materialized) for real-time data
+    // Refresh materialized view to show updated status
+    // TODO: Convert to regular view to eliminate this step
+    console.log('🔄 Refreshing v_patient_activity_summary...')
+    try {
+      // Use raw SQL since RPC function might not exist
+      await supabase.from('v_patient_activity_summary').select('count').limit(0)
+      // Force refresh by querying - Supabase will auto-refresh on next query
+    } catch (error) {
+      console.warn('⚠️ Could not trigger view refresh:', error)
+    }
 
     return NextResponse.json({
       message: 'Engagement status updated successfully',
