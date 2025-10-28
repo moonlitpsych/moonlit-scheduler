@@ -8,6 +8,7 @@
  * - Has future appointment (yes/no)
  * - Days since last seen
  * - Provider assignment
+ * - Exclude test patients
  *
  * Query Parameters:
  * - status: Filter by engagement status (active, discharged, transferred, deceased, inactive)
@@ -15,6 +16,7 @@
  * - has_future_appointment: true/false
  * - no_appointment_since_days: Filter patients not seen in X days
  * - provider_id: Filter by provider
+ * - exclude_test_patients: true/false (default: false)
  * - sort_by: last_seen|next_appointment|patient_name (default: patient_name)
  * - sort_order: asc|desc (default: asc)
  * - limit: Max results (default: 100, max: 1000)
@@ -39,12 +41,13 @@ export async function GET(request: NextRequest) {
     const hasFutureAppointment = searchParams.get('has_future_appointment')
     const noAppointmentSinceDays = searchParams.get('no_appointment_since_days')
     const providerId = searchParams.get('provider_id') || undefined
+    const excludeTestPatients = searchParams.get('exclude_test_patients') === 'true'
     const sortBy = searchParams.get('sort_by') || 'patient_name'
     const sortOrder = searchParams.get('sort_order') || 'asc'
     const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 1000)
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    // Build query
+    // Build query - TODO: Convert to regular view for real-time data
     let query = supabase
       .from('v_patient_activity_summary')
       .select('*', { count: 'exact' })
@@ -71,6 +74,11 @@ export async function GET(request: NextRequest) {
     if (providerId) {
       // Filter by primary provider (assigned provider) for "My Patients" view
       query = query.eq('primary_provider_id', providerId)
+    }
+
+    if (excludeTestPatients) {
+      // Exclude test patients (default behavior in admin views)
+      query = query.eq('is_test_patient', false)
     }
 
     // Apply sorting

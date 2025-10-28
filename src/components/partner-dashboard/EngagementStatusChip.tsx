@@ -8,7 +8,7 @@
 'use client'
 
 interface EngagementStatusChipProps {
-  status: 'active' | 'discharged' | 'transferred' | 'deceased' | 'inactive'
+  status: 'active' | 'discharged' | 'transferred' | 'deceased' | 'inactive' | 'unresponsive'
   className?: string
 }
 
@@ -18,6 +18,12 @@ const STATUS_CONFIG = {
     bgColor: 'bg-green-100',
     textColor: 'text-green-800',
     borderColor: 'border-green-200'
+  },
+  unresponsive: {
+    label: 'Unresponsive',
+    bgColor: 'bg-orange-100',
+    textColor: 'text-orange-800',
+    borderColor: 'border-orange-200'
   },
   discharged: {
     label: 'Discharged',

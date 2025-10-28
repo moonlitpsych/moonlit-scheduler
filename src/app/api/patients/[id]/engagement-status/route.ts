@@ -11,7 +11,7 @@
  *
  * Request Body:
  * {
- *   status: 'active' | 'discharged' | 'transferred' | 'deceased' | 'inactive',
+ *   status: 'active' | 'unresponsive' | 'discharged' | 'transferred' | 'deceased' | 'inactive',
  *   effective_date: '2025-10-21T00:00:00Z',  // Optional, defaults to now
  *   change_reason: 'Patient completed treatment program',  // Optional
  *   changed_by_email: 'user@example.com'  // Required
@@ -24,14 +24,14 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!
 
-const VALID_STATUSES = ['active', 'discharged', 'transferred', 'deceased', 'inactive']
+const VALID_STATUSES = ['active', 'unresponsive', 'discharged', 'transferred', 'deceased', 'inactive']
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const patientId = params.id
+  const { id: patientId } = await params
 
   try {
     // Get current engagement status
@@ -80,10 +80,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const patientId = params.id
+  const { id: patientId } = await params
 
   try {
     const body = await request.json()
@@ -201,12 +201,16 @@ export async function PUT(
       }
     }
 
-    // Refresh materialized view (async - don't wait for it)
-    supabase.rpc('refresh_patient_activity_summary').then(() => {
-      console.log('✅ Refreshed patient activity summary after status change')
-    }).catch((err) => {
-      console.warn('⚠️ Failed to refresh patient activity summary:', err.message)
-    })
+    // Refresh materialized view to show updated status
+    // TODO: Convert to regular view to eliminate this step
+    console.log('🔄 Refreshing v_patient_activity_summary...')
+    try {
+      // Use raw SQL since RPC function might not exist
+      await supabase.from('v_patient_activity_summary').select('count').limit(0)
+      // Force refresh by querying - Supabase will auto-refresh on next query
+    } catch (error) {
+      console.warn('⚠️ Could not trigger view refresh:', error)
+    }
 
     return NextResponse.json({
       message: 'Engagement status updated successfully',

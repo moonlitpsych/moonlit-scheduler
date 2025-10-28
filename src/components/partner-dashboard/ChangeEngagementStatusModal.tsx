@@ -8,7 +8,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
 
 interface ChangeEngagementStatusModalProps {
@@ -27,6 +27,7 @@ interface ChangeEngagementStatusModalProps {
 
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Active', description: 'Patient is actively engaged in treatment' },
+  { value: 'unresponsive', label: 'Unresponsive', description: 'Patient not responding to outreach about appointments' },
   { value: 'discharged', label: 'Discharged', description: 'Patient completed treatment program' },
   { value: 'transferred', label: 'Transferred', description: 'Patient transferred to another provider/facility' },
   { value: 'inactive', label: 'Inactive', description: 'Patient no longer seeking care' },
@@ -47,6 +48,18 @@ export function ChangeEngagementStatusModal({
   const [changeReason, setChangeReason] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [markAsTest, setMarkAsTest] = useState(false)
+
+  // Reset form when modal opens or patient changes
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedStatus(currentStatus)
+      setEffectiveDate(new Date().toISOString().split('T')[0])
+      setChangeReason('')
+      setError(null)
+      setMarkAsTest(false)
+    }
+  }, [isOpen, patient.id, currentStatus])
 
   if (!isOpen) return null
 
@@ -73,19 +86,51 @@ export function ChangeEngagementStatusModal({
           effective_date: new Date(effectiveDate).toISOString(),
           change_reason: changeReason.trim() || null,
           changed_by_email: userEmail,
-          changed_by_type: 'partner_user'
+          changed_by_type: userType === 'admin' ? 'admin' : 'partner_user'
         })
       })
 
       const data = await response.json()
 
       if (!response.ok) {
+        console.error('Status update failed:', data)
         throw new Error(data.error || 'Failed to update engagement status')
       }
 
-      // Show notification if admin will be notified
-      if (data.needs_admin_notification) {
+      console.log('✅ Status update successful:', {
+        patient_id: patient.id,
+        previous_status: data.previous_status,
+        new_status: data.new_status,
+        changed: data.changed,
+        needs_admin_notification: data.needs_admin_notification
+      })
+
+      // If marking as test patient, make additional API call
+      if (markAsTest) {
+        try {
+          const testResponse = await fetch(`/api/patients/${patient.id}/mark-test`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_test_patient: true })
+          })
+
+          if (!testResponse.ok) {
+            console.warn('Failed to mark as test patient, but status was updated')
+          } else {
+            console.log('✅ Patient marked as test')
+          }
+        } catch (testErr) {
+          console.warn('Error marking as test patient:', testErr)
+        }
+      }
+
+      // Show notification if admin will be notified (only for partner users)
+      if (data.needs_admin_notification && userType === 'partner') {
         alert('Status updated. Moonlit admin has been notified of this change.')
+      } else if (userType === 'admin') {
+        // For admin users, just show a simple success message
+        const testMsg = markAsTest ? ' Patient marked as test data.' : ''
+        alert(`Status updated successfully to "${STATUS_OPTIONS.find(o => o.value === selectedStatus)?.label}".${testMsg}`)
       }
 
       onSuccess()
@@ -195,6 +240,23 @@ export function ChangeEngagementStatusModal({
             />
           </div>
 
+          {/* Mark as Test Patient Checkbox */}
+          <div className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <input
+              type="checkbox"
+              id="markAsTest"
+              checked={markAsTest}
+              onChange={(e) => setMarkAsTest(e.target.checked)}
+              className="mt-0.5 h-4 w-4 text-moonlit-brown focus:ring-moonlit-brown border-gray-300 rounded"
+            />
+            <label htmlFor="markAsTest" className="flex-1 cursor-pointer">
+              <div className="text-sm font-medium text-gray-900">Mark as test patient</div>
+              <div className="text-sm text-gray-600 mt-1">
+                Check this if this patient is test data. Test patients will be filtered out of patient views by default.
+              </div>
+            </label>
+          </div>
+
           {/* Admin Notification Warning - Only show for partner users */}
           {willNotifyAdmin && userType === 'partner' && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start space-x-3">
@@ -228,7 +290,7 @@ export function ChangeEngagementStatusModal({
             </button>
             <button
               type="submit"
-              disabled={loading || selectedStatus === currentStatus}
+              disabled={loading || (selectedStatus === currentStatus && !markAsTest)}
               className="px-4 py-2 bg-moonlit-brown text-white rounded-lg hover:bg-moonlit-brown/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Updating...' : 'Update Status'}

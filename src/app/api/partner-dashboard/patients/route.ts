@@ -61,13 +61,14 @@ export async function GET(request: NextRequest) {
 
     // OPTIMIZATION: Handle referrer role with simple query
     if (partnerUser.role === 'partner_referrer') {
-      // Get total count first
+      // Get total count first (exclude test patients)
       const { count: totalCount } = await supabaseAdmin
         .from('patients')
         .select('id', { count: 'exact', head: true })
         .eq('referred_by_partner_user_id', partnerUser.id)
+        .eq('is_test_patient', false)
 
-      // Get paginated patients
+      // Get paginated patients (exclude test patients)
       const { data: patients, error: patientsError } = await supabaseAdmin
         .from('patients')
         .select(`
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
           created_at
         `)
         .eq('referred_by_partner_user_id', partnerUser.id)
+        .eq('is_test_patient', false)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1)
 
@@ -132,7 +134,7 @@ export async function GET(request: NextRequest) {
         roi_file_url,
         primary_contact_user_id,
         status,
-        patients (
+        patients!inner (
           id,
           first_name,
           last_name,
@@ -141,6 +143,7 @@ export async function GET(request: NextRequest) {
           date_of_birth,
           status,
           primary_provider_id,
+          is_test_patient,
           primary_provider:providers!primary_provider_id (
             id,
             first_name,
@@ -150,6 +153,7 @@ export async function GET(request: NextRequest) {
       `)
       .eq('organization_id', partnerUser.organization_id)
       .eq('status', 'active')
+      .eq('patients.is_test_patient', false)
       .order('start_date', { ascending: false })
       .range(offset, offset + limit - 1)
 

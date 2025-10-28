@@ -132,6 +132,7 @@ export default function ProviderPatientRoster({ providerId }: ProviderPatientRos
     if (appointmentFilter === 'no_future') params.append('has_future_appointment', 'false')
     if (appointmentFilter === 'has_future') params.append('has_future_appointment', 'true')
     if (orgFilter && orgFilter !== 'all') params.append('organization_id', orgFilter)
+    params.append('exclude_test_patients', 'true') // Always exclude test patients from provider view
     params.append('sort_by', sortBy)
     params.append('limit', limit.toString())
     params.append('offset', ((page - 1) * limit).toString())
