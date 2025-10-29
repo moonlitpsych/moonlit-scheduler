@@ -57,6 +57,20 @@ interface PayerCredentialingProgress {
 
   // Tasks list
   tasks: CredentialingTask[]
+
+  // Workflow details (Phase 2 enhancement)
+  workflow?: {
+    portal_url: string | null
+    submission_method: string | null
+    submission_email: string | null
+    contact_type: string | null
+    contact_name: string | null
+    contact_email: string | null
+    contact_phone: string | null
+    form_template_url: string | null
+    form_template_filename: string | null
+    detailed_instructions: any | null
+  }
 }
 
 /**
@@ -157,6 +171,26 @@ export async function GET(
 
     const payerMap = new Map(payers?.map(p => [p.id, p]))
 
+    // Step 4b: Get workflow details for payers (Phase 2 enhancement)
+    const { data: workflows } = await supabaseAdmin
+      .from('payer_credentialing_workflows')
+      .select(`
+        payer_id,
+        portal_url,
+        submission_method,
+        submission_email,
+        contact_type,
+        credentialing_contact_name,
+        credentialing_contact_email,
+        credentialing_contact_phone,
+        form_template_url,
+        form_template_filename,
+        detailed_instructions
+      `)
+      .in('payer_id', payerIds)
+
+    const workflowMap = new Map(workflows?.map(w => [w.payer_id, w]))
+
     // Step 5: Group tasks by payer
     const tasksByPayer = new Map<string, CredentialingTask[]>()
     tasks?.forEach(task => {
@@ -196,6 +230,7 @@ export async function GET(
 
       const application = applications?.find(a => a.payer_id === payerId)
       const payerTasks = tasksByPayer.get(payerId) || []
+      const workflow = workflowMap.get(payerId)
 
       // Calculate task statistics
       const totalTasks = payerTasks.length
@@ -226,7 +261,21 @@ export async function GET(
         blocked_tasks: blockedTasks,
         completion_percentage: completionPercentage,
 
-        tasks: payerTasks
+        tasks: payerTasks,
+
+        // Include workflow data (Phase 2 enhancement)
+        workflow: workflow ? {
+          portal_url: workflow.portal_url,
+          submission_method: workflow.submission_method,
+          submission_email: workflow.submission_email,
+          contact_type: workflow.contact_type,
+          contact_name: workflow.credentialing_contact_name,
+          contact_email: workflow.credentialing_contact_email,
+          contact_phone: workflow.credentialing_contact_phone,
+          form_template_url: workflow.form_template_url,
+          form_template_filename: workflow.form_template_filename,
+          detailed_instructions: workflow.detailed_instructions
+        } : undefined
       })
     })
 

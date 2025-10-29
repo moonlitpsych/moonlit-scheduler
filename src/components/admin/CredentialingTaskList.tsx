@@ -26,6 +26,18 @@ interface PayerTaskGroup {
   total_tasks: number
   completed_tasks: number
   tasks: CredentialingTask[]
+  workflow?: {
+    portal_url: string | null
+    submission_method: string | null
+    submission_email: string | null
+    contact_type: string | null
+    contact_name: string | null
+    contact_email: string | null
+    contact_phone: string | null
+    form_template_url: string | null
+    form_template_filename: string | null
+    detailed_instructions: any | null
+  }
 }
 
 interface CredentialingTaskListProps {

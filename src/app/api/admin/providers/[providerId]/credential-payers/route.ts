@@ -184,10 +184,6 @@ export async function POST(
         })
 
         templates.forEach((template, index) => {
-          const dueDate = template.estimated_days > 0
-            ? new Date(Date.now() + template.estimated_days * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-            : null
-
           tasks.push({
             provider_id: providerId,
             payer_id: payerId,
@@ -196,7 +192,7 @@ export async function POST(
             description: template.description,
             task_status: 'pending',
             task_order: template.order || index + 1,
-            due_date: dueDate,
+            due_date: null, // No automatic due dates
             estimated_days: template.estimated_days,
             created_by: user?.email || 'admin'
           })
