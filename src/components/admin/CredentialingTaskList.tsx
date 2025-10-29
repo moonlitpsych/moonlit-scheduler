@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Circle, Clock, AlertCircle, Ban, Calendar, FileText, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react'
+import { CheckCircle2, Circle, Clock, AlertCircle, Ban, Calendar, FileText, ExternalLink, ChevronDown, ChevronRight, Mail, Download, Globe, List } from 'lucide-react'
 
 interface CredentialingTask {
   id: string
@@ -253,6 +253,75 @@ export default function CredentialingTaskList({
                               </h4>
                               {task.description && (
                                 <p className="text-sm text-gray-600 mt-1">{task.description}</p>
+                              )}
+
+                              {/* Workflow Info */}
+                              {group.workflow && (
+                                <div className="mt-3 space-y-2">
+                                  {/* Contact Email */}
+                                  {group.workflow.contact_email && (
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <Mail className="w-4 h-4 text-indigo-600" />
+                                      <span className="text-gray-600">Contact:</span>
+                                      <a
+                                        href={`mailto:${group.workflow.contact_email}`}
+                                        className="text-indigo-600 hover:text-indigo-700 hover:underline"
+                                      >
+                                        {group.workflow.contact_name || group.workflow.contact_email}
+                                      </a>
+                                    </div>
+                                  )}
+
+                                  {/* Portal URL */}
+                                  {group.workflow.portal_url && (
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <Globe className="w-4 h-4 text-blue-600" />
+                                      <span className="text-gray-600">Portal:</span>
+                                      <a
+                                        href={group.workflow.portal_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                                      >
+                                        {group.workflow.portal_url}
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    </div>
+                                  )}
+
+                                  {/* Form Download */}
+                                  {group.workflow.form_template_url && (
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <Download className="w-4 h-4 text-green-600" />
+                                      <span className="text-gray-600">Form:</span>
+                                      <a
+                                        href={group.workflow.form_template_url}
+                                        download={group.workflow.form_template_filename}
+                                        className="text-green-600 hover:text-green-700 hover:underline flex items-center gap-1"
+                                      >
+                                        {group.workflow.form_template_filename}
+                                        <Download className="w-3 h-3" />
+                                      </a>
+                                    </div>
+                                  )}
+
+                                  {/* Detailed Instructions */}
+                                  {group.workflow.detailed_instructions && Array.isArray(group.workflow.detailed_instructions) && (
+                                    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                      <div className="flex items-start gap-2">
+                                        <List className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                        <div className="flex-1">
+                                          <p className="text-sm font-medium text-blue-900 mb-1">Instructions:</p>
+                                          <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                                            {group.workflow.detailed_instructions.map((instruction: string, idx: number) => (
+                                              <li key={idx}>{instruction}</li>
+                                            ))}
+                                          </ol>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               )}
 
                               {/* Dates */}
