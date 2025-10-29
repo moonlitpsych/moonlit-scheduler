@@ -58,7 +58,9 @@ export async function POST() {
             user_metadata: {
               first_name: provider.first_name,
               last_name: provider.last_name,
-              role: 'provider'
+              role: 'provider',
+              temp_password: true, // Track if using temporary password
+              password_set_at: new Date().toISOString()
             }
           })
 
