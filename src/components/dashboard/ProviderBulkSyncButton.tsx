@@ -45,12 +45,22 @@ export default function ProviderBulkSyncButton({ onSyncComplete }: ProviderBulkS
         throw new Error('Not authenticated')
       }
 
+      // Check for impersonation context
+      const impersonation = (await import('@/lib/provider-impersonation')).providerImpersonationManager.getImpersonatedProvider()
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      }
+
+      // Add impersonated provider ID if viewing as another provider
+      if (impersonation) {
+        headers['x-impersonated-provider-id'] = impersonation.provider.id
+      }
+
       const response = await fetch('/api/patients/sync-all', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        }
+        headers
       })
 
       if (!response.ok) {
