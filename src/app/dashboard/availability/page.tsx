@@ -79,7 +79,7 @@ export default function DashboardAvailabilityPage() {
     const loadUserAndProvider = async () => {
         try {
             const { data: { user }, error: userError } = await supabase.auth.getUser()
-            
+
             if (userError || !user) {
                 router.push('/auth/login')
                 return
@@ -87,18 +87,34 @@ export default function DashboardAvailabilityPage() {
 
             setUser(user)
 
-            // FIXED: Added .eq('is_active', true) to filter out inactive duplicates
-            const { data: providerData, error: providerError } = await supabase
-                .from('providers')
-                .select('*')
-                .eq('auth_user_id', user.id)
-                .eq('is_active', true)
-                .single()
+            // Check for impersonation context first (for admin viewing as provider)
+            const impersonation = (await import('@/lib/provider-impersonation')).providerImpersonationManager.getImpersonatedProvider()
 
-            if (providerError) {
-                setError(`Provider lookup failed: ${providerError.message}.
-                Please ensure your provider account is linked to auth user ID: ${user.id}`)
+            let providerData: Provider | null = null
+
+            if (impersonation) {
+                // Admin viewing as a provider - use impersonated provider
+                providerData = impersonation.provider as Provider
             } else {
+                // Regular provider viewing their own availability
+                const { data: loadedProvider, error: providerError } = await supabase
+                    .from('providers')
+                    .select('*')
+                    .eq('auth_user_id', user.id)
+                    .eq('is_active', true)
+                    .single()
+
+                if (providerError) {
+                    setError(`Provider lookup failed: ${providerError.message}.
+                    Please ensure your provider account is linked to auth user ID: ${user.id}`)
+                    setLoading(false)
+                    return
+                }
+
+                providerData = loadedProvider
+            }
+
+            if (providerData) {
                 setProvider(providerData)
                 await loadProviderSchedule(providerData.id)
                 await loadProviderExceptions(providerData.id)
