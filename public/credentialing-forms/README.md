@@ -1,36 +1,47 @@
 # Credentialing Forms Directory
 
-This directory stores PDF forms, Excel templates, and other documents required for provider credentialing with various payers.
+This directory stores PDF and Excel templates for payer credentialing workflows.
 
-## Current Forms Needed:
+## Current Forms Needed
 
-### PDF Forms:
-- `selecthealth-provider-application.pdf` - SelectHealth credentialing application
-- `hmhi-bhn-provider-application.pdf` - HMHI BHN credentialing application
-- `regence-provider-application.pdf` - Regence BCBS credentialing application
-- `health-choice-utah-provider-application.pdf` - Health Choice Utah credentialing application
+Based on the credentialing workflows configured in the database:
 
-### Excel Forms:
-- `molina-provider-roster.xlsx` - Molina provider roster spreadsheet template
+1. **Health Choice Utah**
+   - File: `health-choice-utah-provider-application.pdf`
+   - Contact: Amy Prince (Amy.Prince@healthchoiceutah.com)
 
-## File Organization:
+2. **SelectHealth Integrated**
+   - File: `selecthealth-provider-application.pdf`
+   - Contact: Brittany Reynolds (Brittany.Reynolds@selecthealth.org)
 
-- Files should be named consistently: `{payer-slug}-{form-type}.{ext}`
-- Use lowercase with hyphens for payer names
-- Keep file names descriptive but concise
+3. **HMHI BHN**
+   - File: `hmhi-bhn-provider-application.pdf`
+   - Contact: Jessie Konate (jessie.konate@hsc.utah.edu)
 
-## Usage:
+4. **Regence BlueCross BlueShield**
+   - File: `regence-provider-application.pdf`
+   - Contact: General credentialing email
 
-These forms are referenced in the `payer_credentialing_workflows` table via the `form_template_url` field.
+5. **Molina Utah**
+   - File: `molina-provider-roster.xlsx`
+   - Contact: MHU PIM Team (MHUPIM@molinahealthcare.com)
 
-Forms are accessible to:
-- Admins in the credentialing dashboard
-- Future: Providers if they need to complete their own credentialing
+## How to Add Forms
 
-## Adding New Forms:
+1. Place the PDF or Excel file in this directory
+2. Use the exact filename listed above
+3. Forms will automatically be available for download in the credentialing task UI
 
-1. Upload form file to this directory
-2. Update the corresponding `payer_credentialing_workflows` record:
-   - Set `form_template_filename`
-   - Set `form_template_url` to `/credentialing-forms/{filename}`
-3. Test download link in credentialing task view
+## Re-enabling Form Downloads
+
+Once files are added, uncomment the form download section in:
+- `src/components/admin/CredentialingTaskList.tsx` (lines 292-306)
+
+The code is already configured to serve these files - just add the actual files and uncomment the UI section.
+
+## File Paths in Database
+
+The database stores relative paths like:
+- `/credentialing-forms/selecthealth-provider-application.pdf`
+
+Next.js automatically serves files from `/public` at the root URL path.

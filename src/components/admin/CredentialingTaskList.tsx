@@ -267,7 +267,7 @@ export default function CredentialingTaskList({
                                         href={`mailto:${group.workflow.contact_email}`}
                                         className="text-indigo-600 hover:text-indigo-700 hover:underline"
                                       >
-                                        {group.workflow.contact_name || group.workflow.contact_email}
+                                        {group.workflow.contact_name ? `${group.workflow.contact_name} (${group.workflow.contact_email})` : group.workflow.contact_email}
                                       </a>
                                     </div>
                                   )}
@@ -289,8 +289,8 @@ export default function CredentialingTaskList({
                                     </div>
                                   )}
 
-                                  {/* Form Download */}
-                                  {group.workflow.form_template_url && (
+                                  {/* Form Download - TEMPORARILY DISABLED until actual files are added to /public/credentialing-forms/ */}
+                                  {/* {group.workflow.form_template_url && (
                                     <div className="flex items-center gap-2 text-sm">
                                       <Download className="w-4 h-4 text-green-600" />
                                       <span className="text-gray-600">Form:</span>
@@ -303,7 +303,7 @@ export default function CredentialingTaskList({
                                         <Download className="w-3 h-3" />
                                       </a>
                                     </div>
-                                  )}
+                                  )} */}
 
                                   {/* Detailed Instructions */}
                                   {group.workflow.detailed_instructions && Array.isArray(group.workflow.detailed_instructions) && (
