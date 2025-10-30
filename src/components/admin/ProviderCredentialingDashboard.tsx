@@ -93,9 +93,9 @@ export default function ProviderCredentialingDashboard({
         throw new Error('Failed to update task')
       }
 
-      // Update local state instead of reloading everything (prevents flicker)
+      // Update both payerGroups and stats in one batch to prevent flicker
       setPayerGroups(prevGroups => {
-        return prevGroups.map(group => {
+        const updatedGroups = prevGroups.map(group => {
           // Find if this payer group contains the updated task
           const taskIndex = group.tasks.findIndex(t => t.id === taskId)
 
@@ -129,32 +129,20 @@ export default function ProviderCredentialingDashboard({
             completion_percentage: completionPercentage
           }
         })
-      })
 
-      // Update overall stats
-      setStats(prevStats => {
-        if (!prevStats) return prevStats
-
-        const newGroups = payerGroups.map(group => {
-          const taskIndex = group.tasks.findIndex(t => t.id === taskId)
-          if (taskIndex === -1) return group
-
-          const updatedTasks = [...group.tasks]
-          updatedTasks[taskIndex] = { ...updatedTasks[taskIndex], ...updates }
+        // Update overall stats based on the NEW groups (not old state)
+        setStats(prevStats => {
+          if (!prevStats) return prevStats
 
           return {
-            ...group,
-            tasks: updatedTasks,
-            completed_tasks: updatedTasks.filter(t => t.task_status === 'completed').length,
-            in_progress_tasks: updatedTasks.filter(t => t.task_status === 'in_progress').length
+            ...prevStats,
+            completed_tasks: updatedGroups.reduce((sum, g) => sum + g.completed_tasks, 0),
+            in_progress_payers: updatedGroups.filter(g => g.in_progress_tasks > 0).length,
+            total_tasks: updatedGroups.reduce((sum, g) => sum + g.total_tasks, 0)
           }
         })
 
-        return {
-          ...prevStats,
-          completed_tasks: newGroups.reduce((sum, g) => sum + g.completed_tasks, 0),
-          in_progress_payers: newGroups.filter(g => g.in_progress_tasks > 0).length
-        }
+        return updatedGroups
       })
 
     } catch (err: any) {
