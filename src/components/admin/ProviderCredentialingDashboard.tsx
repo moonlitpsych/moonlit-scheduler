@@ -93,8 +93,70 @@ export default function ProviderCredentialingDashboard({
         throw new Error('Failed to update task')
       }
 
-      // Reload dashboard to refresh data
-      await loadDashboard()
+      // Update local state instead of reloading everything (prevents flicker)
+      setPayerGroups(prevGroups => {
+        return prevGroups.map(group => {
+          // Find if this payer group contains the updated task
+          const taskIndex = group.tasks.findIndex(t => t.id === taskId)
+
+          if (taskIndex === -1) {
+            return group // Task not in this group, return unchanged
+          }
+
+          // Update the specific task
+          const updatedTasks = [...group.tasks]
+          updatedTasks[taskIndex] = {
+            ...updatedTasks[taskIndex],
+            ...updates
+          }
+
+          // Recalculate task statistics for this payer
+          const completedTasks = updatedTasks.filter(t => t.task_status === 'completed').length
+          const inProgressTasks = updatedTasks.filter(t => t.task_status === 'in_progress').length
+          const pendingTasks = updatedTasks.filter(t => t.task_status === 'pending').length
+          const blockedTasks = updatedTasks.filter(t => t.task_status === 'blocked').length
+          const completionPercentage = updatedTasks.length > 0
+            ? Math.round((completedTasks / updatedTasks.length) * 100)
+            : 0
+
+          return {
+            ...group,
+            tasks: updatedTasks,
+            completed_tasks: completedTasks,
+            in_progress_tasks: inProgressTasks,
+            pending_tasks: pendingTasks,
+            blocked_tasks: blockedTasks,
+            completion_percentage: completionPercentage
+          }
+        })
+      })
+
+      // Update overall stats
+      setStats(prevStats => {
+        if (!prevStats) return prevStats
+
+        const newGroups = payerGroups.map(group => {
+          const taskIndex = group.tasks.findIndex(t => t.id === taskId)
+          if (taskIndex === -1) return group
+
+          const updatedTasks = [...group.tasks]
+          updatedTasks[taskIndex] = { ...updatedTasks[taskIndex], ...updates }
+
+          return {
+            ...group,
+            tasks: updatedTasks,
+            completed_tasks: updatedTasks.filter(t => t.task_status === 'completed').length,
+            in_progress_tasks: updatedTasks.filter(t => t.task_status === 'in_progress').length
+          }
+        })
+
+        return {
+          ...prevStats,
+          completed_tasks: newGroups.reduce((sum, g) => sum + g.completed_tasks, 0),
+          in_progress_payers: newGroups.filter(g => g.in_progress_tasks > 0).length
+        }
+      })
+
     } catch (err: any) {
       console.error('Error updating task:', err)
       alert(err.message || 'Failed to update task')
