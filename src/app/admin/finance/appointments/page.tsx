@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Search, Upload, Download, RefreshCw, DollarSign, TrendingUp } from 'lucide-react'
 import AppointmentDetailDrawer from '@/components/finance/AppointmentDetailDrawer'
 import FileUploadModal from '@/components/finance/FileUploadModal'
+import ProviderPaySummary from '@/components/finance/ProviderPaySummary'
 
 interface AppointmentGridRow {
   appointment_id: string
@@ -26,6 +27,7 @@ interface AppointmentGridRow {
   patient_paid_date: string | null
   discount_note: string | null
   appointment_status: string | null
+  is_test_data: boolean
 }
 
 export default function FinanceAppointmentsPage() {
@@ -34,7 +36,9 @@ export default function FinanceAppointmentsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedAppointment, setSelectedAppointment] = useState<string | null>(null)
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
-  const [uploadType, setUploadType] = useState<'appointments' | 'era'>('appointments')
+  const [uploadType, setUploadType] = useState<'appointments' | 'era' | 'provider-pay'>('appointments')
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
+  const [showTestData, setShowTestData] = useState(false)
 
   // Date filters
   const [fromDate, setFromDate] = useState('')
@@ -107,8 +111,8 @@ export default function FinanceAppointmentsPage() {
 
     const headers = [
       'Date', 'Service', 'Practitioner', 'Patient', 'Payer', 'Rev Type',
-      'Expected Gross', 'Provider Expected Pay', 'Provider Paid', 'Provider Pay Status',
-      'Claim Status', 'Reimbursement', 'Expected Net', 'Actual Net'
+      'Expected Gross', 'Provider Expected Pay', 'Provider Paid', 'Provider Paid Date', 'Provider Pay Status',
+      'Claim Status', 'Reimbursement', 'Patient Paid', 'Patient Paid Date', 'Expected Net', 'Actual Net', 'Discount Note'
     ]
 
     const rows = appointments.map(a => [
@@ -121,11 +125,15 @@ export default function FinanceAppointmentsPage() {
       (a.expected_gross_cents / 100).toFixed(2),
       (a.provider_expected_pay_cents / 100).toFixed(2),
       a.provider_paid_cents ? (a.provider_paid_cents / 100).toFixed(2) : '',
+      a.provider_paid_date || '',
       a.provider_pay_status,
       a.claim_status,
       a.reimbursement_cents ? (a.reimbursement_cents / 100).toFixed(2) : '',
+      a.patient_paid ? (a.patient_paid / 100).toFixed(2) : '',
+      a.patient_paid_date || '',
       (a.expected_net_cents / 100).toFixed(2),
       (a.actual_net_cents / 100).toFixed(2),
+      a.discount_note || ''
     ])
 
     const csv = [
@@ -147,12 +155,63 @@ export default function FinanceAppointmentsPage() {
   const totalProviderPay = appointments.reduce((sum, a) => sum + (a.provider_paid_cents || 0), 0)
   const totalActualNet = appointments.reduce((sum, a) => sum + a.actual_net_cents, 0)
 
-  const filteredAppointments = appointments.filter(a =>
-    searchTerm === '' ||
-    a.practitioner.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.payer?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const handleBulkMarkTestData = async (isTest: boolean) => {
+    if (selectedRows.size === 0) {
+      alert('No appointments selected')
+      return
+    }
+
+    if (!confirm(`Mark ${selectedRows.size} appointments as ${isTest ? 'TEST DATA' : 'REAL DATA'}?`)) {
+      return
+    }
+
+    try {
+      const promises = Array.from(selectedRows).map(appointmentId =>
+        fetch(`/api/finance/appointments/${appointmentId}/override`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            column_name: 'is_test_data',
+            value: isTest,
+            reason: `Bulk mark as ${isTest ? 'test' : 'real'} data by admin`,
+            changed_by: null
+          })
+        })
+      )
+
+      await Promise.all(promises)
+      alert(`${selectedRows.size} appointments updated`)
+      setSelectedRows(new Set())
+      fetchAppointments()
+    } catch (error: any) {
+      alert('Bulk update failed: ' + error.message)
+    }
+  }
+
+  const toggleRowSelection = (appointmentId: string) => {
+    const newSelection = new Set(selectedRows)
+    if (newSelection.has(appointmentId)) {
+      newSelection.delete(appointmentId)
+    } else {
+      newSelection.add(appointmentId)
+    }
+    setSelectedRows(newSelection)
+  }
+
+  const filteredAppointments = appointments.filter(a => {
+    // Test data filter
+    if (!showTestData && a.is_test_data) {
+      return false
+    }
+
+    // Search filter
+    if (searchTerm === '') return true
+    return (
+      a.practitioner?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.payer?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  })
 
   return (
     <div className="p-6">
@@ -192,6 +251,11 @@ export default function FinanceAppointmentsPage() {
           </div>
           <div className="text-sm text-[#091747]/60">Net (Actual)</div>
         </div>
+      </div>
+
+      {/* Provider Pay Summary */}
+      <div className="mb-6">
+        <ProviderPaySummary onRefresh={fetchAppointments} />
       </div>
 
       {/* Controls */}
@@ -247,6 +311,17 @@ export default function FinanceAppointmentsPage() {
               <span>Upload ERA</span>
             </button>
             <button
+              onClick={() => {
+                setUploadType('provider-pay')
+                setUploadModalOpen(true)
+              }}
+              className="flex items-center space-x-2 px-4 py-2 bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-white rounded-lg transition-colors"
+              title="Upload provider pay data from your spreadsheet"
+            >
+              <Upload className="h-4 w-4" />
+              <span>Upload Provider Pay</span>
+            </button>
+            <button
               onClick={exportToCSV}
               className="flex items-center space-x-2 px-4 py-2 border border-stone-200 hover:bg-stone-50 text-[#091747] rounded-lg transition-colors"
             >
@@ -264,8 +339,8 @@ export default function FinanceAppointmentsPage() {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="flex-1 max-w-md">
+        {/* Search and Filters */}
+        <div className="flex-1 max-w-md space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#091747]/40" />
             <input
@@ -275,6 +350,40 @@ export default function FinanceAppointmentsPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
             />
+          </div>
+          <div className="flex items-center space-x-4">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showTestData}
+                onChange={(e) => setShowTestData(e.target.checked)}
+                className="h-4 w-4 text-[#BF9C73] focus:ring-[#BF9C73] border-stone-300 rounded"
+              />
+              <span className="text-sm text-[#091747]">Show test data</span>
+            </label>
+            {selectedRows.size > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-[#091747]">{selectedRows.size} selected</span>
+                <button
+                  onClick={() => handleBulkMarkTestData(true)}
+                  className="px-3 py-1 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded transition-colors"
+                >
+                  Mark as Test
+                </button>
+                <button
+                  onClick={() => handleBulkMarkTestData(false)}
+                  className="px-3 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors"
+                >
+                  Mark as Real
+                </button>
+                <button
+                  onClick={() => setSelectedRows(new Set())}
+                  className="px-3 py-1 text-xs bg-stone-100 hover:bg-stone-200 text-[#091747] rounded transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -290,6 +399,7 @@ export default function FinanceAppointmentsPage() {
             <table className="w-full">
               <thead className="bg-stone-50 border-b border-stone-200">
                 <tr>
+                  <th className="px-4 py-3 w-12"></th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#091747]/60 uppercase">Date</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#091747]/60 uppercase">Service</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#091747]/60 uppercase">Practitioner</th>
@@ -308,11 +418,24 @@ export default function FinanceAppointmentsPage() {
                 {filteredAppointments.map((appt) => (
                   <tr
                     key={appt.appointment_id}
-                    onClick={() => setSelectedAppointment(appt.appointment_id)}
-                    className="hover:bg-stone-50 cursor-pointer transition-colors"
+                    className={`hover:bg-stone-50 transition-colors ${appt.is_test_data ? 'bg-orange-50/50' : ''}`}
                   >
-                    <td className="px-4 py-3 text-sm text-[#091747]">{appt.appt_date}</td>
-                    <td className="px-4 py-3 text-sm text-[#091747]">{appt.service}</td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.has(appt.appointment_id)}
+                        onChange={() => toggleRowSelection(appt.appointment_id)}
+                        className="h-4 w-4 text-[#BF9C73] focus:ring-[#BF9C73] border-stone-300 rounded"
+                      />
+                    </td>
+                    <td
+                      className="px-4 py-3 text-sm text-[#091747] cursor-pointer"
+                      onClick={() => setSelectedAppointment(appt.appointment_id)}
+                    >
+                      {appt.appt_date}
+                      {appt.is_test_data && <span className="ml-1 text-xs text-orange-600">TEST</span>}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#091747] cursor-pointer" onClick={() => setSelectedAppointment(appt.appointment_id)}>{appt.service}</td>
                     <td className="px-4 py-3 text-sm text-[#091747]">{appt.practitioner}</td>
                     <td className="px-4 py-3 text-sm text-[#091747]">{appt.last_name}</td>
                     <td className="px-4 py-3 text-sm text-[#091747]">{appt.payer || 'Cash'}</td>

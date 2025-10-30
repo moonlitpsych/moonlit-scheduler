@@ -287,6 +287,18 @@ class PracticeQSyncService {
       console.log(`📍 [Appointment ${intakeqAppt.Id}] Location Info:`, locationInfo)
     }
 
+    // 4.6. Extract and map payer from IntakeQ custom fields
+    let payerId: string | null = null
+    const insuranceName = this.extractInsuranceFromCustomFields(intakeqAppt)
+    if (insuranceName) {
+      payerId = await this.mapInsuranceToPayer(insuranceName)
+      if (payerId) {
+        console.log(`💳 [Appointment ${intakeqAppt.Id}] Mapped insurance "${insuranceName}" → payer ${payerId}`)
+      } else {
+        console.warn(`⚠️ [Appointment ${intakeqAppt.Id}] Could not map insurance "${insuranceName}" to payer`)
+      }
+    }
+
     // 4.6. Generate Google Meet link if this is a telehealth appointment without a meeting URL
     if (!meetingUrl && this.isTelehealthAppointment(locationInfo)) {
       console.log(`🔗 [Appointment ${intakeqAppt.Id}] Generating Google Meet link for telehealth appointment`)
@@ -342,6 +354,7 @@ class PracticeQSyncService {
         start_time: startTime,
         end_time: endTime,
         provider_id: providerId,
+        payer_id: payerId, // Add payer from insurance mapping
         meeting_url: meetingUrl,
         location_info: locationInfo,
         patient_info: {
@@ -353,7 +366,8 @@ class PracticeQSyncService {
         },
         insurance_info: {
           source: 'intakeq_sync',
-          synced_at: new Date().toISOString()
+          synced_at: new Date().toISOString(),
+          insurance_name: insuranceName || null
         },
         updated_at: new Date().toISOString()
       }
@@ -387,6 +401,7 @@ class PracticeQSyncService {
         .insert({
           patient_id: patientId,
           provider_id: providerId,
+          payer_id: payerId, // Add payer from insurance mapping
           start_time: startTime,
           end_time: endTime,
           status,
@@ -404,7 +419,8 @@ class PracticeQSyncService {
           },
           insurance_info: {
             source: 'intakeq_sync',
-            synced_at: new Date().toISOString()
+            synced_at: new Date().toISOString(),
+            insurance_name: insuranceName || null
           },
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()

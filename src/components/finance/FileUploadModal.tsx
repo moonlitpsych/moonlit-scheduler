@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { X, Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react'
 
 interface FileUploadModalProps {
-  type: 'appointments' | 'era'
+  type: 'appointments' | 'era' | 'provider-pay'
   onClose: () => void
   onSuccess: () => void
 }
@@ -32,7 +32,9 @@ export default function FileUploadModal({ type, onClose, onSuccess }: FileUpload
 
       const endpoint = type === 'appointments'
         ? '/api/finance/upload/appointments'
-        : '/api/finance/upload/era'
+        : type === 'era'
+        ? '/api/finance/upload/era'
+        : '/api/finance/upload/provider-pay'
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -61,6 +63,7 @@ export default function FileUploadModal({ type, onClose, onSuccess }: FileUpload
   }
 
   const isAppointments = type === 'appointments'
+  const isProviderPay = type === 'provider-pay'
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -69,11 +72,13 @@ export default function FileUploadModal({ type, onClose, onSuccess }: FileUpload
         <div className="flex items-center justify-between p-6 border-b border-stone-200">
           <div>
             <h2 className="text-xl font-bold text-[#091747] font-['Newsreader']">
-              Upload {isAppointments ? 'Appointments' : 'ERA'} CSV
+              Upload {isAppointments ? 'Appointments' : isProviderPay ? 'Provider Pay' : 'ERA'} CSV
             </h2>
             <p className="text-sm text-[#091747]/60 mt-1">
               {isAppointments
                 ? 'Upload appointment data to sync with finance system'
+                : isProviderPay
+                ? 'Upload provider pay data from your finance spreadsheet'
                 : 'Upload ERA (835) remittance data to track payments'}
             </p>
           </div>
@@ -98,8 +103,15 @@ export default function FileUploadModal({ type, onClose, onSuccess }: FileUpload
                 <li><code className="bg-blue-100 px-1 rounded">Patient_Last</code> - Patient last name</li>
                 <li><code className="bg-blue-100 px-1 rounded">Payer</code> - Payer name (optional)</li>
                 <li><code className="bg-blue-100 px-1 rounded">Revenue_Type</code> - Cash/Medicaid/Commercial</li>
-                <li><code className="bg-blue-100 px-1 rounded">Price</code> - Dollar amount</li>
-                <li><code className="bg-blue-100 px-1 rounded">External_ID</code> - IntakeQ ID (optional)</li>
+              </ul>
+            ) : isProviderPay ? (
+              <ul className="text-sm text-blue-800 space-y-1">
+                <li><code className="bg-blue-100 px-1 rounded">Date</code> - Appointment date</li>
+                <li><code className="bg-blue-100 px-1 rounded">Practitioner</code> - Provider name</li>
+                <li><code className="bg-blue-100 px-1 rounded">Patient_Last</code> - Patient last name</li>
+                <li><code className="bg-blue-100 px-1 rounded">Provider_Paid</code> - Amount paid to provider</li>
+                <li><code className="bg-blue-100 px-1 rounded">Provider_Paid_Date</code> - Date paid (optional)</li>
+                <li><code className="bg-blue-100 px-1 rounded">Reimbursement</code> - Insurance reimbursement amount (optional)</li>
               </ul>
             ) : (
               <ul className="text-sm text-blue-800 space-y-1">

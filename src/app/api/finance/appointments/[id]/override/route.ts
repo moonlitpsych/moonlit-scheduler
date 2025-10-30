@@ -15,10 +15,10 @@ import { supabaseAdmin } from '@/lib/supabase'
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const appointmentId = params.id
+    const { id: appointmentId } = await params
     const body = await request.json()
     const { column_name, value, reason, changed_by } = body
 
@@ -33,11 +33,15 @@ export async function PATCH(
     const allowedColumns = [
       'patient_paid',
       'patient_paid_date',
+      'provider_paid_cents',
+      'provider_paid_date',
       'discount_reason',
       'claim_needed',
       'claim_status',
       'appt_status',
-      'notes'
+      'notes',
+      'reimbursement_cents',
+      'is_test_data'
     ]
 
     if (!allowedColumns.includes(column_name)) {
@@ -108,10 +112,10 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const appointmentId = params.id
+    const { id: appointmentId } = await params
     const { searchParams } = new URL(request.url)
     const columnName = searchParams.get('column_name')
 

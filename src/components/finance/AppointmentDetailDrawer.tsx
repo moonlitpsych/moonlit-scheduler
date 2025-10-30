@@ -45,9 +45,13 @@ export default function AppointmentDetailDrawer({
   // Editable fields
   const [patientPaid, setPatientPaid] = useState('')
   const [patientPaidDate, setPatientPaidDate] = useState('')
+  const [providerPaid, setProviderPaid] = useState('')
+  const [providerPaidDate, setProviderPaidDate] = useState('')
   const [discountNote, setDiscountNote] = useState('')
   const [claimStatus, setClaimStatus] = useState('')
   const [notes, setNotes] = useState('')
+  const [reimbursementAmount, setReimbursementAmount] = useState('')
+  const [isTestData, setIsTestData] = useState(false)
 
   useEffect(() => {
     fetchDetail()
@@ -64,9 +68,13 @@ export default function AppointmentDetailDrawer({
         setDetail(appt)
         setPatientPaid(appt.patient_paid?.toString() || '')
         setPatientPaidDate(appt.patient_paid_date || '')
+        setProviderPaid(appt.provider_paid_cents ? (appt.provider_paid_cents / 100).toFixed(2) : '')
+        setProviderPaidDate(appt.provider_paid_date || '')
         setDiscountNote(appt.discount_note || '')
         setClaimStatus(appt.claim_status || '')
         setNotes(appt.notes_override || '')
+        setReimbursementAmount(appt.reimbursement_cents ? (appt.reimbursement_cents / 100).toFixed(2) : '')
+        setIsTestData(appt.is_test_data || false)
       }
     } catch (error: any) {
       console.error('Failed to load appointment detail:', error)
@@ -84,8 +92,8 @@ export default function AppointmentDetailDrawer({
         body: JSON.stringify({
           column_name: columnName,
           value,
-          reason: `Manual override via UI at ${new Date().toISOString()}`,
-          changed_by: 'admin', // In production, get from auth context
+          reason: `Manual override via UI by admin at ${new Date().toISOString()}`,
+          changed_by: null, // TODO: Get from auth context
         })
       })
 
@@ -105,9 +113,13 @@ export default function AppointmentDetailDrawer({
     const updates = [
       { column: 'patient_paid', value: patientPaid ? parseFloat(patientPaid) : null },
       { column: 'patient_paid_date', value: patientPaidDate || null },
+      { column: 'provider_paid_cents', value: providerPaid ? Math.round(parseFloat(providerPaid) * 100) : null },
+      { column: 'provider_paid_date', value: providerPaidDate || null },
       { column: 'discount_reason', value: discountNote || null },
       { column: 'claim_status', value: claimStatus || null },
       { column: 'notes', value: notes || null },
+      { column: 'reimbursement_cents', value: reimbursementAmount ? Math.round(parseFloat(reimbursementAmount) * 100) : null },
+      { column: 'is_test_data', value: isTestData },
     ]
 
     let allSuccess = true
@@ -266,6 +278,55 @@ export default function AppointmentDetailDrawer({
 
             <div>
               <label className="block text-sm font-medium text-[#091747] mb-1">
+                Reimbursement Amount ($)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={reimbursementAmount}
+                onChange={(e) => setReimbursementAmount(e.target.value)}
+                disabled={!editing}
+                placeholder="Enter insurance reimbursement amount"
+                className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 disabled:bg-stone-50"
+              />
+              <p className="mt-1 text-xs text-[#091747]/50">
+                Enter the actual amount received from insurance
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#091747] mb-1">
+                Provider Paid Amount ($)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={providerPaid}
+                onChange={(e) => setProviderPaid(e.target.value)}
+                disabled={!editing}
+                placeholder="Amount paid to provider"
+                className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 disabled:bg-stone-50"
+              />
+              <p className="mt-1 text-xs text-[#091747]/50">
+                Amount paid to provider for this appointment
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#091747] mb-1">
+                Provider Paid Date
+              </label>
+              <input
+                type="date"
+                value={providerPaidDate}
+                onChange={(e) => setProviderPaidDate(e.target.value)}
+                disabled={!editing}
+                className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 disabled:bg-stone-50"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#091747] mb-1">
                 Claim Status Override
               </label>
               <select
@@ -295,6 +356,23 @@ export default function AppointmentDetailDrawer({
                 rows={3}
                 className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 disabled:bg-stone-50"
               />
+            </div>
+
+            <div className="flex items-center space-x-2 pt-3 border-t border-stone-200">
+              <input
+                type="checkbox"
+                id="isTestData"
+                checked={isTestData}
+                onChange={(e) => setIsTestData(e.target.checked)}
+                disabled={!editing}
+                className="h-4 w-4 text-[#BF9C73] focus:ring-[#BF9C73] border-stone-300 rounded disabled:opacity-50"
+              />
+              <label htmlFor="isTestData" className="text-sm font-medium text-[#091747]">
+                Mark as Test Data
+              </label>
+              <span className="text-xs text-[#091747]/50 ml-2">
+                (Test data will be excluded from reports)
+              </span>
             </div>
           </div>
         </section>
