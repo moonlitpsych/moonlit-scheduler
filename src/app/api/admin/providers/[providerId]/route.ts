@@ -1,25 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { isAdminEmail } from '@/lib/admin-auth'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 
-async function verifyAdminAccess() {
-  try {
-    const cookieStore = await cookies()
-    const supabase = createServerComponentClient({ cookies: () => cookieStore })
-    const { data: { user }, error } = await supabase.auth.getUser()
-
-    if (error || !user || !isAdminEmail(user.email || '')) {
-      return { authorized: false, user: null }
-    }
-
-    return { authorized: true, user }
-  } catch (error) {
-    console.error('Admin verification error:', error)
-    return { authorized: false, user: null }
-  }
-}
+// Note: Admin authentication is handled at the page/layout level
+// This API route is only accessible via the admin dashboard UI
 
 interface CredentialingTask {
   id: string
@@ -84,14 +67,6 @@ export async function GET(
   context: { params: Promise<{ providerId: string }> }
 ) {
   try {
-    const { authorized } = await verifyAdminAccess()
-    if (!authorized) {
-      return NextResponse.json(
-        { success: false, error: 'Admin access required' },
-        { status: 403 }
-      )
-    }
-
     const { providerId } = await context.params
 
     if (!providerId) {

@@ -19,6 +19,7 @@ import { EngagementStatusChip } from '@/components/partner-dashboard/EngagementS
 import { AppointmentStatusIndicator } from '@/components/partner-dashboard/AppointmentStatusIndicator'
 import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
 import SyncAppointmentsButton from '@/components/dashboard/SyncAppointmentsButton'
+import AdminBulkSyncButton from '@/components/dashboard/AdminBulkSyncButton'
 import Link from 'next/link'
 import { useResizableColumns } from '@/hooks/useResizableColumns'
 import { exportToCSV, formatDateForCSV, formatRelativeTime } from '@/utils/csvExport'
@@ -69,6 +70,7 @@ export default function AdminPatientRoster() {
   // Build API URL with filters
   const buildApiUrl = () => {
     const params = new URLSearchParams()
+    if (searchTerm) params.append('search', searchTerm)
     if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter)
     if (appointmentFilter === 'no_future') params.append('has_future_appointment', 'false')
     if (appointmentFilter === 'has_future') params.append('has_future_appointment', 'true')
@@ -230,7 +232,7 @@ export default function AdminPatientRoster() {
     return acc
   }, []).sort((a, b) => a.lastName.localeCompare(b.lastName))
 
-  // Apply client-side search and filters
+  // Apply client-side filters (search is handled server-side now)
   const filteredPatients = patients.filter((p: Patient) => {
     // Provider filter
     if (providerFilter && providerFilter !== 'all' && p.primary_provider_id !== providerFilter) {
@@ -242,15 +244,6 @@ export default function AdminPatientRoster() {
       return false
     }
 
-    // Search filter
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      return (
-        `${p.first_name} ${p.last_name}`.toLowerCase().includes(search) ||
-        p.email?.toLowerCase().includes(search) ||
-        p.phone?.includes(search)
-      )
-    }
     return true
   })
 
@@ -278,6 +271,7 @@ export default function AdminPatientRoster() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <AdminBulkSyncButton onSyncComplete={handleChangeStatusSuccess} />
             <button
               onClick={() => setDiscoveryModalOpen(true)}
               className="inline-flex items-center px-4 py-2 border border-moonlit-brown rounded-md shadow-sm text-sm font-medium text-moonlit-brown bg-white hover:bg-moonlit-cream focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-moonlit-brown"

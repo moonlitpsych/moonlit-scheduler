@@ -257,9 +257,22 @@ class IntakeQService {
     }
   }
 
+  async getClient(clientId: string): Promise<any> {
+    console.log(`🔍 Fetching IntakeQ client: ${clientId}`)
+
+    try {
+      const response = await this.makeRequest<any>(`/clients/${clientId}`)
+      console.log(`✅ IntakeQ client fetched: ${clientId}`)
+      return response
+    } catch (error: any) {
+      console.error('❌ Failed to fetch IntakeQ client:', error.message)
+      throw error
+    }
+  }
+
   async getAppointment(appointmentId: string): Promise<IntakeQAppointmentResponse> {
     console.log(`🔍 Fetching IntakeQ appointment: ${appointmentId}`)
-    
+
     try {
       const response = await this.makeRequest<IntakeQAppointmentResponse>(`/appointments/${appointmentId}`)
       return response

@@ -11,6 +11,7 @@
  * - Exclude test patients
  *
  * Query Parameters:
+ * - search: Search across first_name, last_name, email, phone (case-insensitive)
  * - status: Filter by engagement status (active, discharged, transferred, deceased, inactive)
  * - organization_id: Filter by organization (for partner dashboard)
  * - has_future_appointment: true/false
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
 
     // Parse query parameters
+    const search = searchParams.get('search') || undefined
     const status = searchParams.get('status') || undefined
     const organizationId = searchParams.get('organization_id') || undefined
     const hasFutureAppointment = searchParams.get('has_future_appointment')
@@ -53,6 +55,11 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact' })
 
     // Apply filters
+    if (search) {
+      // Server-side search across first_name, last_name, email, phone
+      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
+    }
+
     if (status) {
       query = query.eq('engagement_status', status)
     }
