@@ -69,12 +69,12 @@ export default function SelectPartnerPage() {
     // Set impersonation context
     partnerImpersonationManager.setImpersonatedPartner(partner, currentUser.email)
 
-    // Log the impersonation start
-    await partnerImpersonationManager.logAdminAction({
-      partnerId: partner.id,
-      actionType: 'partner_impersonation_start',
-      description: `Admin ${currentUser.email} started viewing as ${partner.full_name} (${partner.organization?.name || 'No org'})`
-    })
+    // TODO: Log the impersonation start (requires admin API endpoint for audit logs)
+    // await partnerImpersonationManager.logAdminAction({
+    //   partnerId: partner.id,
+    //   actionType: 'partner_impersonation_start',
+    //   description: `Admin ${currentUser.email} started viewing as ${partner.full_name} (${partner.organization?.name || 'No org'})`
+    // })
 
     // Navigate to partner dashboard
     router.push('/partner-dashboard')

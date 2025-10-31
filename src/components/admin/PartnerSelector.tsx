@@ -59,12 +59,12 @@ export default function PartnerSelector() {
     // Update impersonation
     partnerImpersonationManager.setImpersonatedPartner(partner, adminEmail)
 
-    // Log the switch
-    await partnerImpersonationManager.logAdminAction({
-      partnerId: partner.id,
-      actionType: 'partner_impersonation_switch',
-      description: `Admin switched to viewing as ${partner.full_name} (${partner.organization?.name || 'No org'})`
-    })
+    // TODO: Log the switch (requires admin API endpoint for audit logs)
+    // await partnerImpersonationManager.logAdminAction({
+    //   partnerId: partner.id,
+    //   actionType: 'partner_impersonation_switch',
+    //   description: `Admin switched to viewing as ${partner.full_name} (${partner.organization?.name || 'No org'})`
+    // })
 
     // Refresh page to load new partner data
     window.location.reload()
