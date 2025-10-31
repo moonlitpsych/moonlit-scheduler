@@ -289,21 +289,23 @@ export default function CredentialingTaskList({
                                     </div>
                                   )}
 
-                                  {/* Form Download - TEMPORARILY DISABLED until actual files are added to /public/credentialing-forms/ */}
-                                  {/* {group.workflow.form_template_url && (
+                                  {/* Form Download - PDFs/Excel from Supabase Storage */}
+                                  {group.workflow.form_template_url && (
                                     <div className="flex items-center gap-2 text-sm">
                                       <Download className="w-4 h-4 text-green-600" />
                                       <span className="text-gray-600">Form:</span>
                                       <a
                                         href={group.workflow.form_template_url}
                                         download={group.workflow.form_template_filename}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
                                         className="text-green-600 hover:text-green-700 hover:underline flex items-center gap-1"
                                       >
                                         {group.workflow.form_template_filename}
                                         <Download className="w-3 h-3" />
                                       </a>
                                     </div>
-                                  )} */}
+                                  )}
 
                                   {/* Detailed Instructions */}
                                   {group.workflow.detailed_instructions && Array.isArray(group.workflow.detailed_instructions) && (
