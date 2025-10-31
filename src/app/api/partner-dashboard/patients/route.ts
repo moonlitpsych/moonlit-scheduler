@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = (page - 1) * limit
+    const partnerUserId = searchParams.get('partner_user_id') // For admin impersonation
 
     // Get authenticated user
     const cookieStore = await cookies()
@@ -45,12 +46,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Get partner user record
-    const { data: partnerUser, error: userError } = await supabaseAdmin
+    let partnerUserQuery = supabaseAdmin
       .from('partner_users')
       .select('id, organization_id, role, is_active')
-      .eq('auth_user_id', session.user.id)
       .eq('is_active', true)
-      .single()
+
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', session.user.id)
+    }
+
+    const { data: partnerUser, error: userError } = await partnerUserQuery.single()
 
     if (userError || !partnerUser) {
       return NextResponse.json(

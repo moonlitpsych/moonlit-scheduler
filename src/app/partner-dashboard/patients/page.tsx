@@ -18,6 +18,7 @@ import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/Chan
 import SyncAppointmentsButton from '@/components/partner-dashboard/SyncAppointmentsButton'
 import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
 import AppointmentLocationDisplay from '@/components/partner-dashboard/AppointmentLocationDisplay'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
 import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity, Download, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
@@ -105,14 +106,28 @@ export default function PatientRosterPage() {
   const [page, setPage] = useState(1)
   const [allPatients, setAllPatients] = useState<PatientWithDetails[]>([])
 
+  // Check for admin impersonation
+  const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+  const impersonatedPartnerId = impersonation?.partner.id
+
   // Use SWR for data fetching with caching
-  const { data: partnerData, error: partnerError } = useSWR('/api/partner/me', fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 300000, // 5 minutes
-  })
+  // Skip fetching partner/me if admin is impersonating (we already have the data)
+  const { data: partnerData, error: partnerError } = useSWR(
+    impersonation ? null : '/api/partner/me',
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 300000, // 5 minutes
+    }
+  )
+
+  // Build patients API URL with impersonation support
+  const patientsUrl = impersonatedPartnerId
+    ? `/api/partner-dashboard/patients?page=${page}&limit=20&partner_user_id=${impersonatedPartnerId}`
+    : `/api/partner-dashboard/patients?page=${page}&limit=20`
 
   const { data: patientsData, error: patientsError, mutate } = useSWR(
-    `/api/partner-dashboard/patients?page=${page}&limit=20`,
+    patientsUrl,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -127,7 +142,20 @@ export default function PatientRosterPage() {
     }
   )
 
-  const partnerUser = partnerData?.success ? partnerData.data : null
+  // Use impersonated partner data if admin is viewing, otherwise use fetched data
+  const partnerUser = impersonation
+    ? {
+        id: impersonation.partner.id,
+        auth_user_id: impersonation.partner.auth_user_id,
+        organization_id: impersonation.partner.organization_id,
+        full_name: impersonation.partner.full_name,
+        email: impersonation.partner.email,
+        phone: impersonation.partner.phone,
+        role: impersonation.partner.role,
+        status: impersonation.partner.is_active ? 'active' : 'inactive'
+      } as PartnerUser
+    : (partnerData?.success ? partnerData.data : null)
+
   const patients = patientsData?.success ? allPatients : []
   const totalCount = patientsData?.data?.pagination?.total || 0
   const hasMore = patientsData?.data?.pagination?.hasMore || false
