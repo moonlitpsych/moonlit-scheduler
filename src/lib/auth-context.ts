@@ -1,16 +1,16 @@
 // Authentication Context and Role Management
-// Handles dual-role users (admin + provider) with session-based context switching
+// Handles multi-role users (admin + provider + partner) with session-based context switching
 
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
 import { isAdminEmail } from './admin-auth'
 
-export type UserContext = 'admin' | 'provider'
+export type UserContext = 'admin' | 'provider' | 'partner'
 
 export interface UserRole {
-  role: 'admin' | 'provider'
+  role: 'admin' | 'provider' | 'partner'
   hasAccess: boolean
-  data?: any // Provider data for provider role
+  data?: any // Provider data for provider role, partner data for partner role
 }
 
 export interface AuthContextData {
@@ -68,6 +68,40 @@ class AuthContextManager {
     } catch (providerError) {
       // Provider role not available
       console.log('Provider role not found for user:', user.email)
+    }
+
+    // Check partner role
+    try {
+      const { data: partnerData, error } = await this.supabase
+        .from('partner_users')
+        .select(`
+          id,
+          auth_user_id,
+          organization_id,
+          full_name,
+          email,
+          phone,
+          role,
+          is_active,
+          organization:organizations(
+            id,
+            name
+          )
+        `)
+        .eq('auth_user_id', user.id)
+        .eq('is_active', true)
+        .single()
+
+      if (!error && partnerData) {
+        availableRoles.push({
+          role: 'partner',
+          hasAccess: true,
+          data: partnerData
+        })
+      }
+    } catch (partnerError) {
+      // Partner role not available
+      console.log('Partner role not found for user:', user.email)
     }
 
     const canSwitchContext = availableRoles.length > 1
@@ -128,6 +162,8 @@ class AuthContextManager {
         return '/admin'
       case 'provider':
         return '/dashboard'
+      case 'partner':
+        return '/partner-dashboard'
       default:
         return '/auth/login'
     }

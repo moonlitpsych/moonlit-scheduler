@@ -8,6 +8,9 @@ import { Database } from '@/types/database'
 import { Building2, Users, Calendar, Home, LogOut, Menu, X, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { AccountSettingsModal } from '@/components/shared/AccountSettingsModal'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
+import { isAdminEmail } from '@/lib/admin-auth'
+import PartnerSelector from '@/components/admin/PartnerSelector'
 
 export default function PartnerDashboardLayout({
   children,
@@ -19,6 +22,7 @@ export default function PartnerDashboardLayout({
   const [partnerUser, setPartnerUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isAccountSettingsOpen, setIsAccountSettingsOpen] = useState(false)
+  const [isAdminViewing, setIsAdminViewing] = useState(false)
 
   const router = useRouter()
   const pathname = usePathname()
@@ -36,22 +40,53 @@ export default function PartnerDashboardLayout({
           return
         }
 
-        // Fetch partner user info
-        const response = await fetch('/api/partner/me')
-        const result = await response.json()
+        // Check if user is admin
+        const isAdmin = isAdminEmail(user.email || '')
 
-        if (result.success) {
-          setPartnerUser(result.data)
+        // Check for impersonation context
+        const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+
+        if (isAdmin && impersonation) {
+          // Admin viewing as a partner
+          setIsAdminViewing(true)
+
+          // Parse full_name for consistency with /api/partner/me
+          const nameParts = impersonation.partner.full_name?.split(' ') || ['', '']
+          const first_name = nameParts[0] || ''
+          const last_name = nameParts.slice(1).join(' ') || ''
+
+          setPartnerUser({
+            ...impersonation.partner,
+            first_name,
+            last_name,
+            status: impersonation.partner.is_active ? 'active' : 'inactive'
+          })
+          setLoading(false)
+        } else if (isAdmin && !impersonation && pathname !== '/partner-dashboard/select-partner') {
+          // Admin hasn't selected a partner yet - redirect to selector
+          router.replace('/partner-dashboard/select-partner')
+          return
+        } else {
+          // Regular partner user viewing their own dashboard
+          setIsAdminViewing(false)
+
+          // Fetch partner user info
+          const response = await fetch('/api/partner/me')
+          const result = await response.json()
+
+          if (result.success) {
+            setPartnerUser(result.data)
+          }
+
+          setLoading(false)
         }
-
-        setLoading(false)
       } catch (error) {
         console.error('Error loading partner user:', error)
         setLoading(false)
       }
     }
     loadUser()
-  }, [supabase])
+  }, [supabase, pathname, router])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -202,21 +237,28 @@ export default function PartnerDashboardLayout({
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar for mobile */}
-        <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3">
+        {/* Top bar - Desktop (for admin selector) and Mobile */}
+        <div className="bg-white border-b border-gray-200 px-4 py-3">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold text-moonlit-navy font-['Newsreader']">
+            <h1 className="text-lg font-semibold text-moonlit-navy font-['Newsreader'] lg:hidden">
               Partner Dashboard
             </h1>
-            {partnerUser && (
-              <div className="flex items-center space-x-3">
+            {/* Admin Partner Selector - Desktop */}
+            {isAdminViewing && (
+              <div className="hidden lg:flex items-center ml-auto bg-gradient-to-r from-moonlit-brown to-moonlit-peach rounded-lg shadow-sm">
+                <PartnerSelector />
+              </div>
+            )}
+            {/* Mobile user info */}
+            <div className="lg:hidden flex items-center space-x-3">
+              {partnerUser && (
                 <div className="w-8 h-8 bg-gradient-to-br from-moonlit-brown to-moonlit-peach rounded-full flex items-center justify-center">
                   <span className="text-white font-medium text-sm">
                     {getInitials(partnerUser.full_name)}
                   </span>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
