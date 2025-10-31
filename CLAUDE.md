@@ -196,6 +196,37 @@ try {
 - System checks: Does provider's SelectHealth contract include Signature plan?
 - Result: ✅ "We accept your plan, book here" OR ❌ "Your plan is not accepted with this provider"
 
+### Real Contract Data (No Mock Data):
+
+**SelectHealth - Dr. Anthony Privratsky Contract** (Oct 31, 2025)
+- Source: `/Users/miriam/Downloads/Select_Health_Contract_for_Anthony_Privratsky_signed.pdf`
+- Contract ID: `4046d9cf-db24-43da-b54b-e6fc9309133d`
+- Effective Date: 2025-10-13
+- Plans Accepted (6 total):
+  1. **Select Choice** (PPO) - DEFAULT - Pages 23-24
+  2. **Select Care** (PPO) - Pages 25-26
+  3. **Select Med** (PPO) - Pages 27-28
+  4. **Select Value** (HMO) - Page 29
+  5. **SelectHealth Share** (PPO) - Pages 30-31
+  6. **Select Access** (Medicaid/CHIP, type: OTHER) - Pages 32-36
+
+**Scripts Created:**
+- `scripts/cleanup-and-add-plans.js` - Remove mock data, add real plans (Node.js HTTPS)
+- `scripts/populate-junction-table.js` - Link contract to accepted plans
+- `scripts/add-real-selecthealth-plans.mjs` - Add plans with aliases (Supabase client)
+- `scripts/cleanup-mock-plans.mjs` - Clean up mock data (Supabase client)
+- `scripts/check-selecthealth-db.ts` - Verification script
+
+**Migrations:**
+- `032-rollback-mock-plan-data.sql` - Deleted 9 mock plans, 25 aliases, 8 networks
+- `033-add-selecthealth-contract-plans.sql` - Added 6 real SelectHealth plans from contract
+
+**Critical Pattern:**
+- Extract plan names ONLY from actual signed contract appendices
+- Document source pages in `notes` field for traceability
+- Use `is_default` flag for standard/most common plan
+- Medicaid/CHIP plans use `plan_type = 'OTHER'` (not a separate type)
+
 ---
 
 ## ✅ COMPLETED: Provider Impersonation System (Oct 15, 2025)
