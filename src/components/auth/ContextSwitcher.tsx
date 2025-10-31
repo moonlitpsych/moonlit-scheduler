@@ -2,17 +2,19 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Settings, UserCheck, LogOut, RefreshCcw } from 'lucide-react'
+import { ChevronDown, Settings, UserCheck, LogOut, RefreshCcw, Key } from 'lucide-react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
 import { authContextManager, UserContext, AuthContextData } from '@/lib/auth-context'
 import { providerImpersonationManager } from '@/lib/provider-impersonation'
 import { isAdminEmail } from '@/lib/admin-auth'
+import { AccountSettingsModal } from '@/components/shared/AccountSettingsModal'
 
 export default function ContextSwitcher() {
   const [authContext, setAuthContext] = useState<AuthContextData | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [switching, setSwitching] = useState(false)
+  const [isAccountSettingsOpen, setIsAccountSettingsOpen] = useState(false)
   const router = useRouter()
   const supabase = createClientComponentClient<Database>()
 
@@ -87,11 +89,22 @@ export default function ContextSwitcher() {
 
         {isOpen && (
           <>
-            <div 
-              className="fixed inset-0 z-10" 
+            <div
+              className="fixed inset-0 z-10"
               onClick={() => setIsOpen(false)}
             />
             <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-stone-200 py-2 z-20">
+              <button
+                onClick={() => {
+                  setIsAccountSettingsOpen(true)
+                  setIsOpen(false)
+                }}
+                className="w-full flex items-center px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+              >
+                <Key className="w-4 h-4 mr-3" />
+                Account Settings
+              </button>
+              <div className="border-t border-stone-100 my-1" />
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
@@ -102,6 +115,13 @@ export default function ContextSwitcher() {
             </div>
           </>
         )}
+
+        {/* Account Settings Modal */}
+        <AccountSettingsModal
+          isOpen={isAccountSettingsOpen}
+          onClose={() => setIsAccountSettingsOpen(false)}
+          userEmail={authContext?.user?.email}
+        />
       </div>
     )
   }
@@ -196,6 +216,19 @@ export default function ContextSwitcher() {
               </>
             )}
 
+            {/* Account Settings */}
+            <button
+              onClick={() => {
+                setIsAccountSettingsOpen(true)
+                setIsOpen(false)
+              }}
+              className="w-full flex items-center px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+            >
+              <Key className="w-4 h-4 mr-3" />
+              Account Settings
+            </button>
+            <div className="border-t border-stone-100" />
+
             {/* Logout */}
             <button
               onClick={handleLogout}
@@ -207,6 +240,13 @@ export default function ContextSwitcher() {
           </div>
         </>
       )}
+
+      {/* Account Settings Modal */}
+      <AccountSettingsModal
+        isOpen={isAccountSettingsOpen}
+        onClose={() => setIsAccountSettingsOpen(false)}
+        userEmail={authContext?.user?.email}
+      />
     </div>
   )
 }
