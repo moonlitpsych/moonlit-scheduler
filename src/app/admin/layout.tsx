@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { routeGuardManager } from '@/lib/route-guards'
 import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity, GitBranch, FileText, DollarSign } from 'lucide-react'
 import Link from 'next/link'
@@ -17,6 +17,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
@@ -55,6 +56,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.replace('/auth/login')
+  }
+
+  // Helper to determine if a nav item is active
+  const isActive = (path: string) => {
+    if (path === '/admin/patients') {
+      return pathname === path
+    }
+    return pathname?.startsWith(path)
+  }
+
+  // Helper to get nav link classes
+  const getNavLinkClasses = (path: string) => {
+    const baseClasses = "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors"
+    const activeClasses = "bg-[#BF9C73] text-white"
+    const inactiveClasses = "text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73]"
+
+    return `${baseClasses} ${isActive(path) ? activeClasses : inactiveClasses}`
   }
 
   if (loading) {
@@ -119,7 +137,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <nav className="p-4 space-y-2">
           <Link
             href="/admin/patients"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+            className={getNavLinkClasses('/admin/patients')}
           >
             <Users className="h-4 w-4" />
             <span>All Patients</span>
@@ -127,7 +145,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
           <Link
             href="/admin/partners"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+            className={getNavLinkClasses('/admin/partners')}
           >
             <Building2 className="h-4 w-4" />
             <span>Partner CRM</span>
@@ -136,7 +154,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
           <Link
             href="/admin/organizations"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+            className={getNavLinkClasses('/admin/organizations')}
           >
             <Building2 className="h-4 w-4" />
             <span>Organizations</span>
@@ -152,7 +170,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
           <Link
             href="/admin/payers"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+            className={getNavLinkClasses('/admin/payers')}
           >
             <Shield className="h-4 w-4" />
             <span>Payers</span>
@@ -160,7 +178,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
           <Link
             href="/admin/contracts"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+            className={getNavLinkClasses('/admin/contracts')}
           >
             <Activity className="h-4 w-4" />
             <span>Contracts</span>
@@ -169,7 +187,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
           <Link
             href="/admin/bookability"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+            className={getNavLinkClasses('/admin/bookability')}
           >
             <GitBranch className="h-4 w-4" />
             <span>Bookability</span>
@@ -177,15 +195,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
           <Link
             href="/admin/provider-credentialing"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+            className={getNavLinkClasses('/admin/provider-credentialing')}
           >
             <FileText className="h-4 w-4" />
             <span>Provider Credentialing</span>
           </Link>
 
           <Link
-            href="/admin/finance/appointments"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+            href="/admin/finance"
+            className={getNavLinkClasses('/admin/finance')}
           >
             <DollarSign className="h-4 w-4" />
             <span>Finance</span>
@@ -193,7 +211,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
           <Link
             href="/admin/analytics"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-[#091747]/70 hover:bg-[#BF9C73]/10 hover:text-[#BF9C73] transition-colors"
+            className={getNavLinkClasses('/admin/analytics')}
           >
             <BarChart3 className="h-4 w-4" />
             <span>Analytics</span>
