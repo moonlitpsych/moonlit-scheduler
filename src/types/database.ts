@@ -855,11 +855,8 @@ export type Database = {
           effective_date: string
           expiration_date: string | null
           id: string
-          network_id: string | null
-          network_notes: string | null
           notes: string | null
           payer_id: string
-          plan_id: string | null
           provider_id: string
           status: string | null
           updated_at: string | null
@@ -869,11 +866,8 @@ export type Database = {
           effective_date: string
           expiration_date?: string | null
           id?: string
-          network_id?: string | null
-          network_notes?: string | null
           notes?: string | null
           payer_id: string
-          plan_id?: string | null
           provider_id: string
           status?: string | null
           updated_at?: string | null
@@ -883,11 +877,8 @@ export type Database = {
           effective_date?: string
           expiration_date?: string | null
           id?: string
-          network_id?: string | null
-          network_notes?: string | null
           notes?: string | null
           payer_id?: string
-          plan_id?: string | null
           provider_id?: string
           status?: string | null
           updated_at?: string | null
@@ -912,6 +903,48 @@ export type Database = {
             columns: ["provider_id"]
             isOneToOne: false
             referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      provider_payer_accepted_plans: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          plan_id: string
+          provider_payer_network_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          plan_id: string
+          provider_payer_network_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          plan_id?: string
+          provider_payer_network_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_payer_accepted_plans_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "payer_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_payer_accepted_plans_provider_payer_network_id_fkey"
+            columns: ["provider_payer_network_id"]
+            isOneToOne: false
+            referencedRelation: "provider_payer_networks"
             referencedColumns: ["id"]
           },
         ]

@@ -136,6 +136,68 @@ try {
 
 ---
 
+## ✅ COMPLETED: Plan-Level Insurance Validation (Oct 31, 2025)
+
+**STATUS:** ✅ IN PRODUCTION - Junction table architecture for plan acceptance
+
+### What Was Built:
+
+**Problem:** System only validated payer-level contracts (e.g., "accepts Regence"), causing booking errors when patients had specific plans not covered by the contract (e.g., "SelectHealth Signature" when contract only covers "Choice, Care, Med, Value").
+
+**Solution:**
+- **Junction table**: `provider_payer_accepted_plans` links ONE contract to MULTIPLE accepted plans
+- **Plan resolution**: Maps messy insurance card strings to canonical plan IDs
+- **Validation on booking**: Trigger checks if provider's contract accepts patient's specific plan
+
+**Result:** ✅ Patients see accurate "we accept your plan" messaging; booking prevented if plan not covered
+
+### Key Architecture:
+
+**Tables (5 total):**
+1. `payer_networks` - Network definitions (e.g., "Regence BHPN", "SelectHealth Traditional")
+2. `payer_plans` - Specific plans (e.g., "SelectHealth Choice", "Aetna Signature PPO")
+3. `payer_plan_aliases` - Maps card strings → canonical plans (e.g., "AETNA CVS HEALTH" → Aetna Signature)
+4. `payer_plan_routing_ids` - Clearinghouse routing for claims
+5. **`provider_payer_accepted_plans`** - Junction: Links contract → accepted plans
+
+**Functions:**
+- `resolve_plan_name_to_id()` - Maps plan string to plan_id with confidence scoring
+- `does_provider_accept_plan()` - Validates provider contract accepts specific plan
+
+**Booking Trigger:**
+- Extracts `plan_name` from `appointments.insurance_info` JSONB
+- Validates against junction table
+- Falls back to payer-level if no plan specified (backward compatible)
+
+### Critical Design Rules:
+
+**❌ NEVER add `network_id` or `plan_id` to `provider_payer_networks`**
+- ONE contract row per provider-payer relationship
+- Use `provider_payer_accepted_plans` junction table to link contract → multiple plans
+- Keeps contract table clean and matches real-world legal contracts
+
+**Bookability vs Contracts:**
+- `provider_payer_networks` = Legal contracts
+- `v_bookable_provider_payer` view = Who CAN book (includes supervised relationships)
+- Plan validation uses junction table to check if bookable provider accepts specific plan
+
+### Migration Files:
+- `022-add-payer-network-and-plan-tables.sql` - 4 core tables
+- `026-seed-big3-payer-networks-and-plans.sql` - Regence/SelectHealth/Aetna seed data
+- `028-create-provider-payer-accepted-plans.sql` - Junction table
+- `029-create-plan-validation-functions.sql` - Plan resolution logic
+- `030-update-booking-trigger-for-plan-validation.sql` - Booking validation
+
+### API Changes:
+- `book/route.ts` - Accepts optional `planName` parameter, stores in `insurance_info.plan_name`
+
+### Patient Experience:
+- Patient enters: "I have SelectHealth Signature"
+- System checks: Does provider's SelectHealth contract include Signature plan?
+- Result: ✅ "We accept your plan, book here" OR ❌ "Your plan is not accepted with this provider"
+
+---
+
 ## ✅ COMPLETED: Provider Impersonation System (Oct 15, 2025)
 
 **STATUS:** ✅ READY FOR TESTING - Admin can view provider dashboards for support
