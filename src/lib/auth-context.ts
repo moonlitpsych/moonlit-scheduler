@@ -40,9 +40,10 @@ class AuthContextManager {
     }
 
     const availableRoles: UserRole[] = []
+    const userIsAdmin = isAdminEmail(user.email || '')
 
     // Check admin role
-    if (isAdminEmail(user.email || '')) {
+    if (userIsAdmin) {
       availableRoles.push({
         role: 'admin',
         hasAccess: true
@@ -64,10 +65,26 @@ class AuthContextManager {
           hasAccess: true,
           data: providerData
         })
+      } else if (userIsAdmin) {
+        // Admins can always access provider dashboard (via impersonation)
+        availableRoles.push({
+          role: 'provider',
+          hasAccess: true,
+          data: null
+        })
       }
     } catch (providerError) {
-      // Provider role not available
+      // Provider role not available for this user
       console.log('Provider role not found for user:', user.email)
+
+      // Admins can still access provider dashboard (via impersonation)
+      if (userIsAdmin) {
+        availableRoles.push({
+          role: 'provider',
+          hasAccess: true,
+          data: null
+        })
+      }
     }
 
     // Check partner role
@@ -98,10 +115,26 @@ class AuthContextManager {
           hasAccess: true,
           data: partnerData
         })
+      } else if (userIsAdmin) {
+        // Admins can always access partner dashboard (via impersonation)
+        availableRoles.push({
+          role: 'partner',
+          hasAccess: true,
+          data: null
+        })
       }
     } catch (partnerError) {
-      // Partner role not available
+      // Partner role not available for this user
       console.log('Partner role not found for user:', user.email)
+
+      // Admins can still access partner dashboard (via impersonation)
+      if (userIsAdmin) {
+        availableRoles.push({
+          role: 'partner',
+          hasAccess: true,
+          data: null
+        })
+      }
     }
 
     const canSwitchContext = availableRoles.length > 1
