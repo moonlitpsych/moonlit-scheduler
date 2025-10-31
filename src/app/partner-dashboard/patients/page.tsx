@@ -37,6 +37,7 @@ interface PatientWithDetails {
   phone?: string
   date_of_birth?: string
   status: string
+  engagement_status: string
   primary_provider_id?: string
   primary_provider?: {
     id: string
@@ -132,7 +133,7 @@ export default function PatientRosterPage() {
     patient: 200,
     status: 120,
     previous: 160,
-    next: 180,
+    next: 140,
     provider: 150,
     contact: 200,
     actions: 180
@@ -245,11 +246,11 @@ export default function PatientRosterPage() {
     // Apply type filter
     if (filterType === 'assigned' && !p.is_assigned_to_me) return false
     if (filterType === 'roi_missing' && p.affiliation.consent_status === 'active') return false
-    if (filterType === 'active_only' && p.status !== 'active') return false
+    if (filterType === 'active_only' && p.engagement_status !== 'active') return false
     if (filterType === 'no_future_appt' && p.next_appointment) return false
 
     // Apply engagement status filter (if not 'all')
-    if (engagementStatusFilter && engagementStatusFilter !== 'all' && p.status !== engagementStatusFilter) {
+    if (engagementStatusFilter && engagementStatusFilter !== 'all' && p.engagement_status !== engagementStatusFilter) {
       return false
     }
 
@@ -438,7 +439,7 @@ export default function PatientRosterPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600 font-['Newsreader']">Active</p>
                 <p className="text-2xl font-bold text-moonlit-navy mt-1">
-                  {patients.filter(p => p.status === 'active').length}
+                  {patients.filter(p => p.engagement_status === 'active').length}
                 </p>
               </div>
               <Activity className="w-8 h-8 text-green-600" />
@@ -560,7 +561,7 @@ export default function PatientRosterPage() {
                       />
                     </th>
                     <th style={{ width: columnWidths.status }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
+                      Engagement Status
                       <div
                         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
                         onMouseDown={(e) => handleMouseDown('status', e)}
@@ -629,21 +630,15 @@ export default function PatientRosterPage() {
                           </div>
                         </div>
                       </td>
-                      {/* 2. Status (ROI Consent) */}
+                      {/* 2. Engagement Status */}
                       <td style={{ width: columnWidths.status }} className="px-6 py-4 whitespace-nowrap">
-                        {patient.affiliation.consent_status === 'active' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                            ROI Active
-                          </span>
-                        ) : patient.affiliation.consent_status === 'expired' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                            ROI Expired
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                            No ROI
-                          </span>
-                        )}
+                        <button
+                          onClick={() => handleOpenChangeStatusModal(patient)}
+                          className="hover:opacity-80 transition-opacity"
+                          title="Click to change status"
+                        >
+                          <EngagementStatusChip status={patient.engagement_status} />
+                        </button>
                       </td>
                       {/* 3. Previous Appointment */}
                       <td style={{ width: columnWidths.previous }} className="px-6 py-4">
@@ -847,6 +842,16 @@ export default function PatientRosterPage() {
           isOpen={assignProviderModalOpen}
           onClose={handleCloseAssignProviderModal}
           onSuccess={handleAssignProviderSuccess}
+        />
+      )}
+
+      {/* Change Engagement Status Modal */}
+      {changeStatusPatient && (
+        <ChangeEngagementStatusModal
+          patient={changeStatusPatient}
+          isOpen={changeStatusModalOpen}
+          onClose={handleCloseChangeStatusModal}
+          onSuccess={handleChangeStatusSuccess}
         />
       )}
     </div>
