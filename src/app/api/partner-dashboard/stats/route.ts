@@ -22,13 +22,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Check for impersonation (admin viewing as partner)
+    const { searchParams } = new URL(request.url)
+    const partnerUserId = searchParams.get('partner_user_id')
+
     // Get partner user record
-    const { data: partnerUser, error: userError } = await supabaseAdmin
+    let partnerUserQuery = supabaseAdmin
       .from('partner_users')
       .select('id, organization_id, role, is_active')
-      .eq('auth_user_id', session.user.id)
       .eq('is_active', true)
-      .single()
+
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', session.user.id)
+    }
+
+    const { data: partnerUser, error: userError } = await partnerUserQuery.single()
 
     if (userError || !partnerUser) {
       return NextResponse.json(

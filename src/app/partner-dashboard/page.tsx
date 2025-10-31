@@ -81,11 +81,16 @@ export default function PartnerDashboardPage() {
             return
           }
 
-          setPartnerUser(userData.data)
+          partnerData = userData.data
+          setPartnerUser(partnerData)
         }
 
         // Fetch dashboard stats
-        const statsResponse = await fetch('/api/partner-dashboard/stats')
+        // If impersonating, pass the partner_user_id so API knows which partner to query
+        const statsUrl = impersonation
+          ? `/api/partner-dashboard/stats?partner_user_id=${partnerData.id}`
+          : '/api/partner-dashboard/stats'
+        const statsResponse = await fetch(statsUrl)
         if (statsResponse.ok) {
           const statsData = await statsResponse.json()
           if (statsData.success) {
