@@ -8,7 +8,6 @@
 import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { TransferPatientModal } from '@/components/partner-dashboard/TransferPatientModal'
 import { SendNotificationModal } from '@/components/partner-dashboard/SendNotificationModal'
 import { UploadROIModal } from '@/components/partner-dashboard/UploadROIModal'
@@ -389,7 +388,6 @@ export default function PatientRosterPage() {
 
   return (
     <div className="min-h-screen bg-moonlit-cream">
-      <PartnerHeader partnerUser={partnerUser} currentPage="patients" />
 
       <div className="container mx-auto px-4 py-8">
         {/* Page header */}

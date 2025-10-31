@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { DashboardStats } from '@/components/partner-dashboard/DashboardStats'
 import { UpcomingAppointments } from '@/components/partner-dashboard/UpcomingAppointments'
 import CalendarExport from '@/components/partner-dashboard/CalendarExport'
@@ -189,7 +188,6 @@ export default function PartnerDashboardPage() {
 
   return (
     <div className="min-h-screen bg-moonlit-cream">
-      <PartnerHeader partnerUser={partnerUser} currentPage="dashboard" />
       
       <div className="container mx-auto px-4 py-8">
         {/* Page header */}
