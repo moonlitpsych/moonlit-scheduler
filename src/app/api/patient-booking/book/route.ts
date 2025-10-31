@@ -45,6 +45,7 @@ interface IntakeBookingRequest {
     // Insurance enrichment fields for IntakeQ
     memberId?: string
     groupNumber?: string
+    planName?: string // V4.0: Plan name from 271 response or insurance card (for network resolution)
     // Partner referral tracking (V3.0)
     referralCode?: string // Partner user email or code
     referredByOrganizationId?: string // Organization ID (for Eddie referrals)
@@ -219,6 +220,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             notes,
             memberId,
             groupNumber,
+            planName,
             referralCode,
             referredByOrganizationId,
             referredByPartnerUserId
@@ -229,7 +231,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             hasMemberId: !!memberId,
             hasGroupNumber: !!groupNumber,
             memberIdLength: memberId?.length,
-            groupNumberLength: groupNumber?.length
+            groupNumberLength: groupNumber?.length,
+            hasPlanName: !!planName,
+            planName: planName || 'not provided'
         })
 
         // V3.0: Resolve referralCode to partner_user_id if provided
@@ -510,7 +514,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             },
             insurance_info: {
                 payer_id: payerId,
-                payer_name: payer.name
+                payer_name: payer.name,
+                plan_name: planName || null, // V4.0: Store plan name for network resolution
+                member_id: memberId || null,
+                group_number: groupNumber || null
             },
             notes: notes || '',
             booking_source: 'patient_portal',

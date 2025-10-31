@@ -405,6 +405,192 @@ export type Database = {
         }
         Relationships: []
       }
+      payer_networks: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          network_code: string | null
+          network_name: string
+          payer_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          network_code?: string | null
+          network_name: string
+          payer_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          network_code?: string | null
+          network_name?: string
+          payer_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payer_networks_payer_id_fkey"
+            columns: ["payer_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payer_plan_aliases: {
+        Row: {
+          alias_string: string
+          created_at: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          plan_id: string
+          priority: number
+          source: string
+        }
+        Insert: {
+          alias_string: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          plan_id: string
+          priority?: number
+          source: string
+        }
+        Update: {
+          alias_string?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          plan_id?: string
+          priority?: number
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payer_plan_aliases_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "payer_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payer_plan_routing_ids: {
+        Row: {
+          clearinghouse: string
+          created_at: string
+          id: string
+          id_type: string
+          is_active: boolean
+          notes: string | null
+          plan_id: string
+          routing_id: string
+          updated_at: string
+        }
+        Insert: {
+          clearinghouse: string
+          created_at?: string
+          id?: string
+          id_type: string
+          is_active?: boolean
+          notes?: string | null
+          plan_id: string
+          routing_id: string
+          updated_at?: string
+        }
+        Update: {
+          clearinghouse?: string
+          created_at?: string
+          id?: string
+          id_type?: string
+          is_active?: boolean
+          notes?: string | null
+          plan_id?: string
+          routing_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payer_plan_routing_ids_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "payer_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payer_plans: {
+        Row: {
+          created_at: string
+          effective_date: string | null
+          expiration_date: string | null
+          id: string
+          is_active: boolean
+          is_default: boolean
+          network_id: string | null
+          notes: string | null
+          payer_id: string
+          plan_name: string
+          plan_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          effective_date?: string | null
+          expiration_date?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          network_id?: string | null
+          notes?: string | null
+          payer_id: string
+          plan_name: string
+          plan_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          effective_date?: string | null
+          expiration_date?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          network_id?: string | null
+          notes?: string | null
+          payer_id?: string
+          plan_name?: string
+          plan_type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payer_plans_network_id_fkey"
+            columns: ["network_id"]
+            isOneToOne: false
+            referencedRelation: "payer_networks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payer_plans_payer_id_fkey"
+            columns: ["payer_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pos_location: {
         Row: {
           code: string
@@ -669,8 +855,11 @@ export type Database = {
           effective_date: string
           expiration_date: string | null
           id: string
+          network_id: string | null
+          network_notes: string | null
           notes: string | null
           payer_id: string
+          plan_id: string | null
           provider_id: string
           status: string | null
           updated_at: string | null
@@ -680,8 +869,11 @@ export type Database = {
           effective_date: string
           expiration_date?: string | null
           id?: string
+          network_id?: string | null
+          network_notes?: string | null
           notes?: string | null
           payer_id: string
+          plan_id?: string | null
           provider_id: string
           status?: string | null
           updated_at?: string | null
@@ -691,8 +883,11 @@ export type Database = {
           effective_date?: string
           expiration_date?: string | null
           id?: string
+          network_id?: string | null
+          network_notes?: string | null
           notes?: string | null
           payer_id?: string
+          plan_id?: string | null
           provider_id?: string
           status?: string | null
           updated_at?: string | null
