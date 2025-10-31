@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
               start_time: block.start_time,
               end_time: block.end_time,
               is_recurring: true,
+              timezone: 'America/Denver',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
