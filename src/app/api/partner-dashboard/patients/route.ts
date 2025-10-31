@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = (page - 1) * limit
+    const partnerUserId = searchParams.get('partner_user_id') // For admin impersonation
 
     // Get authenticated user
     const cookieStore = await cookies()
@@ -45,12 +46,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Get partner user record
-    const { data: partnerUser, error: userError } = await supabaseAdmin
+    let partnerUserQuery = supabaseAdmin
       .from('partner_users')
       .select('id, organization_id, role, is_active')
-      .eq('auth_user_id', session.user.id)
       .eq('is_active', true)
-      .single()
+
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', session.user.id)
+    }
+
+    const { data: partnerUser, error: userError } = await partnerUserQuery.single()
 
     if (userError || !partnerUser) {
       return NextResponse.json(
@@ -148,6 +157,10 @@ export async function GET(request: NextRequest) {
             id,
             first_name,
             last_name
+          ),
+          patient_engagement_status (
+            status,
+            updated_at
           )
         )
       `)
@@ -276,37 +289,43 @@ export async function GET(request: NextRequest) {
     }, {} as Record<string, any>)
 
     // Format response
-    const patientsWithDetails = affiliations?.map(affiliation => ({
-      ...affiliation.patients,
-      // Provider is now included in the main query
-      affiliation: {
-        id: affiliation.id,
-        affiliation_type: affiliation.affiliation_type,
-        start_date: affiliation.start_date,
-        consent_on_file: affiliation.consent_on_file,
-        consent_expires_on: affiliation.consent_expires_on,
-        consent_status: affiliation.consent_on_file
-          ? (affiliation.consent_expires_on && new Date(affiliation.consent_expires_on) < new Date()
-            ? 'expired'
-            : 'active')
-          : 'missing',
-        primary_contact_user_id: affiliation.primary_contact_user_id,
-        status: affiliation.status
-      },
-      is_assigned_to_me: assignedPatientIds.has(affiliation.patient_id),
-      current_assignment: assignmentsByPatient[affiliation.patient_id] || null,
-      previous_appointment: previousAppointmentsByPatient[affiliation.patient_id] || null,
-      next_appointment: appointmentsByPatient[affiliation.patient_id]?.[0] || null,
-      upcoming_appointment_count: appointmentsByPatient[affiliation.patient_id]?.length || 0
-    })) || []
+    const patientsWithDetails = affiliations?.map(affiliation => {
+      // Extract engagement status correctly (it's a single object, not an array)
+      const engagementStatus = affiliation.patients.patient_engagement_status?.status || 'active'
+
+      return {
+        ...affiliation.patients,
+        engagement_status: engagementStatus,
+        // Provider is now included in the main query
+        affiliation: {
+          id: affiliation.id,
+          affiliation_type: affiliation.affiliation_type,
+          start_date: affiliation.start_date,
+          consent_on_file: affiliation.consent_on_file,
+          consent_expires_on: affiliation.consent_expires_on,
+          consent_status: affiliation.consent_on_file
+            ? (affiliation.consent_expires_on && new Date(affiliation.consent_expires_on) < new Date()
+              ? 'expired'
+              : 'active')
+            : 'missing',
+          primary_contact_user_id: affiliation.primary_contact_user_id,
+          status: affiliation.status
+        },
+        is_assigned_to_me: assignedPatientIds.has(affiliation.patient_id),
+        current_assignment: assignmentsByPatient[affiliation.patient_id] || null,
+        previous_appointment: previousAppointmentsByPatient[affiliation.patient_id] || null,
+        next_appointment: appointmentsByPatient[affiliation.patient_id]?.[0] || null,
+        upcoming_appointment_count: appointmentsByPatient[affiliation.patient_id]?.length || 0
+      }
+    }) || []
 
     // Debug logging
-    console.log('📊 Provider assignments being returned:')
+    console.log('📊 Provider assignments and engagement statuses being returned:')
     patientsWithDetails.forEach(p => {
       const providerInfo = p.primary_provider
         ? `Dr. ${p.primary_provider.first_name} ${p.primary_provider.last_name}`
         : 'NULL'
-      console.log(`   ${p.first_name} ${p.last_name} → ${providerInfo}`)
+      console.log(`   ${p.first_name} ${p.last_name} → ${providerInfo} [Status: ${p.engagement_status}]`)
     })
 
     const totalPages = Math.ceil((totalCount || 0) / limit)

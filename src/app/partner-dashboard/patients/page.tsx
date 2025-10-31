@@ -8,7 +8,6 @@
 import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { TransferPatientModal } from '@/components/partner-dashboard/TransferPatientModal'
 import { SendNotificationModal } from '@/components/partner-dashboard/SendNotificationModal'
 import { UploadROIModal } from '@/components/partner-dashboard/UploadROIModal'
@@ -19,9 +18,10 @@ import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/Chan
 import SyncAppointmentsButton from '@/components/partner-dashboard/SyncAppointmentsButton'
 import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
 import AppointmentLocationDisplay from '@/components/partner-dashboard/AppointmentLocationDisplay'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
-import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity, Download, RotateCcw } from 'lucide-react'
+import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity, Download, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import Link from 'next/link'
 import { useResizableColumns } from '@/hooks/useResizableColumns'
 import { exportToCSV, formatDateForCSV, formatRelativeTime } from '@/utils/csvExport'
@@ -37,6 +37,7 @@ interface PatientWithDetails {
   phone?: string
   date_of_birth?: string
   status: string
+  engagement_status: string
   primary_provider_id?: string
   primary_provider?: {
     id: string
@@ -89,23 +90,44 @@ interface PatientWithDetails {
   upcoming_appointment_count: number
 }
 
+type SortColumn = 'name' | 'status' | 'previous' | 'next' | 'provider' | 'contact'
+type SortDirection = 'asc' | 'desc' | null
+
 export default function PatientRosterPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'assigned' | 'roi_missing' | 'active_only' | 'no_future_appt'>('all')
   const [engagementStatusFilter, setEngagementStatusFilter] = useState<string>('active')
 
+  // Sort state
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null)
+
   // Pagination state
   const [page, setPage] = useState(1)
   const [allPatients, setAllPatients] = useState<PatientWithDetails[]>([])
 
+  // Check for admin impersonation
+  const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+  const impersonatedPartnerId = impersonation?.partner.id
+
   // Use SWR for data fetching with caching
-  const { data: partnerData, error: partnerError } = useSWR('/api/partner/me', fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 300000, // 5 minutes
-  })
+  // Skip fetching partner/me if admin is impersonating (we already have the data)
+  const { data: partnerData, error: partnerError } = useSWR(
+    impersonation ? null : '/api/partner/me',
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 300000, // 5 minutes
+    }
+  )
+
+  // Build patients API URL with impersonation support
+  const patientsUrl = impersonatedPartnerId
+    ? `/api/partner-dashboard/patients?page=${page}&limit=20&partner_user_id=${impersonatedPartnerId}`
+    : `/api/partner-dashboard/patients?page=${page}&limit=20`
 
   const { data: patientsData, error: patientsError, mutate } = useSWR(
-    `/api/partner-dashboard/patients?page=${page}&limit=20`,
+    patientsUrl,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -120,7 +142,20 @@ export default function PatientRosterPage() {
     }
   )
 
-  const partnerUser = partnerData?.success ? partnerData.data : null
+  // Use impersonated partner data if admin is viewing, otherwise use fetched data
+  const partnerUser = impersonation
+    ? {
+        id: impersonation.partner.id,
+        auth_user_id: impersonation.partner.auth_user_id,
+        organization_id: impersonation.partner.organization_id,
+        full_name: impersonation.partner.full_name,
+        email: impersonation.partner.email,
+        phone: impersonation.partner.phone,
+        role: impersonation.partner.role,
+        status: impersonation.partner.is_active ? 'active' : 'inactive'
+      } as PartnerUser
+    : (partnerData?.success ? partnerData.data : null)
+
   const patients = patientsData?.success ? allPatients : []
   const totalCount = patientsData?.data?.pagination?.total || 0
   const hasMore = patientsData?.data?.pagination?.hasMore || false
@@ -132,7 +167,7 @@ export default function PatientRosterPage() {
     patient: 200,
     status: 120,
     previous: 160,
-    next: 180,
+    next: 140,
     provider: 150,
     contact: 200,
     actions: 180
@@ -140,7 +175,7 @@ export default function PatientRosterPage() {
 
   // CSV Export function
   const handleExportCSV = () => {
-    const csvData = filteredPatients.map(patient => ({
+    const csvData = sortedPatients.map(patient => ({
       name: `${patient.first_name} ${patient.last_name}`,
       email: patient.email || '',
       phone: patient.phone || '',
@@ -240,16 +275,44 @@ export default function PatientRosterPage() {
     }
   }
 
+  // Handle column sort
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      // Cycle through: asc -> desc -> null (unsorted)
+      if (sortDirection === 'asc') {
+        setSortDirection('desc')
+      } else if (sortDirection === 'desc') {
+        setSortDirection(null)
+        setSortColumn(null)
+      }
+    } else {
+      // New column, start with ascending
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  // Get sort icon for column header
+  const getSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+    }
+    if (sortDirection === 'asc') {
+      return <ArrowUp className="w-4 h-4 text-moonlit-brown" />
+    }
+    return <ArrowDown className="w-4 h-4 text-moonlit-brown" />
+  }
+
   // Filter and search patients (client-side filtering)
   const filteredPatients = patients.filter(p => {
     // Apply type filter
     if (filterType === 'assigned' && !p.is_assigned_to_me) return false
     if (filterType === 'roi_missing' && p.affiliation.consent_status === 'active') return false
-    if (filterType === 'active_only' && p.status !== 'active') return false
+    if (filterType === 'active_only' && p.engagement_status !== 'active') return false
     if (filterType === 'no_future_appt' && p.next_appointment) return false
 
     // Apply engagement status filter (if not 'all')
-    if (engagementStatusFilter && engagementStatusFilter !== 'all' && p.status !== engagementStatusFilter) {
+    if (engagementStatusFilter && engagementStatusFilter !== 'all' && p.engagement_status !== engagementStatusFilter) {
       return false
     }
 
@@ -264,6 +327,47 @@ export default function PatientRosterPage() {
     }
 
     return true
+  })
+
+  // Sort patients after filtering
+  const sortedPatients = [...filteredPatients].sort((a, b) => {
+    if (!sortColumn || !sortDirection) return 0
+
+    let aValue: any
+    let bValue: any
+
+    switch (sortColumn) {
+      case 'name':
+        aValue = `${a.first_name} ${a.last_name}`.toLowerCase()
+        bValue = `${b.first_name} ${b.last_name}`.toLowerCase()
+        break
+      case 'status':
+        aValue = a.engagement_status
+        bValue = b.engagement_status
+        break
+      case 'previous':
+        aValue = a.previous_appointment?.start_time ? new Date(a.previous_appointment.start_time).getTime() : 0
+        bValue = b.previous_appointment?.start_time ? new Date(b.previous_appointment.start_time).getTime() : 0
+        break
+      case 'next':
+        aValue = a.next_appointment?.start_time ? new Date(a.next_appointment.start_time).getTime() : Number.MAX_SAFE_INTEGER
+        bValue = b.next_appointment?.start_time ? new Date(b.next_appointment.start_time).getTime() : Number.MAX_SAFE_INTEGER
+        break
+      case 'provider':
+        aValue = a.primary_provider ? `${a.primary_provider.first_name} ${a.primary_provider.last_name}`.toLowerCase() : ''
+        bValue = b.primary_provider ? `${b.primary_provider.first_name} ${b.primary_provider.last_name}`.toLowerCase() : ''
+        break
+      case 'contact':
+        aValue = (a.email || a.phone || '').toLowerCase()
+        bValue = (b.email || b.phone || '').toLowerCase()
+        break
+      default:
+        return 0
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
+    return 0
   })
 
   const formatDate = (dateString: string) => {
@@ -388,7 +492,6 @@ export default function PatientRosterPage() {
 
   return (
     <div className="min-h-screen bg-moonlit-cream">
-      <PartnerHeader partnerUser={partnerUser} currentPage="patients" />
 
       <div className="container mx-auto px-4 py-8">
         {/* Page header */}
@@ -438,7 +541,7 @@ export default function PatientRosterPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600 font-['Newsreader']">Active</p>
                 <p className="text-2xl font-bold text-moonlit-navy mt-1">
-                  {patients.filter(p => p.status === 'active').length}
+                  {patients.filter(p => p.engagement_status === 'active').length}
                 </p>
               </div>
               <Activity className="w-8 h-8 text-green-600" />
@@ -540,7 +643,7 @@ export default function PatientRosterPage() {
 
         {/* Patient list */}
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          {filteredPatients.length === 0 ? (
+          {sortedPatients.length === 0 ? (
             <div className="p-12 text-center">
               <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 font-['Newsreader']">
@@ -553,42 +656,78 @@ export default function PatientRosterPage() {
                 <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                   <tr>
                     <th style={{ width: columnWidths.patient }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Patient
+                      <button
+                        onClick={() => handleSort('name')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Patient
+                        {getSortIcon('name')}
+                      </button>
                       <div
                         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
                         onMouseDown={(e) => handleMouseDown('patient', e)}
                       />
                     </th>
                     <th style={{ width: columnWidths.status }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
+                      <button
+                        onClick={() => handleSort('status')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Engagement Status
+                        {getSortIcon('status')}
+                      </button>
                       <div
                         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
                         onMouseDown={(e) => handleMouseDown('status', e)}
                       />
                     </th>
                     <th style={{ width: columnWidths.previous }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Previous Appointment
+                      <button
+                        onClick={() => handleSort('previous')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Previous Appointment
+                        {getSortIcon('previous')}
+                      </button>
                       <div
                         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
                         onMouseDown={(e) => handleMouseDown('previous', e)}
                       />
                     </th>
                     <th style={{ width: columnWidths.next }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Next Appointment
+                      <button
+                        onClick={() => handleSort('next')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Next Appointment
+                        {getSortIcon('next')}
+                      </button>
                       <div
                         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
                         onMouseDown={(e) => handleMouseDown('next', e)}
                       />
                     </th>
                     <th style={{ width: columnWidths.provider }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Provider
+                      <button
+                        onClick={() => handleSort('provider')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Provider
+                        {getSortIcon('provider')}
+                      </button>
                       <div
                         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
                         onMouseDown={(e) => handleMouseDown('provider', e)}
                       />
                     </th>
                     <th style={{ width: columnWidths.contact }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact
+                      <button
+                        onClick={() => handleSort('contact')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Contact
+                        {getSortIcon('contact')}
+                      </button>
                       <div
                         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown"
                         onMouseDown={(e) => handleMouseDown('contact', e)}
@@ -604,7 +743,7 @@ export default function PatientRosterPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredPatients.map((patient) => (
+                  {sortedPatients.map((patient) => (
                     <tr key={patient.id} className="hover:bg-gray-50">
                       {/* 1. Patient */}
                       <td style={{ width: columnWidths.patient }} className="px-6 py-4 whitespace-nowrap">
@@ -629,21 +768,15 @@ export default function PatientRosterPage() {
                           </div>
                         </div>
                       </td>
-                      {/* 2. Status (ROI Consent) */}
+                      {/* 2. Engagement Status */}
                       <td style={{ width: columnWidths.status }} className="px-6 py-4 whitespace-nowrap">
-                        {patient.affiliation.consent_status === 'active' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                            ROI Active
-                          </span>
-                        ) : patient.affiliation.consent_status === 'expired' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                            ROI Expired
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                            No ROI
-                          </span>
-                        )}
+                        <button
+                          onClick={() => handleOpenChangeStatusModal(patient)}
+                          className="hover:opacity-80 transition-opacity"
+                          title="Click to change status"
+                        >
+                          <EngagementStatusChip status={patient.engagement_status} />
+                        </button>
                       </td>
                       {/* 3. Previous Appointment */}
                       <td style={{ width: columnWidths.previous }} className="px-6 py-4">
@@ -847,6 +980,16 @@ export default function PatientRosterPage() {
           isOpen={assignProviderModalOpen}
           onClose={handleCloseAssignProviderModal}
           onSuccess={handleAssignProviderSuccess}
+        />
+      )}
+
+      {/* Change Engagement Status Modal */}
+      {changeStatusPatient && (
+        <ChangeEngagementStatusModal
+          patient={changeStatusPatient}
+          isOpen={changeStatusModalOpen}
+          onClose={handleCloseChangeStatusModal}
+          onSuccess={handleChangeStatusSuccess}
         />
       )}
     </div>

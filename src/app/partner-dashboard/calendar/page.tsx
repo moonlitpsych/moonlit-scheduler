@@ -7,7 +7,6 @@
 
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
 import { Calendar, Copy, RefreshCw, Check, ExternalLink, AlertCircle } from 'lucide-react'
@@ -124,7 +123,6 @@ export default function CalendarSubscriptionPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-moonlit-cream">
-        <PartnerHeader partnerUser={partnerUser} currentPage="calendar" />
         <div className="container mx-auto px-4 py-8">
           <div className="animate-pulse">
             <div className="h-8 bg-gray-200 rounded mb-4 w-1/3"></div>
@@ -137,7 +135,6 @@ export default function CalendarSubscriptionPage() {
 
   return (
     <div className="min-h-screen bg-moonlit-cream">
-      <PartnerHeader partnerUser={partnerUser} currentPage="calendar" />
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Page header */}

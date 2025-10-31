@@ -3,12 +3,12 @@
 
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { DashboardStats } from '@/components/partner-dashboard/DashboardStats'
 import { UpcomingAppointments } from '@/components/partner-dashboard/UpcomingAppointments'
 import CalendarExport from '@/components/partner-dashboard/CalendarExport'
 import { PartnerDashboardData, PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 
 export default function PartnerDashboardPage() {
   const [partnerUser, setPartnerUser] = useState<PartnerUser | null>(null)
@@ -21,47 +21,81 @@ export default function PartnerDashboardPage() {
     const fetchData = async () => {
       try {
         setLoading(true)
-        
+
         // Get authenticated user from Supabase
         const supabase = createClientComponentClient<Database>()
         const { data: { user } } = await supabase.auth.getUser()
-        
+
         if (!user) {
           setError('Partner authentication required. Please sign in to access your dashboard.')
           return
         }
-        
-        // Fetch partner user data using the authenticated user's ID
-        const userResponse = await fetch('/api/partner/me', {
-          headers: {
-            'x-partner-user-id': user.id
+
+        // Check for impersonation context first
+        const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+
+        let partnerData: PartnerUser
+
+        if (impersonation) {
+          // Admin is impersonating - use impersonated partner data
+          const nameParts = impersonation.partner.full_name?.split(' ') || ['', '']
+          partnerData = {
+            id: impersonation.partner.id,
+            auth_user_id: impersonation.partner.auth_user_id,
+            organization_id: impersonation.partner.organization_id,
+            first_name: nameParts[0] || '',
+            last_name: nameParts.slice(1).join(' ') || '',
+            full_name: impersonation.partner.full_name,
+            email: impersonation.partner.email,
+            phone: impersonation.partner.phone,
+            role: impersonation.partner.role,
+            status: impersonation.partner.is_active ? 'active' : 'inactive',
+            timezone: 'America/Denver',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            organization: impersonation.partner.organization,
+            permissions: {},
+            organization_stats: undefined
           }
-        })
-        
-        if (!userResponse.ok) {
-          if (userResponse.status === 404) {
-            setError('This account does not have partner access. Please check your credentials or contact hello@trymoonlit.com for access.')
-          } else {
-            setError('Failed to load partner user data. Please try again.')
+          setPartnerUser(partnerData)
+        } else {
+          // Regular partner user - fetch from API
+          const userResponse = await fetch('/api/partner/me', {
+            headers: {
+              'x-partner-user-id': user.id
+            }
+          })
+
+          if (!userResponse.ok) {
+            if (userResponse.status === 404) {
+              setError('This account does not have partner access. Please check your credentials or contact hello@trymoonlit.com for access.')
+            } else {
+              setError('Failed to load partner user data. Please try again.')
+            }
+            return
           }
-          return
+
+          const userData = await userResponse.json()
+          if (!userData.success) {
+            setError(userData.error || 'Failed to load user data')
+            return
+          }
+
+          partnerData = userData.data
+          setPartnerUser(partnerData)
         }
-        
-        const userData = await userResponse.json()
-        if (!userData.success) {
-          setError(userData.error || 'Failed to load user data')
-          return
-        }
-        
-        setPartnerUser(userData.data)
 
         // Fetch dashboard stats
-        const statsResponse = await fetch('/api/partner-dashboard/stats')
+        // If impersonating, pass the partner_user_id so API knows which partner to query
+        const statsUrl = impersonation
+          ? `/api/partner-dashboard/stats?partner_user_id=${partnerData.id}`
+          : '/api/partner-dashboard/stats'
+        const statsResponse = await fetch(statsUrl)
         if (statsResponse.ok) {
           const statsData = await statsResponse.json()
           if (statsData.success) {
             setDashboardData({
-              upcoming_appointments: [],
+              upcoming_appointments: statsData.data.upcoming_appointments || [],
               my_assigned_patients: [],
               recent_changes: [],
               organization_stats: statsData.data.organization_stats
@@ -189,7 +223,6 @@ export default function PartnerDashboardPage() {
 
   return (
     <div className="min-h-screen bg-moonlit-cream">
-      <PartnerHeader partnerUser={partnerUser} currentPage="dashboard" />
       
       <div className="container mx-auto px-4 py-8">
         {/* Page header */}

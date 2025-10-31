@@ -2,17 +2,20 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Settings, UserCheck, LogOut, RefreshCcw } from 'lucide-react'
+import { ChevronDown, Settings, UserCheck, LogOut, RefreshCcw, Key, Building2 } from 'lucide-react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
 import { authContextManager, UserContext, AuthContextData } from '@/lib/auth-context'
 import { providerImpersonationManager } from '@/lib/provider-impersonation'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import { isAdminEmail } from '@/lib/admin-auth'
+import { AccountSettingsModal } from '@/components/shared/AccountSettingsModal'
 
 export default function ContextSwitcher() {
   const [authContext, setAuthContext] = useState<AuthContextData | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [switching, setSwitching] = useState(false)
+  const [isAccountSettingsOpen, setIsAccountSettingsOpen] = useState(false)
   const router = useRouter()
   const supabase = createClientComponentClient<Database>()
 
@@ -42,10 +45,17 @@ export default function ContextSwitcher() {
       if (newContext === 'provider' && authContext.user && isAdminEmail(authContext.user.email || '')) {
         // Clear any existing impersonation
         providerImpersonationManager.clearImpersonation()
+        partnerImpersonationManager.clearImpersonation()
         router.push('/dashboard/select-provider')
+      } else if (newContext === 'partner' && authContext.user && isAdminEmail(authContext.user.email || '')) {
+        // If switching to partner dashboard and user is admin, route to partner selector
+        providerImpersonationManager.clearImpersonation()
+        partnerImpersonationManager.clearImpersonation()
+        router.push('/partner-dashboard/select-partner')
       } else if (newContext === 'admin') {
         // Clear impersonation when switching back to admin
         providerImpersonationManager.clearImpersonation()
+        partnerImpersonationManager.clearImpersonation()
         const route = authContextManager.getDashboardRoute(newContext)
         router.push(route)
       } else {
@@ -87,11 +97,22 @@ export default function ContextSwitcher() {
 
         {isOpen && (
           <>
-            <div 
-              className="fixed inset-0 z-10" 
+            <div
+              className="fixed inset-0 z-10"
               onClick={() => setIsOpen(false)}
             />
             <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-stone-200 py-2 z-20">
+              <button
+                onClick={() => {
+                  setIsAccountSettingsOpen(true)
+                  setIsOpen(false)
+                }}
+                className="w-full flex items-center px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+              >
+                <Key className="w-4 h-4 mr-3" />
+                Account Settings
+              </button>
+              <div className="border-t border-stone-100 my-1" />
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
@@ -102,6 +123,13 @@ export default function ContextSwitcher() {
             </div>
           </>
         )}
+
+        {/* Account Settings Modal */}
+        <AccountSettingsModal
+          isOpen={isAccountSettingsOpen}
+          onClose={() => setIsAccountSettingsOpen(false)}
+          userEmail={authContext?.user?.email}
+        />
       </div>
     )
   }
@@ -115,6 +143,8 @@ export default function ContextSwitcher() {
         return <Settings className="w-4 h-4" />
       case 'provider':
         return <UserCheck className="w-4 h-4" />
+      case 'partner':
+        return <Building2 className="w-4 h-4" />
       default:
         return null
     }
@@ -126,6 +156,8 @@ export default function ContextSwitcher() {
         return 'Admin Dashboard'
       case 'provider':
         return 'Provider Dashboard'
+      case 'partner':
+        return 'Partner Dashboard'
       default:
         return role
     }
@@ -196,6 +228,19 @@ export default function ContextSwitcher() {
               </>
             )}
 
+            {/* Account Settings */}
+            <button
+              onClick={() => {
+                setIsAccountSettingsOpen(true)
+                setIsOpen(false)
+              }}
+              className="w-full flex items-center px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+            >
+              <Key className="w-4 h-4 mr-3" />
+              Account Settings
+            </button>
+            <div className="border-t border-stone-100" />
+
             {/* Logout */}
             <button
               onClick={handleLogout}
@@ -207,6 +252,13 @@ export default function ContextSwitcher() {
           </div>
         </>
       )}
+
+      {/* Account Settings Modal */}
+      <AccountSettingsModal
+        isOpen={isAccountSettingsOpen}
+        onClose={() => setIsAccountSettingsOpen(false)}
+        userEmail={authContext?.user?.email}
+      />
     </div>
   )
 }

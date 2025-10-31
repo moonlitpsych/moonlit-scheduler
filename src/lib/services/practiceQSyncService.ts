@@ -94,10 +94,10 @@ class PracticeQSyncService {
   ): Promise<SyncResult> {
     const warnings: string[] = []
 
-    // 1. Get patient info
+    // 1. Get patient info (including alternate emails)
     const { data: patient, error: patientError } = await supabaseAdmin
       .from('patients')
-      .select('id, first_name, last_name, email')
+      .select('id, first_name, last_name, email, alternate_emails')
       .eq('id', patientId)
       .single()
 
@@ -109,7 +109,10 @@ class PracticeQSyncService {
       throw new Error(`Patient ${patientId} has no email address`)
     }
 
-    console.log(`🔄 [PracticeQ Sync] Starting sync for ${patient.first_name} ${patient.last_name} (${patient.email})`)
+    // Get all emails for this patient (primary + alternates)
+    const allEmails = this.getAllPatientEmails(patient)
+    console.log(`🔄 [PracticeQ Sync] Starting sync for ${patient.first_name} ${patient.last_name}`)
+    console.log(`📧 [PracticeQ Sync] Checking ${allEmails.length} email(s): ${allEmails.join(', ')}`)
 
     // 2. Verify patient is affiliated with organization (skip for admin/provider sync)
     if (organizationId) {
@@ -139,18 +142,45 @@ class PracticeQSyncService {
 
     console.log(`📅 [PracticeQ Sync] Date range: ${startDate} to ${endDate}`)
 
-    // 4. Fetch appointments from IntakeQ
-    let intakeqAppointments: IntakeQAppointment[]
-    try {
-      // IntakeQ API: GET /appointments?client={email}&startDate={date}&endDate={date}
-      const response = await intakeQService.makeRequest<IntakeQAppointment[]>(
-        `/appointments?client=${encodeURIComponent(patient.email)}&startDate=${startDate}&endDate=${endDate}`
-      )
-      intakeqAppointments = response || []
-      console.log(`📥 [PracticeQ Sync] Fetched ${intakeqAppointments.length} appointments from IntakeQ`)
-    } catch (error: any) {
-      console.error('❌ [PracticeQ Sync] Failed to fetch from IntakeQ:', error.message)
-      throw new Error(`Failed to fetch appointments from PracticeQ: ${error.message}`)
+    // 4. Fetch appointments from IntakeQ for ALL patient emails
+    let intakeqAppointments: IntakeQAppointment[] = []
+    const appointmentsByEmail: Map<string, IntakeQAppointment[]> = new Map()
+
+    for (const email of allEmails) {
+      try {
+        console.log(`📧 [PracticeQ Sync] Querying IntakeQ for email: ${email}`)
+        // IntakeQ API: GET /appointments?client={email}&startDate={date}&endDate={date}
+        const response = await intakeQService.makeRequest<IntakeQAppointment[]>(
+          `/appointments?client=${encodeURIComponent(email)}&startDate=${startDate}&endDate=${endDate}`
+        )
+        const appointments = response || []
+        console.log(`📥 [PracticeQ Sync] Found ${appointments.length} appointment(s) for ${email}`)
+
+        if (appointments.length > 0) {
+          appointmentsByEmail.set(email, appointments)
+          intakeqAppointments.push(...appointments)
+        }
+      } catch (error: any) {
+        console.warn(`⚠️ [PracticeQ Sync] Failed to fetch appointments for ${email}:`, error.message)
+        // Continue trying other emails instead of failing completely
+      }
+    }
+
+    // Deduplicate appointments by IntakeQ appointment ID
+    const uniqueAppointments = new Map<string, IntakeQAppointment>()
+    for (const appt of intakeqAppointments) {
+      if (!uniqueAppointments.has(appt.Id)) {
+        uniqueAppointments.set(appt.Id, appt)
+      }
+    }
+    intakeqAppointments = Array.from(uniqueAppointments.values())
+
+    console.log(`📥 [PracticeQ Sync] Total unique appointments found: ${intakeqAppointments.length}`)
+    if (appointmentsByEmail.size > 0) {
+      console.log(`📧 [PracticeQ Sync] Breakdown by email:`)
+      appointmentsByEmail.forEach((appts, email) => {
+        console.log(`   - ${email}: ${appts.length} appointment(s)`)
+      })
     }
 
     // 5. Process each appointment
@@ -770,6 +800,36 @@ class PracticeQSyncService {
     }
 
     return null
+  }
+
+  /**
+   * Get all email addresses for a patient (primary + alternates)
+   * Used for querying IntakeQ when patient has multiple emails
+   */
+  private getAllPatientEmails(patient: { email: string; alternate_emails?: any }): string[] {
+    const emails: string[] = [patient.email] // Always start with primary email
+
+    // Add alternate emails if they exist
+    if (patient.alternate_emails) {
+      try {
+        // alternate_emails is a JSONB array, so it could be parsed or raw
+        const alternates = Array.isArray(patient.alternate_emails)
+          ? patient.alternate_emails
+          : JSON.parse(patient.alternate_emails)
+
+        if (Array.isArray(alternates)) {
+          for (const email of alternates) {
+            if (email && typeof email === 'string' && email.trim() && !emails.includes(email.trim())) {
+              emails.push(email.trim())
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ [PracticeQ Sync] Failed to parse alternate_emails:', error)
+      }
+    }
+
+    return emails
   }
 
   /**

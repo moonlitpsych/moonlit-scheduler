@@ -729,6 +729,41 @@ To sync multiple ROI contacts to IntakeQ, refactor to loop through array and con
 
 ---
 
+## 📧 Handling Duplicate Patient Records (Oct 31, 2025)
+
+**Problem:** Patients sometimes change their email after intake, creating duplicate records when they book again with the new email.
+
+**Prevention (Migration 007):**
+- Added `alternate_emails` JSONB column to `patients` table
+- PracticeQ sync service now queries IntakeQ for ALL patient emails (primary + alternates)
+- When a patient changes email:
+  1. Update `patients.email` to new address
+  2. Add old email to `patients.alternate_emails` array: `'["old@email.com"]'::jsonb`
+  3. Sync will find appointments under either email
+
+**Resolution (When Duplicates Exist):**
+
+Manual SQL merge is appropriate for rare cases. See `/database-migrations/merge-matthew-reese-records-v2.sql` as template.
+
+**Key steps:**
+1. Identify canonical record (check `patient_organization_affiliations`)
+2. Update canonical record's email and add old email to `alternate_emails`
+3. **Disable bookability triggers** before moving appointments:
+   ```sql
+   ALTER TABLE appointments DISABLE TRIGGER check_bookable_provider_payer;
+   ALTER TABLE appointments DISABLE TRIGGER enforce_bookable_provider_payer;
+   ```
+4. Move appointments: `UPDATE appointments SET patient_id = 'canonical-id' WHERE patient_id = 'duplicate-id'`
+5. **Re-enable triggers**
+6. Delete duplicate patient record
+7. Verify merge with SELECT statements
+
+**Why triggers must be disabled:** Changing `patient_id` in appointments table re-validates provider-payer contracts, which may fail if patient's payer differs between records.
+
+**When to build merge UI:** If this becomes frequent (5-10+ occurrences), consider building `/admin/patients/merge` with validation and preview.
+
+---
+
 📝 For Future Developers
 
 Use canonical view v_bookable_provider_payer for provider-payer relationships.

@@ -22,13 +22,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Check for impersonation (admin viewing as partner)
+    const { searchParams } = new URL(request.url)
+    const partnerUserId = searchParams.get('partner_user_id')
+
     // Get partner user record
-    const { data: partnerUser, error: userError } = await supabaseAdmin
+    let partnerUserQuery = supabaseAdmin
       .from('partner_users')
       .select('id, organization_id, role, is_active')
-      .eq('auth_user_id', session.user.id)
       .eq('is_active', true)
-      .single()
+
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', session.user.id)
+    }
+
+    const { data: partnerUser, error: userError } = await partnerUserQuery.single()
 
     if (userError || !partnerUser) {
       return NextResponse.json(
@@ -88,6 +100,44 @@ export async function GET(request: NextRequest) {
       appointmentsThisWeek = count || 0
     }
 
+    // Get upcoming appointments with full details
+    let upcomingAppointments: any[] = []
+    if (patientIds.length > 0) {
+      const { data: appointments, error: apptError } = await supabaseAdmin
+        .from('appointments')
+        .select(`
+          id,
+          start_time,
+          end_time,
+          status,
+          providers!appointments_provider_id_fkey (
+            id,
+            first_name,
+            last_name,
+            title
+          ),
+          patients (
+            id,
+            first_name,
+            last_name,
+            phone
+          ),
+          payers (
+            id,
+            name
+          )
+        `)
+        .in('patient_id', patientIds)
+        .in('status', ['scheduled', 'confirmed'])
+        .gte('start_time', now.toISOString())
+        .order('start_time', { ascending: true })
+        .limit(10)
+
+      if (!apptError && appointments) {
+        upcomingAppointments = appointments
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -95,7 +145,8 @@ export async function GET(request: NextRequest) {
           total_patients: totalPatients || 0,
           active_patients: activePatients,
           appointments_this_week: appointmentsThisWeek
-        }
+        },
+        upcoming_appointments: upcomingAppointments
       }
     })
 
