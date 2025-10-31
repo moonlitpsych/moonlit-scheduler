@@ -80,30 +80,20 @@ class PartnerImpersonationManager {
    * Get all partners for selection (including inactive)
    */
   async getAllPartners(): Promise<ImpersonatedPartner[]> {
-    const { data, error } = await this.supabase
-      .from('partner_users')
-      .select(`
-        id,
-        auth_user_id,
-        organization_id,
-        full_name,
-        email,
-        phone,
-        role,
-        is_active,
-        organization:organizations(
-          id,
-          name
-        )
-      `)
-      .order('full_name', { ascending: true })
+    try {
+      const response = await fetch('/api/admin/partner-users')
+      const result = await response.json()
 
-    if (error) {
+      if (!result.success) {
+        console.error('Error fetching partners:', result.error)
+        return []
+      }
+
+      return result.data as ImpersonatedPartner[]
+    } catch (error) {
       console.error('Error fetching partners:', error)
       return []
     }
-
-    return data as ImpersonatedPartner[]
   }
 
   /**
