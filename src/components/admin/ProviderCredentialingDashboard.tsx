@@ -53,7 +53,7 @@ export default function ProviderCredentialingDashboard({
   const [payerGroups, setPayerGroups] = useState<PayerTaskGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'select' | 'tasks'>('select')
+  const [activeTab, setActiveTab] = useState<'select' | 'tasks'>('tasks')
 
   useEffect(() => {
     loadDashboard()
