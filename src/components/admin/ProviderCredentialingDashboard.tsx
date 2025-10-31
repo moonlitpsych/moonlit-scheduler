@@ -93,8 +93,58 @@ export default function ProviderCredentialingDashboard({
         throw new Error('Failed to update task')
       }
 
-      // Reload dashboard to refresh data
-      await loadDashboard()
+      // Update both payerGroups and stats in one batch to prevent flicker
+      setPayerGroups(prevGroups => {
+        const updatedGroups = prevGroups.map(group => {
+          // Find if this payer group contains the updated task
+          const taskIndex = group.tasks.findIndex(t => t.id === taskId)
+
+          if (taskIndex === -1) {
+            return group // Task not in this group, return unchanged
+          }
+
+          // Update the specific task
+          const updatedTasks = [...group.tasks]
+          updatedTasks[taskIndex] = {
+            ...updatedTasks[taskIndex],
+            ...updates
+          }
+
+          // Recalculate task statistics for this payer
+          const completedTasks = updatedTasks.filter(t => t.task_status === 'completed').length
+          const inProgressTasks = updatedTasks.filter(t => t.task_status === 'in_progress').length
+          const pendingTasks = updatedTasks.filter(t => t.task_status === 'pending').length
+          const blockedTasks = updatedTasks.filter(t => t.task_status === 'blocked').length
+          const completionPercentage = updatedTasks.length > 0
+            ? Math.round((completedTasks / updatedTasks.length) * 100)
+            : 0
+
+          return {
+            ...group,
+            tasks: updatedTasks,
+            completed_tasks: completedTasks,
+            in_progress_tasks: inProgressTasks,
+            pending_tasks: pendingTasks,
+            blocked_tasks: blockedTasks,
+            completion_percentage: completionPercentage
+          }
+        })
+
+        // Update overall stats based on the NEW groups (not old state)
+        setStats(prevStats => {
+          if (!prevStats) return prevStats
+
+          return {
+            ...prevStats,
+            completed_tasks: updatedGroups.reduce((sum, g) => sum + g.completed_tasks, 0),
+            in_progress_payers: updatedGroups.filter(g => g.in_progress_tasks > 0).length,
+            total_tasks: updatedGroups.reduce((sum, g) => sum + g.total_tasks, 0)
+          }
+        })
+
+        return updatedGroups
+      })
+
     } catch (err: any) {
       console.error('Error updating task:', err)
       alert(err.message || 'Failed to update task')
