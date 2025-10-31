@@ -60,7 +60,7 @@ export default function PartnerDashboardPage() {
           const statsData = await statsResponse.json()
           if (statsData.success) {
             setDashboardData({
-              upcoming_appointments: [],
+              upcoming_appointments: statsData.data.upcoming_appointments || [],
               my_assigned_patients: [],
               recent_changes: [],
               organization_stats: statsData.data.organization_stats
