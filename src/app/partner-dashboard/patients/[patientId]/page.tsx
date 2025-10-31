@@ -8,7 +8,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { PartnerHeader } from '@/components/partner-dashboard/PartnerHeader'
 import { UploadROIModal } from '@/components/partner-dashboard/UploadROIModal'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
@@ -321,7 +320,6 @@ export default function PatientDetailPage() {
 
   return (
     <div className="min-h-screen bg-moonlit-cream">
-      <PartnerHeader partnerUser={partnerUser} currentPage="patients" />
 
       <div className="container mx-auto px-4 py-8">
         {/* Back button */}

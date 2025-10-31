@@ -88,6 +88,44 @@ export async function GET(request: NextRequest) {
       appointmentsThisWeek = count || 0
     }
 
+    // Get upcoming appointments with full details
+    let upcomingAppointments: any[] = []
+    if (patientIds.length > 0) {
+      const { data: appointments, error: apptError } = await supabaseAdmin
+        .from('appointments')
+        .select(`
+          id,
+          start_time,
+          end_time,
+          status,
+          providers!appointments_provider_id_fkey (
+            id,
+            first_name,
+            last_name,
+            title
+          ),
+          patients (
+            id,
+            first_name,
+            last_name,
+            phone
+          ),
+          payers (
+            id,
+            name
+          )
+        `)
+        .in('patient_id', patientIds)
+        .in('status', ['scheduled', 'confirmed'])
+        .gte('start_time', now.toISOString())
+        .order('start_time', { ascending: true })
+        .limit(10)
+
+      if (!apptError && appointments) {
+        upcomingAppointments = appointments
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -95,7 +133,8 @@ export async function GET(request: NextRequest) {
           total_patients: totalPatients || 0,
           active_patients: activePatients,
           appointments_this_week: appointmentsThisWeek
-        }
+        },
+        upcoming_appointments: upcomingAppointments
       }
     })
 
