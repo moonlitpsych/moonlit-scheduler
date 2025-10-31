@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
           start_time,
           end_time,
           status,
-          providers (
+          providers!appointments_provider_id_fkey (
             id,
             first_name,
             last_name,
