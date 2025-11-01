@@ -15,6 +15,7 @@ import { AssignProviderModal } from '@/components/partner-dashboard/AssignProvid
 import { EngagementStatusChip } from '@/components/partner-dashboard/EngagementStatusChip'
 import { AppointmentStatusIndicator } from '@/components/partner-dashboard/AppointmentStatusIndicator'
 import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
+import { GenerateMedicationReportModal } from '@/components/partner-dashboard/GenerateMedicationReportModal'
 import SyncAppointmentsButton from '@/components/partner-dashboard/SyncAppointmentsButton'
 import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
 import AppointmentLocationDisplay from '@/components/partner-dashboard/AppointmentLocationDisplay'
@@ -224,6 +225,10 @@ export default function PatientRosterPage() {
   // Notification modal state
   const [notificationModalOpen, setNotificationModalOpen] = useState(false)
   const [notifyPatient, setNotifyPatient] = useState<PatientWithDetails | null>(null)
+
+  // Medication report modal state
+  const [medicationReportModalOpen, setMedicationReportModalOpen] = useState(false)
+  const [medicationReportPatient, setMedicationReportPatient] = useState<PatientWithDetails | null>(null)
 
   // ROI modal state
   const [roiModalOpen, setRoiModalOpen] = useState(false)
@@ -461,6 +466,22 @@ export default function PatientRosterPage() {
 
   const handleChangeStatusSuccess = async () => {
     // Refresh patient list using SWR cache invalidation
+    await refreshPatientData()
+  }
+
+  // Medication report modal handlers
+  const handleOpenMedicationReportModal = (patient: PatientWithDetails) => {
+    setMedicationReportPatient(patient)
+    setMedicationReportModalOpen(true)
+  }
+
+  const handleCloseMedicationReportModal = () => {
+    setMedicationReportModalOpen(false)
+    setMedicationReportPatient(null)
+  }
+
+  const handleMedicationReportSuccess = async () => {
+    // Optional: Refresh if needed
     await refreshPatientData()
   }
 
@@ -911,6 +932,15 @@ export default function PatientRosterPage() {
                                   <Bell className="w-4 h-4" />
                                   <span>Notify</span>
                                 </button>
+                                <span className="text-gray-300">|</span>
+                                <button
+                                  onClick={() => handleOpenMedicationReportModal(patient)}
+                                  className="text-purple-600 hover:text-purple-800 flex items-center space-x-1"
+                                  title="Generate Medication Report"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span>Med Report</span>
+                                </button>
                               </>
                             )}
                           </div>
@@ -990,6 +1020,16 @@ export default function PatientRosterPage() {
           isOpen={changeStatusModalOpen}
           onClose={handleCloseChangeStatusModal}
           onSuccess={handleChangeStatusSuccess}
+        />
+      )}
+
+      {/* Generate Medication Report Modal */}
+      {medicationReportPatient && (
+        <GenerateMedicationReportModal
+          patient={medicationReportPatient}
+          isOpen={medicationReportModalOpen}
+          onClose={handleCloseMedicationReportModal}
+          onSuccess={handleMedicationReportSuccess}
         />
       )}
     </div>
