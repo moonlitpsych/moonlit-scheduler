@@ -110,6 +110,7 @@ export default function PatientRosterPage() {
   // Check for admin impersonation
   const impersonation = partnerImpersonationManager.getImpersonatedPartner()
   const impersonatedPartnerId = impersonation?.partner.id
+  const partnerUserId = impersonatedPartnerId || undefined // For passing to modals
 
   // Use SWR for data fetching with caching
   // Skip fetching partner/me if admin is impersonating (we already have the data)
@@ -1030,6 +1031,7 @@ export default function PatientRosterPage() {
           isOpen={medicationReportModalOpen}
           onClose={handleCloseMedicationReportModal}
           onSuccess={handleMedicationReportSuccess}
+          partnerUserId={partnerUserId}
         />
       )}
     </div>

@@ -28,24 +28,34 @@ export async function GET(
       )
     }
 
-    // 2. Verify partner user
-    const { data: partnerUser } = await supabaseAdmin
+    // 2. Parse query parameters (including impersonation)
+    const { searchParams } = new URL(request.url)
+    const partnerUserId = searchParams.get('partner_user_id') // For admin impersonation
+    const statusFilter = searchParams.get('status')
+    const limit = parseInt(searchParams.get('limit') || '10')
+
+    // 3. Get partner user record (with impersonation support)
+    let partnerUserQuery = supabaseAdmin
       .from('partner_users')
       .select('id, email, organization_id, role')
-      .eq('auth_user_id', user.id)
-      .single()
+      .eq('is_active', true)
 
-    if (!partnerUser) {
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', user.id)
+    }
+
+    const { data: partnerUser, error: userError } = await partnerUserQuery.single()
+
+    if (userError || !partnerUser) {
       return NextResponse.json(
         { success: false, error: 'Partner user not found' },
         { status: 403 }
       )
     }
-
-    // 3. Parse query parameters
-    const { searchParams } = new URL(request.url)
-    const statusFilter = searchParams.get('status')
-    const limit = parseInt(searchParams.get('limit') || '10')
 
     // 4. Fetch appointments
     let query = supabaseAdmin

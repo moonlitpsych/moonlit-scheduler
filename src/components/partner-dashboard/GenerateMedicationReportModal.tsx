@@ -29,13 +29,15 @@ interface GenerateMedicationReportModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
+  partnerUserId?: string // For admin impersonation
 }
 
 export function GenerateMedicationReportModal({
   patient,
   isOpen,
   onClose,
-  onSuccess
+  onSuccess,
+  partnerUserId
 }: GenerateMedicationReportModalProps) {
   const [completedAppointments, setCompletedAppointments] = useState<CompletedAppointment[]>([])
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>('')
@@ -67,8 +69,17 @@ export function GenerateMedicationReportModal({
     setError(null)
 
     try {
+      // Build URL with optional partner_user_id for impersonation
+      const params = new URLSearchParams({
+        status: 'completed',
+        limit: '10'
+      })
+      if (partnerUserId) {
+        params.append('partner_user_id', partnerUserId)
+      }
+
       const response = await fetch(
-        `/api/partner-dashboard/patients/${patient.id}/appointments?status=completed&limit=10`
+        `/api/partner-dashboard/patients/${patient.id}/appointments?${params.toString()}`
       )
 
       if (!response.ok) {
