@@ -10,9 +10,12 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { patientId: string } }
+  { params }: { params: Promise<{ patientId: string }> }
 ) {
   try {
+    // Await params (Next.js 15 requirement)
+    const { patientId } = await params
+
     const supabase = createRouteHandlerClient({ cookies })
 
     // 1. Verify authentication
@@ -41,7 +44,7 @@ export async function GET(
 
     // 3. Parse query parameters
     const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status') || undefined
+    const statusFilter = searchParams.get('status')
     const limit = parseInt(searchParams.get('limit') || '10')
 
     // 4. Fetch appointments
@@ -58,13 +61,15 @@ export async function GET(
           last_name
         )
       `)
-      .eq('patient_id', params.patientId)
+      .eq('patient_id', patientId)
       .order('start_time', { ascending: false })
       .limit(limit)
 
-    // Apply status filter if provided
-    if (status) {
-      query = query.eq('status', status)
+    // Apply status filter - support both 'completed' and 'confirmed' for past appointments
+    if (statusFilter === 'completed') {
+      query = query.in('status', ['completed', 'confirmed'])
+    } else if (statusFilter) {
+      query = query.eq('status', statusFilter)
     }
 
     const { data: appointments, error: appointmentsError } = await query
