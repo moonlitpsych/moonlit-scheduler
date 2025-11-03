@@ -136,92 +136,102 @@ try {
 
 ---
 
-## ✅ COMPLETED: Plan-Level Insurance Validation (Oct 31, 2025)
+## 🔵 IN PROGRESS: Payer Plan Tracking Infrastructure (Oct 31 - Nov 3, 2025)
 
-**STATUS:** ✅ IN PRODUCTION - Junction table architecture for plan acceptance
+**STATUS:** ⚠️ INFRASTRUCTURE ONLY - Plan tables exist for tracking, NOT for booking validation
 
 ### What Was Built:
 
-**Problem:** System only validated payer-level contracts (e.g., "accepts Regence"), causing booking errors when patients had specific plans not covered by the contract (e.g., "SelectHealth Signature" when contract only covers "Choice, Care, Med, Value").
-
-**Solution:**
-- **Junction table**: `provider_payer_accepted_plans` links ONE contract to MULTIPLE accepted plans
-- **Plan resolution**: Maps messy insurance card strings to canonical plan IDs
-- **Validation on booking**: Trigger checks if provider's contract accepts patient's specific plan
-
-**Result:** ✅ Patients see accurate "we accept your plan" messaging; booking prevented if plan not covered
+**Purpose:** Track which health insurance plans exist for each payer (e.g., "SelectHealth Choice", "Regence PPO") for future use in:
+- Claims processing and routing
+- Plan name resolution from insurance cards
+- Analytics and reporting
+- **FUTURE:** Insurance selection UI filtering
 
 ### Key Architecture:
 
-**Tables (5 total):**
+**Tables (4 total - For Tracking Only):**
 1. `payer_networks` - Network definitions (e.g., "Regence BHPN", "SelectHealth Traditional")
-2. `payer_plans` - Specific plans (e.g., "SelectHealth Choice", "Aetna Signature PPO")
-3. `payer_plan_aliases` - Maps card strings → canonical plans (e.g., "AETNA CVS HEALTH" → Aetna Signature)
+2. `payer_plans` - Specific plans linked to payers (e.g., "SelectHealth Choice")
+   - Column: `payer_id` → Links plan to payer ✅
+   - This is **practice-level**: which plans does the practice accept from each payer
+3. `payer_plan_aliases` - Maps insurance card strings → canonical plans
 4. `payer_plan_routing_ids` - Clearinghouse routing for claims
-5. **`provider_payer_accepted_plans`** - Junction: Links contract → accepted plans
 
-**Functions:**
-- `resolve_plan_name_to_id()` - Maps plan string to plan_id with confidence scoring
-- `does_provider_accept_plan()` - Validates provider contract accepts specific plan
+**Functions (For Future Use):**
+- `resolve_plan_name_to_id()` - Maps messy plan strings to canonical plan IDs
 
-**Booking Trigger:**
-- Extracts `plan_name` from `appointments.insurance_info` JSONB
-- Validates against junction table
-- Falls back to payer-level if no plan specified (backward compatible)
+### 🚨 CRITICAL RULE: NO PLAN VALIDATION IN BOOKING FLOW
 
-### Critical Design Rules:
+**Booking Validation Logic:**
+```
+IF provider is bookable with payer (via v_bookable_provider_payer)
+  THEN provider accepts ALL plans from that payer
+```
 
-**❌ NEVER add `network_id` or `plan_id` to `provider_payer_networks`**
-- ONE contract row per provider-payer relationship
-- Use `provider_payer_accepted_plans` junction table to link contract → multiple plans
-- Keeps contract table clean and matches real-world legal contracts
+**Why?**
+- Plans are tracked at **practice-level**, not provider-level
+- If Moonlit accepts 8 SelectHealth plans, ALL providers bookable with SelectHealth can accept ALL 8 plans
+- No provider-specific plan restrictions exist
 
-**Bookability vs Contracts:**
-- `provider_payer_networks` = Legal contracts
-- `v_bookable_provider_payer` view = Who CAN book (includes supervised relationships)
-- Plan validation uses junction table to check if bookable provider accepts specific plan
+**Where Plan Filtering Belongs (Future Work):**
+- **Insurance Selection Stage**: Show only plans Moonlit accepts
+- **NOT at provider selection**: Just check provider-payer bookability
+- **NOT at booking confirmation**: Just check provider-payer bookability + date
 
 ### Migration Files:
-- `022-add-payer-network-and-plan-tables.sql` - 4 core tables
-- `026-seed-big3-payer-networks-and-plans.sql` - Regence/SelectHealth/Aetna seed data
-- `028-create-provider-payer-accepted-plans.sql` - Junction table
-- `029-create-plan-validation-functions.sql` - Plan resolution logic
-- `030-update-booking-trigger-for-plan-validation.sql` - Booking validation
+- `022-add-payer-network-and-plan-tables.sql` - 4 core tracking tables ✅
+- `026-seed-big3-payer-networks-and-plans.sql` - Regence/SelectHealth/Aetna seed data ✅
+- ~~`028-create-provider-payer-accepted-plans.sql`~~ - **ROLLED BACK** (wrong architecture)
+- ~~`029-create-plan-validation-functions.sql`~~ - **ROLLED BACK** (validation functions removed)
+- ~~`030-update-booking-trigger-for-plan-validation.sql`~~ - **ROLLED BACK** (booking trigger restored)
+- `034-rollback-plan-validation-from-booking.sql` - **Removed plan validation from booking** ✅
 
-### API Changes:
-- `book/route.ts` - Accepts optional `planName` parameter, stores in `insurance_info.plan_name`
+### What Was Removed (Nov 3, 2025):
 
-### Patient Experience:
-- Patient enters: "I have SelectHealth Signature"
-- System checks: Does provider's SelectHealth contract include Signature plan?
-- Result: ✅ "We accept your plan, book here" OR ❌ "Your plan is not accepted with this provider"
+**Problem:** Oct 31 implementation incorrectly added provider-level plan validation to booking trigger, causing legitimate bookings to fail.
 
-### Real Contract Data (No Mock Data):
+**Removed:**
+- `provider_payer_accepted_plans` table - Wrong architecture (implied provider-level restrictions)
+- `does_provider_accept_plan()` function - Validated plans at booking (too strict)
+- `is_provider_in_network_for_plan()` function - Network validation (premature)
+- Plan validation logic from `enforce_bookable_provider_payer()` trigger
 
-**SelectHealth - Dr. Anthony Privratsky Contract** (Oct 31, 2025)
-- Source: `/Users/miriam/Downloads/Select_Health_Contract_for_Anthony_Privratsky_signed.pdf`
-- Contract ID: `4046d9cf-db24-43da-b54b-e6fc9309133d`
-- Effective Date: 2025-10-13
-- Plans Accepted (6 total):
-  1. **Select Choice** (PPO) - DEFAULT - Pages 23-24
-  2. **Select Care** (PPO) - Pages 25-26
-  3. **Select Med** (PPO) - Pages 27-28
-  4. **Select Value** (HMO) - Page 29
-  5. **SelectHealth Share** (PPO) - Pages 30-31
-  6. **Select Access** (Medicaid/CHIP, type: OTHER) - Pages 32-36
+**Restored:**
+- Booking trigger to Oct 7 version (simple provider-payer bookability check)
+- Uses `v_bookable_provider_payer` view ONLY
+- No plan-level validation
 
-**Scripts Created:**
-- `scripts/cleanup-and-add-plans.js` - Remove mock data, add real plans (Node.js HTTPS)
-- `scripts/populate-junction-table.js` - Link contract to accepted plans
-- `scripts/add-real-selecthealth-plans.mjs` - Add plans with aliases (Supabase client)
-- `scripts/cleanup-mock-plans.mjs` - Clean up mock data (Supabase client)
-- `scripts/check-selecthealth-db.ts` - Verification script
+### Current Booking Trigger Behavior (Correct):
 
-**Migrations:**
-- `032-rollback-mock-plan-data.sql` - Deleted 9 mock plans, 25 aliases, 8 networks
-- `033-add-selecthealth-contract-plans.sql` - Added 6 real SelectHealth plans from contract
+```sql
+-- enforce_bookable_provider_payer() function
+-- 1. Check if provider_id exists in v_bookable_provider_payer for this payer_id
+-- 2. Check if date is within contract effective range
+-- 3. Accept booking if checks pass
+-- NO plan validation
+```
 
-**Critical Pattern:**
+**Accepts bookings when:**
+- Provider has direct contract with payer ✅
+- Provider is supervised under payer contract ✅
+- Date is within contract effective range ✅
+- **Regardless of specific plan** ✅
+
+### Real Contract Data (For Future Reference):
+
+**SelectHealth - Practice Contract:**
+- Plans Accepted by Moonlit Practice (6 total):
+  1. **Select Choice** (PPO) - DEFAULT
+  2. **Select Care** (PPO)
+  3. **Select Med** (PPO)
+  4. **Select Value** (HMO)
+  5. **SelectHealth Share** (PPO)
+  6. **Select Access** (Medicaid/CHIP)
+
+These plans are stored in `payer_plans` table for future use, but DO NOT affect booking validation.
+
+### Critical Pattern for Future Developers:
 - Extract plan names ONLY from actual signed contract appendices
 - Document source pages in `notes` field for traceability
 - Use `is_default` flag for standard/most common plan
