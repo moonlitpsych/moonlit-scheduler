@@ -256,7 +256,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             hasGroupNumber: !!groupNumber,
             memberIdLength: memberId?.length,
             groupNumberLength: groupNumber?.length,
-            patient: body.patient ? sanitizePatientForLogging(body.patient) : undefined
+            patient: body.patient ? sanitizePatientForLogging(body.patient) : undefined,
             hasPlanName: !!planName,
             planName: planName || 'not provided'
         })
