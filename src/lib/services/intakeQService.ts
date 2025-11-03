@@ -117,6 +117,19 @@ class IntakeQService {
     this.dailyRequestCount++
     this.lastRequestTime = now
 
+    // V3.1: Check Content-Type before parsing JSON to catch HTML error responses
+    const contentType = response.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      const responseText = await response.text()
+      console.error('❌ IntakeQ API returned non-JSON response:', {
+        url,
+        contentType,
+        status: response.status,
+        responsePreview: responseText.substring(0, 200)
+      })
+      throw new Error(`IntakeQ API returned ${contentType || 'unknown'} instead of JSON. This usually indicates an API error, maintenance mode, or authentication issue. Status: ${response.status}`)
+    }
+
     return response.json()
   }
 
