@@ -5,6 +5,7 @@
  * - Coverage status
  * - Copays and deductibles
  * - Financial summary
+ * - Moonlit billability validation
  * - Warnings and alerts
  */
 
@@ -41,7 +42,7 @@ export default function EligibilityResults({
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      {/* Header */}
+      {/* Header - Patient Eligibility */}
       <div className={`p-6 ${result.isEligible ? 'bg-green-50 border-b border-green-200' : 'bg-red-50 border-b border-red-200'}`}>
         <div className="flex items-start gap-4">
           {result.isEligible ? (
@@ -71,7 +72,7 @@ export default function EligibilityResults({
         </div>
       </div>
 
-      {/* Moonlit Billability Status */}
+      {/* Moonlit Billability Status - SEPARATE from patient eligibility */}
       {result.moonlitBillability && (
         <div className={`p-6 border-b ${
           result.moonlitBillability.status === 'PLAN_VERIFICATION_NEEDED'
