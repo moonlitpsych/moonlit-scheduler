@@ -4,6 +4,7 @@ import { InsuranceInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
 import { useEffect, useState } from 'react'
 import { BookingScenario } from '../BookingFlow'
 import { LEGAL_VERSION } from '@/lib/constants'
+import BookingProgress from '../BookingProgress'
 
 interface Provider {
     id: string
@@ -31,6 +32,8 @@ interface AppointmentSummaryViewProps {
     onEditROI: () => void
     onBack: () => void
     isSubmitting?: boolean
+    progressMessage?: string
+    showRetryButton?: boolean
 }
 
 export default function AppointmentSummaryView({
@@ -45,7 +48,9 @@ export default function AppointmentSummaryView({
     onEditTimeSlot,
     onEditROI,
     onBack,
-    isSubmitting = false
+    isSubmitting = false,
+    progressMessage,
+    showRetryButton = false
 }: AppointmentSummaryViewProps) {
     const [fetchedProvider, setFetchedProvider] = useState<Provider | null>(null)
     const [providerLoading, setProviderLoading] = useState(false)
@@ -525,6 +530,13 @@ export default function AppointmentSummaryView({
                     </div>
                 </div>
             </div>
+
+            {/* V3.3: Progress indicator for long-running operations */}
+            <BookingProgress
+                progressMessage={progressMessage}
+                showRetryButton={showRetryButton}
+                onRetry={onConfirmBooking}
+            />
         </div>
     )
 }

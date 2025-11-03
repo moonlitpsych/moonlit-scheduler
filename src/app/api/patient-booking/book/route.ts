@@ -2,6 +2,15 @@
 // service_instance_id: Server-resolved via getIntakeServiceInstanceForPayer(payerId)
 // New behavior: Client passes payerId, server resolves single Intake service instance
 // Fixed: Eliminated client control over service instance selection
+
+// V3.3: Set explicit timeout for booking route (2 minutes)
+// This prevents unknown Vercel timeout behavior and gives enough time for:
+// - IntakeQ client creation (up to 50s with retries)
+// - Appointment creation
+// - Questionnaire sending
+// - All database operations
+export const maxDuration = 120 // 2 minutes
+
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { resolveIntakeServiceInstance } from '@/lib/services/intakeResolver'
@@ -672,6 +681,34 @@ This is an automated alert from Moonlit Scheduler.
                 .then(({ error }) => {
                     if (error) console.error('Failed to update appointment notes:', error)
                 })
+
+            // V3.3: Send admin notification about database query failure
+            await emailService.sendEmail({
+                to: 'hello@trymoonlit.com',
+                subject: `⚠️ Database Query Failed - Patient ${patientId}`,
+                body: `
+⚠️ DATABASE QUERY FAILURE - PATIENT PRIMARY PROVIDER CHECK
+
+Appointment ID: ${appointmentId}
+Patient ID: ${patientId}
+Provider ID: ${providerId}
+
+ISSUE:
+Failed to check if patient has a primary provider assigned.
+This indicates a potential database connectivity or permission issue.
+
+ERROR DETAILS:
+${patientCheckError.message}
+
+ACTION REQUIRED:
+1. Check database connectivity
+2. Verify patient ${patientId} exists and is accessible
+3. Manually check if patient needs primary_provider_id assignment
+4. If needed, run: UPDATE patients SET primary_provider_id = '${providerId}' WHERE id = '${patientId}';
+
+NOTE: The appointment was created successfully, this is just a data integrity check.
+                `.trim()
+            }).catch(err => console.error('Failed to send database query notification:', err))
         } else if (!patientData.primary_provider_id) {
             console.log(`📌 Patient has no primary provider, assigning provider ${providerId}...`)
             const { error: updateError } = await supabaseAdmin
@@ -691,6 +728,36 @@ This is an automated alert from Moonlit Scheduler.
                     .then(({ error }) => {
                         if (error) console.error('Failed to update appointment notes:', error)
                     })
+
+                // V3.3: Send admin notification about primary provider assignment failure
+                await emailService.sendEmail({
+                    to: 'hello@trymoonlit.com',
+                    subject: `⚠️ Primary Provider Assignment Failed - Patient ${patientId}`,
+                    body: `
+⚠️ PRIMARY PROVIDER ASSIGNMENT FAILED
+
+Appointment ID: ${appointmentId}
+Patient ID: ${patientId}
+Provider ID: ${providerId}
+
+ISSUE:
+Patient's first appointment was booked but we couldn't assign their primary provider.
+This affects care continuity and provider assignment for future visits.
+
+ERROR DETAILS:
+${updateError.message}
+
+ACTION REQUIRED:
+UPDATE patients SET primary_provider_id = '${providerId}' WHERE id = '${patientId}';
+
+IMPACT:
+- Patient has no "home" provider assigned
+- Future appointments may route to wrong provider
+- Care coordination may be affected
+
+NOTE: The appointment was created successfully, only the primary provider assignment failed.
+                    `.trim()
+                }).catch(err => console.error('Failed to send primary provider notification:', err))
             } else {
                 console.log(`✅ Assigned primary provider ${providerId} to patient ${patientId}`)
             }

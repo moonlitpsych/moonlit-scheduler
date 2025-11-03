@@ -60,6 +60,9 @@ export interface BookingState {
     showPQSyncError?: boolean // Only show IntakeQ sync error banner for actual IntakeQ issues
     // NEW: Submission state to prevent duplicate requests
     isSubmitting?: boolean
+    // V3.3: Progress feedback for long-running operations
+    progressMessage?: string
+    showRetryButton?: boolean
 }
 
 interface BookingFlowProps {
@@ -211,8 +214,36 @@ export default function BookingFlow({
         // Set submitting flag
         updateState({ isSubmitting: true })
 
+        // V3.3: Add progressive feedback for long-running operations
+        let progressMessage = 'Processing your booking...'
+        updateState({ progressMessage })
+
+        // Set up progress message updates
+        const progressIntervals: NodeJS.Timeout[] = []
+
+        progressIntervals.push(setTimeout(() => {
+            updateState({ progressMessage: 'Creating your patient record...' })
+        }, 15000)) // 15 seconds
+
+        progressIntervals.push(setTimeout(() => {
+            updateState({ progressMessage: 'Still working, this can take up to a minute...' })
+        }, 30000)) // 30 seconds
+
+        progressIntervals.push(setTimeout(() => {
+            updateState({ progressMessage: 'Almost done, please don\'t close this tab...' })
+        }, 60000)) // 60 seconds
+
         // Create appointment with enhanced error handling
         const abortController = new AbortController()
+
+        // V3.3: Add 90-second timeout
+        const timeoutId = setTimeout(() => {
+            abortController.abort()
+            updateState({
+                progressMessage: 'The booking is taking longer than expected. You can wait or try again.',
+                showRetryButton: true
+            })
+        }, 90000) // 90 seconds
 
         try {
             // Map normalized slot → Intake-only booking payload
@@ -363,14 +394,29 @@ export default function BookingFlow({
             // Handle abort separately
             if (error.name === 'AbortError') {
                 console.log('Booking request aborted')
+                // V3.3: Check if this was a timeout abort
+                if (!state.showRetryButton) {
+                    updateState({
+                        bookingError: 'The booking request timed out. Please try again.',
+                        showRetryButton: true
+                    })
+                }
                 return
             }
 
             alert(`Booking failed: ${error.message}`)
             return // STOP — do not go to confirmation
         } finally {
-            // Always reset submitting flag
-            updateState({ isSubmitting: false })
+            // V3.3: Clean up all timers
+            clearTimeout(timeoutId)
+            progressIntervals.forEach(interval => clearTimeout(interval))
+
+            // Always reset submitting flag and progress message
+            updateState({
+                isSubmitting: false,
+                progressMessage: undefined,
+                showRetryButton: false
+            })
         }
     }
 
@@ -618,6 +664,8 @@ export default function BookingFlow({
                         onEditROI={() => goToStep('roi')}
                         onBack={() => goToStep('roi')}
                         isSubmitting={state.isSubmitting}
+                        progressMessage={state.progressMessage}
+                        showRetryButton={state.showRetryButton}
                     />
                 )
 
