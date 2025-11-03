@@ -515,7 +515,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             insurance_info: {
                 payer_id: payerId,
                 payer_name: payer.name,
-                plan_name: planName || null, // V4.0: Store plan name for network resolution
+                // TEMPORARILY REMOVED: plan_name causes trigger failures when junction table is incomplete
+                // plan_name: planName || null, // V4.0: Store plan name for network resolution
                 member_id: memberId || null,
                 group_number: groupNumber || null
             },
