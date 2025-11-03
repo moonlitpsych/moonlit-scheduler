@@ -10,6 +10,13 @@ interface AdminBulkSyncButtonProps {
 
 interface BulkSyncResult {
   success: boolean
+  discovery?: {
+    appointmentsQueried: number
+    uniqueClientsFound: number
+    newPatientsCreated: number
+    existingPatientsSkipped: number
+    errors: number
+  }
   patientsProcessed: number
   totalSummary: {
     new: number
@@ -115,12 +122,14 @@ export default function AdminBulkSyncButton({ onSyncComplete }: AdminBulkSyncBut
               {isSyncing && (
                 <div className="flex flex-col items-center justify-center py-12">
                   <RefreshCw className="w-16 h-16 text-moonlit-brown animate-spin mb-4" />
-                  <p className="text-lg text-gray-700 mb-2">Fetching latest appointments from PracticeQ...</p>
+                  <p className="text-lg text-gray-700 mb-2">Discovering new patients & syncing appointments...</p>
                   <p className="text-sm text-gray-500">This may take 2-5 minutes for all patients</p>
-                  <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md">
+                  <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md space-y-2">
                     <p className="text-sm text-yellow-800">
-                      <strong>Note:</strong> This will update payer information from insurance fields in IntakeQ,
-                      which will fix any appointments incorrectly marked as "Cash".
+                      <strong>Step 1:</strong> Discovering new patients from recent IntakeQ appointments
+                    </p>
+                    <p className="text-sm text-yellow-800">
+                      <strong>Step 2:</strong> Syncing appointment data and updating payer information
                     </p>
                   </div>
                 </div>
@@ -140,6 +149,24 @@ export default function AdminBulkSyncButton({ onSyncComplete }: AdminBulkSyncBut
 
               {result && (
                 <div className="space-y-6">
+                  {/* Patient Discovery Summary */}
+                  {result.discovery && result.discovery.newPatientsCreated > 0 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                      <div className="flex items-start gap-3">
+                        <Users className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-lg font-semibold text-blue-900 mb-2">
+                            🆕 Discovered {result.discovery.newPatientsCreated} New Patient{result.discovery.newPatientsCreated !== 1 ? 's' : ''}
+                          </p>
+                          <p className="text-sm text-blue-700">
+                            Found {result.discovery.uniqueClientsFound} unique clients in {result.discovery.appointmentsQueried} IntakeQ appointments.
+                            Created {result.discovery.newPatientsCreated} new patient records who weren't in the database yet.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Success Summary */}
                   <div className="bg-green-50 border border-green-200 rounded-lg p-6">
                     <div className="flex items-start gap-3">
