@@ -496,6 +496,20 @@ export default function AppointmentSummaryView({
                         </button>
                     </div>
 
+                    {/* Processing Time Notice - Only shown when submitting */}
+                    {isSubmitting && (
+                        <div className="mt-6 text-center">
+                            <div className="inline-block bg-blue-50 border-2 border-blue-200 rounded-lg px-6 py-3">
+                                <p className="text-blue-800 text-sm font-medium font-['Newsreader']">
+                                    ⏱️ A successful booking can take up to 20 seconds to process
+                                </p>
+                                <p className="text-blue-700 text-sm font-['Newsreader'] mt-1">
+                                    Please do not exit this tab
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Terms Notice */}
                     <div className="mt-6 text-center">
                         <p className="text-[#091747]/60 text-sm font-['Newsreader']">
