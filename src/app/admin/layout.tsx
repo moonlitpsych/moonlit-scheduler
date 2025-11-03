@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { routeGuardManager } from '@/lib/route-guards'
-import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity, GitBranch, FileText, DollarSign } from 'lucide-react'
+import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity, GitBranch, FileText, DollarSign, ClipboardCheck } from 'lucide-react'
 import Link from 'next/link'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
@@ -183,6 +183,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <Activity className="h-4 w-4" />
             <span>Contracts</span>
             <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
+          </Link>
+
+          <Link
+            href="/admin/eligibility-checker"
+            className={getNavLinkClasses('/admin/eligibility-checker')}
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            <span>Eligibility Checker</span>
           </Link>
 
           <Link
