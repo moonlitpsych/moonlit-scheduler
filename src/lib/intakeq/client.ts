@@ -112,9 +112,28 @@ export async function ensureClient(
 
         // ✅ FIX: Add delay to ensure IntakeQ has propagated the client
         // IntakeQ needs time before the client is available for appointments
-        // Testing shows 500ms is insufficient - increasing to 2000ms
-        console.log('⏳ Waiting 2000ms for IntakeQ client propagation...')
-        await new Promise(resolve => setTimeout(resolve, 2000))
+        // V3.0: Increased from 2000ms to 5000ms based on production failures
+        // IntakeQ's eventual consistency can take longer than expected
+        console.log('⏳ Waiting 5000ms for IntakeQ client propagation...')
+        await new Promise(resolve => setTimeout(resolve, 5000))
+
+        // V3.0: Verify client is queryable before proceeding
+        console.log(`🔍 Verifying IntakeQ client ${intakeqClientId} is queryable...`)
+        try {
+            await intakeQService.makeRequest(`/clients/${intakeqClientId}`, { method: 'GET' })
+            console.log(`✅ Client verification successful`)
+        } catch (verifyError: any) {
+            console.warn(`⚠️ Client verification failed, waiting additional 3s: ${verifyError.message}`)
+            await new Promise(resolve => setTimeout(resolve, 3000))
+            // Try verification one more time
+            try {
+                await intakeQService.makeRequest(`/clients/${intakeqClientId}`, { method: 'GET' })
+                console.log(`✅ Client verification successful on retry`)
+            } catch (retryError: any) {
+                console.error(`❌ Client verification failed twice: ${retryError.message}`)
+                throw new Error(`Client created but not yet available in IntakeQ: ${retryError.message}`)
+            }
+        }
 
         // Update our database with the IntakeQ client ID (upsertPracticeQClient already handles alias storage)
         const updateData: any = { intakeq_client_id: intakeqClientId }
@@ -176,9 +195,10 @@ export async function syncClientInsurance(intakeqClientId: string, policySnapsho
 
 /**
  * Creates an appointment in IntakeQ with retry logic
+ * V3.0: Increased retries from 3 to 4 and longer delays for better reliability
  */
 export async function createAppointment(request: IntakeQAppointmentRequest): Promise<IntakeQAppointmentResponse> {
-    const maxRetries = 3
+    const maxRetries = 4 // V3.0: Increased from 3 to 4
     let lastError: any
 
     // Default location ID for telehealth (from CLAUDE.md: "4" for Insurance - UT)
@@ -222,8 +242,10 @@ export async function createAppointment(request: IntakeQAppointmentRequest): Pro
                 break
             }
 
-            // Exponential backoff: 2s, 4s, 8s (longer delays for IntakeQ propagation)
-            const delayMs = Math.pow(2, attempt) * 1000
+            // V3.0: Increased exponential backoff for IntakeQ propagation
+            // Old: 2s, 4s, 8s = 14s total
+            // New: 3s, 6s, 12s, 24s = 45s total (gives IntakeQ more time)
+            const delayMs = Math.pow(2, attempt) * 1500 // V3.0: Changed from 1000ms to 1500ms base
             console.log(`⏳ Retrying in ${delayMs}ms...${isClientNotFound ? ' (waiting for IntakeQ client propagation)' : ''}`)
             await new Promise(resolve => setTimeout(resolve, delayMs))
         }

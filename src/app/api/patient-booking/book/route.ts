@@ -632,15 +632,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             console.log('[PQ_SYNC] pqAppointmentId:', pqAppointmentId)
 
         } catch (error: any) {
-            // NEW BEHAVIOR: Persist error instead of deleting appointment
+            // V3.0: Enhanced error handling with better user messaging
             const errorType = error.status ? `HTTP ${error.status}` : error.code || 'UNKNOWN'
             pqSyncError = `practiceq_create_failed: ${errorType} - ${error.message}`
+
+            // Check if this is a "Client not found" error (propagation issue)
+            const isClientNotFound = error.status === 400 && error.message?.includes('Client not found')
 
             console.error(`BOOKING DEBUG – PQ create failed: ${errorType}:`, {
                 message: error.message,
                 status: error.status,
                 code: error.code,
-                appointmentId
+                appointmentId,
+                isClientNotFound,
+                intakeqClientId
             })
 
             // Mark appointment as error state
@@ -648,7 +653,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                 .from('appointments')
                 .update({
                     status: 'error',
-                    notes: (notes || '') + `\n\n[PQ SYNC FAILED ${new Date().toISOString()}]\nError: ${pqSyncError}`
+                    notes: (notes || '') + `\n\n[PQ SYNC FAILED ${new Date().toISOString()}]\nError: ${pqSyncError}\nClient ID: ${intakeqClientId}`
                 })
                 .eq('id', appointmentId)
 
@@ -656,13 +661,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                 console.error('BOOKING DEBUG – Failed to persist PQ error:', updateError)
             }
 
+            // V3.0: Provide user-friendly error message
+            const userMessage = isClientNotFound
+                ? 'Your information was saved, but there was a temporary delay syncing with our scheduling system. Our team has been notified and will complete your booking within 1 hour. You will receive a confirmation email once processed.'
+                : 'We encountered an issue finalizing your booking. Our team has been notified and will contact you shortly to complete your appointment.'
+
             return NextResponse.json({
                 success: false,
-                error: `Failed to create appointment in IntakeQ: ${error.message}`,
+                error: userMessage,
                 code: 'EHR_WRITE_FAILED',
                 details: {
                     errorType,
-                    appointmentId
+                    appointmentId,
+                    technicalError: error.message,
+                    isRetryable: isClientNotFound
                 }
             }, { status: 502 })
         }
