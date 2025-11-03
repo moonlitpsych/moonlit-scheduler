@@ -145,20 +145,41 @@ export async function sendIntakeQuestionnaire(
       durationMs: Date.now() - startTime
     })
 
-    // Send urgent email notification about failure
+    // V3.3: Send urgent email notification about failure to both Miriam and operations team
     try {
       await sendEmail({
-        to: 'miriam@trymoonlit.com',
-        subject: '⚠️ Urgent: Intake Questionnaire Send Failed',
+        to: ['miriam@trymoonlit.com', 'hello@trymoonlit.com'],
+        subject: '⚠️ URGENT: Intake Questionnaire Send Failed - Manual Action Required',
         html: `
-          <p><strong>Failed to send intake questionnaire after booking</strong></p>
-          <p>Patient: ${request.clientName} (${request.clientEmail})</p>
-          <p>IntakeQ Client ID: ${request.intakeqClientId}</p>
-          <p>Appointment ID: ${request.appointmentId || 'Not provided'}</p>
-          <p>Error: ${error.message}</p>
-          <p><strong>Action Required:</strong> Please manually send the intake questionnaire from IntakeQ.</p>
+          <h2>⚠️ INTAKE QUESTIONNAIRE SEND FAILURE</h2>
+
+          <h3>Patient Information:</h3>
+          <ul>
+            <li><strong>Name:</strong> ${request.clientName}</li>
+            <li><strong>Email:</strong> ${request.clientEmail}</li>
+            <li><strong>IntakeQ Client ID:</strong> ${request.intakeqClientId}</li>
+            <li><strong>Appointment ID:</strong> ${request.appointmentId || 'Not provided'}</li>
+          </ul>
+
+          <h3>Error Details:</h3>
+          <p><strong>Error:</strong> ${error.message}</p>
+          <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+
+          <h3>ACTION REQUIRED:</h3>
+          <ol>
+            <li>Log into IntakeQ</li>
+            <li>Find client: ${request.intakeqClientId}</li>
+            <li>Manually send the ${isMedicaidPayer(request.payerId) ? 'Medicaid' : 'General'} intake questionnaire</li>
+            <li>Confirm patient receives the email</li>
+          </ol>
+
+          <p><strong>Impact:</strong> Patient has successfully booked but will NOT receive their intake forms. This must be resolved before their appointment.</p>
+
+          <hr>
+          <small>This is an automated alert from Moonlit Scheduler. The booking was successful but the intake forms could not be sent automatically.</small>
         `
       })
+      console.log('✅ Failure notification sent to miriam@trymoonlit.com and hello@trymoonlit.com')
     } catch (emailError) {
       console.error('❌ Failed to send failure notification email:', emailError)
     }

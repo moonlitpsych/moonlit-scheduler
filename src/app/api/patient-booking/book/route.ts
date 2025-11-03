@@ -2,6 +2,15 @@
 // service_instance_id: Server-resolved via getIntakeServiceInstanceForPayer(payerId)
 // New behavior: Client passes payerId, server resolves single Intake service instance
 // Fixed: Eliminated client control over service instance selection
+
+// V3.3: Set explicit timeout for booking route (2 minutes)
+// This prevents unknown Vercel timeout behavior and gives enough time for:
+// - IntakeQ client creation (up to 50s with retries)
+// - Appointment creation
+// - Questionnaire sending
+// - All database operations
+export const maxDuration = 120 // 2 minutes
+
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { resolveIntakeServiceInstance } from '@/lib/services/intakeResolver'
@@ -11,6 +20,7 @@ import { ensureClient, syncClientInsurance, createAppointment } from '@/lib/inta
 import { emailService } from '@/lib/services/emailService'
 import { googleMeetService } from '@/lib/services/googleMeetService'
 import { sendIntakeQuestionnaire } from '@/lib/services/intakeqQuestionnaire'
+import { validateBookingRequest, sanitizePatientForLogging } from '@/lib/validation/bookingSchema'
 
 /**
  * Normalization helpers for identity matching
@@ -211,7 +221,21 @@ async function ensurePatient(input: {
 
 export async function POST(request: NextRequest): Promise<NextResponse<IntakeBookingResponse>> {
     try {
-        const body = await request.json() as IntakeBookingRequest
+        const rawBody = await request.json()
+
+        // V3.2: Validate input with zod schema
+        const validation = validateBookingRequest(rawBody)
+        if (!validation.success) {
+            console.error('❌ Invalid booking request:', validation.errors)
+            return NextResponse.json({
+                success: false,
+                error: 'Invalid request data',
+                validationErrors: validation.errors
+            } as IntakeBookingResponse, { status: 400 })
+        }
+
+        // Use validated data
+        const body = validation.data as IntakeBookingRequest
         const {
             providerId,
             payerId,
@@ -226,12 +250,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             referredByPartnerUserId
         } = body
 
-        // Log insurance enrichment fields received
+        // Log insurance enrichment fields received (with sanitized patient data)
         console.log('[BOOKING REQUEST] Insurance fields:', {
             hasMemberId: !!memberId,
             hasGroupNumber: !!groupNumber,
             memberIdLength: memberId?.length,
             groupNumberLength: groupNumber?.length,
+            patient: body.patient ? sanitizePatientForLogging(body.patient) : undefined
             hasPlanName: !!planName,
             planName: planName || 'not provided'
         })
@@ -384,6 +409,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                     body.groupNumber    // Pass group number for IntakeQ enrichment
                 )
 
+                // V3.2: Assertion - ensureClient should never return empty string
+                if (!intakeqClientId || intakeqClientId.trim() === '') {
+                    throw new Error('CRITICAL: ensureClient returned empty ID - this should never happen')
+                }
+
                 // Get provider mapping
                 practitionerExternalId = await getIntakeqPractitionerId(providerId)
 
@@ -393,9 +423,84 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                 console.log('✅ IntakeQ mappings resolved:', { intakeqClientId, practitionerExternalId, serviceExternalId })
 
             } catch (error: any) {
-                console.error('⚠️ IntakeQ mapping failed (will continue with DB insert):', error.message)
-                intakeqMappingError = error
-                // Don't return - continue to create DB appointment
+                // V3.1 Fix: Return error immediately instead of continuing with empty client ID
+                console.error('❌ IntakeQ client mapping failed, stopping booking flow:', error.message)
+
+                // Send notification email to admin
+                try {
+                    const { data: patientData } = await supabaseAdmin
+                        .from('patients')
+                        .select('first_name, last_name, email, phone')
+                        .eq('id', patientId)
+                        .single()
+
+                    const { data: providerData } = await supabaseAdmin
+                        .from('providers')
+                        .select('first_name, last_name')
+                        .eq('id', providerId)
+                        .single()
+
+                    if (patientData && providerData) {
+                        const appointmentDate = startDate.toISOString().split('T')[0]
+                        const appointmentTime = startDate.toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true,
+                            timeZone: 'America/Denver'
+                        })
+
+                        await emailService.sendEmail({
+                            to: 'hello@trymoonlit.com',
+                            subject: `🚨 BOOKING BLOCKED - IntakeQ Client Creation Failed - ${appointmentDate}`,
+                            body: `
+🚨 BOOKING BLOCKED - INTAKEQ CLIENT CREATION FAILED
+
+PATIENT INFORMATION:
+• Name: ${patientData.first_name} ${patientData.last_name}
+• Email: ${patientData.email}
+• Phone: ${patientData.phone || 'Not provided'}
+
+ATTEMPTED APPOINTMENT:
+• Provider: ${providerData.first_name} ${providerData.last_name}
+• Date: ${appointmentDate}
+• Time: ${appointmentTime} (Mountain Time)
+• Duration: ${durationMinutes} minutes
+
+ERROR DETAILS:
+• Error: ${error.message}
+• Patient ID: ${patientId}
+• Provider ID: ${providerId}
+
+WHAT HAPPENED:
+The system could not create or verify the IntakeQ client record. This blocked the booking from proceeding to prevent creating an appointment without a valid client ID.
+
+ACTION REQUIRED:
+1. Check IntakeQ API status and authentication
+2. Verify patient record exists in IntakeQ
+3. Contact patient to reschedule if needed
+4. Review IntakeQ integration logs for details
+
+---
+This is an automated alert from Moonlit Scheduler.
+                            `.trim()
+                        })
+
+                        console.log('✅ Blocking notification email sent to hello@trymoonlit.com')
+                    }
+                } catch (emailError: any) {
+                    console.error('❌ Failed to send blocking notification email:', emailError.message)
+                }
+
+                // Return error to user
+                return NextResponse.json({
+                    success: false,
+                    error: 'We encountered an issue setting up your patient record in our scheduling system. Please try again in a few moments, or contact us directly for assistance.',
+                    code: 'INTAKEQ_CLIENT_FAILED',
+                    details: {
+                        message: error.message,
+                        patientId
+                    }
+                }, { status: 502 })
             }
         } else {
             console.log('📌 IntakeQ sync skipped (PRACTICEQ_ENRICH_ENABLED=false)')
@@ -566,6 +671,44 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
 
         if (patientCheckError) {
             console.error('⚠️ Could not check patient primary_provider_id:', patientCheckError)
+            // V3.2: Add compensation - update appointment notes with failure
+            await supabaseAdmin
+                .from('appointments')
+                .update({
+                    notes: (notes || '') + `\n\n[COMPENSATION NOTE ${new Date().toISOString()}]\nFailed to check patient primary provider: ${patientCheckError.message}\nManual review needed.`
+                })
+                .eq('id', appointmentId)
+                .then(({ error }) => {
+                    if (error) console.error('Failed to update appointment notes:', error)
+                })
+
+            // V3.3: Send admin notification about database query failure
+            await emailService.sendEmail({
+                to: 'hello@trymoonlit.com',
+                subject: `⚠️ Database Query Failed - Patient ${patientId}`,
+                body: `
+⚠️ DATABASE QUERY FAILURE - PATIENT PRIMARY PROVIDER CHECK
+
+Appointment ID: ${appointmentId}
+Patient ID: ${patientId}
+Provider ID: ${providerId}
+
+ISSUE:
+Failed to check if patient has a primary provider assigned.
+This indicates a potential database connectivity or permission issue.
+
+ERROR DETAILS:
+${patientCheckError.message}
+
+ACTION REQUIRED:
+1. Check database connectivity
+2. Verify patient ${patientId} exists and is accessible
+3. Manually check if patient needs primary_provider_id assignment
+4. If needed, run: UPDATE patients SET primary_provider_id = '${providerId}' WHERE id = '${patientId}';
+
+NOTE: The appointment was created successfully, this is just a data integrity check.
+                `.trim()
+            }).catch(err => console.error('Failed to send database query notification:', err))
         } else if (!patientData.primary_provider_id) {
             console.log(`📌 Patient has no primary provider, assigning provider ${providerId}...`)
             const { error: updateError } = await supabaseAdmin
@@ -575,6 +718,46 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
 
             if (updateError) {
                 console.error('⚠️ Failed to assign primary provider:', updateError)
+                // V3.2: Add compensation - update appointment notes with failure
+                await supabaseAdmin
+                    .from('appointments')
+                    .update({
+                        notes: (notes || '') + `\n\n[COMPENSATION NOTE ${new Date().toISOString()}]\nFailed to assign primary provider: ${updateError.message}\nPatient needs primary_provider_id set to ${providerId}.`
+                    })
+                    .eq('id', appointmentId)
+                    .then(({ error }) => {
+                        if (error) console.error('Failed to update appointment notes:', error)
+                    })
+
+                // V3.3: Send admin notification about primary provider assignment failure
+                await emailService.sendEmail({
+                    to: 'hello@trymoonlit.com',
+                    subject: `⚠️ Primary Provider Assignment Failed - Patient ${patientId}`,
+                    body: `
+⚠️ PRIMARY PROVIDER ASSIGNMENT FAILED
+
+Appointment ID: ${appointmentId}
+Patient ID: ${patientId}
+Provider ID: ${providerId}
+
+ISSUE:
+Patient's first appointment was booked but we couldn't assign their primary provider.
+This affects care continuity and provider assignment for future visits.
+
+ERROR DETAILS:
+${updateError.message}
+
+ACTION REQUIRED:
+UPDATE patients SET primary_provider_id = '${providerId}' WHERE id = '${patientId}';
+
+IMPACT:
+- Patient has no "home" provider assigned
+- Future appointments may route to wrong provider
+- Care coordination may be affected
+
+NOTE: The appointment was created successfully, only the primary provider assignment failed.
+                    `.trim()
+                }).catch(err => console.error('Failed to send primary provider notification:', err))
             } else {
                 console.log(`✅ Assigned primary provider ${providerId} to patient ${patientId}`)
             }
@@ -619,18 +802,56 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         let pqAppointmentId: string | null = null
         let pqSyncError: string | null = null
 
-        try {
-            const appointmentResult = await createAppointment({
-                intakeqClientId,
-                practitionerExternalId,
-                serviceExternalId,
-                start: startDate,
-                end: endDate,
-                locationType,
-                notes: notes || `Booked via Moonlit Scheduler - Appointment ID: ${appointmentId}`
+        // V3.1 Fix: Validation guard - ensure we have a valid client ID before proceeding
+        if (!intakeqClientId || intakeqClientId.trim() === '') {
+            console.error('❌ Cannot create IntakeQ appointment: intakeqClientId is empty')
+            console.error('DEBUG: This should have been caught earlier by ensureClient failure check')
+            pqSyncError = 'practiceq_create_failed: Empty client ID'
+
+            // Update appointment notes with defensive error
+            await supabaseAdmin
+                .from('appointments')
+                .update({
+                    notes: (notes || '') + `\n\n[PQ SYNC BLOCKED ${new Date().toISOString()}]\nReason: Empty IntakeQ client ID (defensive guard triggered)\nStatus: Requires investigation`
+                })
+                .eq('id', appointmentId)
+
+            // Send admin notification
+            await emailService.sendEmail({
+                to: 'hello@trymoonlit.com',
+                subject: `⚠️ DEFENSIVE GUARD TRIGGERED - Empty Client ID - ${appointmentId}`,
+                body: `
+⚠️ DEFENSIVE VALIDATION GUARD TRIGGERED
+
+Appointment ID: ${appointmentId}
+Patient ID: ${patientId}
+Provider ID: ${providerId}
+
+ISSUE:
+IntakeQ appointment creation was blocked because intakeqClientId is empty.
+This should have been caught earlier by the ensureClient failure check.
+
+ACTION REQUIRED:
+1. Review logs for appointment ${appointmentId}
+2. Check why ensureClient check did not trigger
+3. Manually create IntakeQ appointment for this patient
+                `.trim()
             })
-            pqAppointmentId = appointmentResult.pqAppointmentId
-            console.log('[PQ_SYNC] pqAppointmentId:', pqAppointmentId)
+
+            // Continue to return the appointment (DB booking succeeded, just IntakeQ sync failed)
+        } else {
+            try {
+                const appointmentResult = await createAppointment({
+                    intakeqClientId,
+                    practitionerExternalId,
+                    serviceExternalId,
+                    start: startDate,
+                    end: endDate,
+                    locationType,
+                    notes: notes || `Booked via Moonlit Scheduler - Appointment ID: ${appointmentId}`
+                })
+                pqAppointmentId = appointmentResult.pqAppointmentId
+                console.log('[PQ_SYNC] pqAppointmentId:', pqAppointmentId)
 
         } catch (error: any) {
             // V3.0: Enhanced error handling with better user messaging
@@ -649,17 +870,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                 intakeqClientId
             })
 
-            // Mark appointment as error state
+            // V3.1 Fix: Update notes with error details but keep status as 'scheduled'
+            // Database constraint only allows ['scheduled', 'confirmed'] - 'error' is invalid
             const { error: updateError } = await supabaseAdmin
                 .from('appointments')
                 .update({
-                    status: 'error',
-                    notes: (notes || '') + `\n\n[PQ SYNC FAILED ${new Date().toISOString()}]\nError: ${pqSyncError}\nClient ID: ${intakeqClientId}`
+                    // Keep status as 'scheduled' - appointment exists in DB even though IntakeQ sync failed
+                    notes: (notes || '') + `\n\n[PQ SYNC FAILED ${new Date().toISOString()}]\nError: ${pqSyncError}\nClient ID: ${intakeqClientId}\nStatus: Requires manual IntakeQ appointment creation`
                 })
                 .eq('id', appointmentId)
 
             if (updateError) {
-                console.error('BOOKING DEBUG – Failed to persist PQ error:', updateError)
+                console.error('BOOKING DEBUG – Failed to persist PQ error notes:', updateError)
             }
 
             // V3.0: Send notification email to admin about the failure
@@ -722,7 +944,7 @@ ACTION REQUIRED:
 4. Send confirmation email to patient
 
 DATABASE APPOINTMENT ID: ${appointmentId}
-Status has been set to 'error' in the database.
+Status: 'scheduled' (appointment exists in DB, IntakeQ sync failed - see notes field)
 
 ---
 This is an automated alert from Moonlit Scheduler.
@@ -752,7 +974,8 @@ This is an automated alert from Moonlit Scheduler.
                     isRetryable: isClientNotFound
                 }
             }, { status: 502 })
-        }
+            }
+        } // V3.1: End of else block for non-empty client ID validation
 
         // Step 8: Update appointment with PQ ID and set status to 'scheduled'
         console.log('✅ Updating appointment with IntakeQ ID...')
@@ -766,7 +989,39 @@ This is an automated alert from Moonlit Scheduler.
 
         if (updateError) {
             console.error('❌ Error updating appointment with PQ ID:', updateError)
-            throw new Error(`Failed to update appointment: ${updateError.message}`)
+            // V3.2: Don't throw - use compensation instead
+            // The appointment exists, we just couldn't update it with PQ ID
+            await supabaseAdmin
+                .from('appointments')
+                .update({
+                    notes: (notes || '') + `\n\n[COMPENSATION NOTE ${new Date().toISOString()}]\nFailed to update appointment with IntakeQ ID: ${updateError.message}\nIntakeQ appointment ID: ${pqAppointmentId}\nRequires manual DB update.`,
+                    status: 'scheduled' // Still mark as scheduled since appointment exists
+                })
+                .eq('id', appointmentId)
+                .then(({ error }) => {
+                    if (error) console.error('Failed to update appointment notes:', error)
+                })
+
+            // Send admin notification about the failed update
+            await emailService.sendEmail({
+                to: 'hello@trymoonlit.com',
+                subject: `⚠️ DB Update Failed - Appointment ${appointmentId}`,
+                body: `
+⚠️ DATABASE UPDATE FAILED - MANUAL INTERVENTION NEEDED
+
+Appointment ID: ${appointmentId}
+IntakeQ Appointment ID: ${pqAppointmentId}
+
+ISSUE:
+Appointment was created successfully in both our database and IntakeQ,
+but we couldn't update the database with the IntakeQ appointment ID.
+
+ACTION REQUIRED:
+UPDATE appointments SET pq_appointment_id = '${pqAppointmentId}' WHERE id = '${appointmentId}';
+
+This is a non-critical error - the appointment is valid and the patient has been notified.
+                `.trim()
+            }).catch(err => console.error('Failed to send admin notification:', err))
         }
 
         // Step 8.5: Send intake questionnaire to patient (NEW - Production Fix)
@@ -855,6 +1110,37 @@ This is an automated alert from Moonlit Scheduler.
 
                     if (meetingUrlError) {
                         console.error('⚠️ Failed to save meeting URL to database:', meetingUrlError)
+                        // V3.2: Add compensation - update appointment notes with failure
+                        await supabaseAdmin
+                            .from('appointments')
+                            .update({
+                                notes: (notes || '') + `\n\n[COMPENSATION NOTE ${new Date().toISOString()}]\nFailed to save meeting URL: ${meetingUrlError.message}\nGoogle Meet URL: ${meetingUrl}\nRequires manual update.`
+                            })
+                            .eq('id', appointmentId)
+                            .then(({ error }) => {
+                                if (error) console.error('Failed to update appointment notes:', error)
+                            })
+
+                        // Send admin notification about missing meeting URL
+                        await emailService.sendEmail({
+                            to: 'hello@trymoonlit.com',
+                            subject: `⚠️ Meeting URL Not Saved - Appointment ${appointmentId}`,
+                            body: `
+⚠️ MEETING URL NOT SAVED - MANUAL UPDATE NEEDED
+
+Appointment ID: ${appointmentId}
+Google Meet URL: ${meetingUrl}
+
+ISSUE:
+Telehealth appointment was created successfully but the Google Meet URL
+couldn't be saved to the database.
+
+ACTION REQUIRED:
+UPDATE appointments SET meeting_url = '${meetingUrl}' WHERE id = '${appointmentId}';
+
+This is important - patient/provider need this link to join the appointment.
+                            `.trim()
+                        }).catch(err => console.error('Failed to send meeting URL notification:', err))
                     } else {
                         console.log('✅ Meeting URL saved to database')
                     }
@@ -1016,7 +1302,7 @@ This booking was created through the Moonlit Scheduler widget.
 
         // Save idempotency record for future duplicate requests
         if (idempotencyKey) {
-            await supabaseAdmin
+            const { error: insertError } = await supabaseAdmin
                 .from('idempotency_requests')
                 .insert({
                     key: idempotencyKey,
@@ -1024,13 +1310,32 @@ This booking was created through the Moonlit Scheduler widget.
                     request_payload: body,
                     response_data: response
                 })
-                .then(({ error }) => {
-                    if (error) {
-                        console.warn(`⚠️ Failed to save idempotency record: ${error.message}`)
-                    } else {
-                        console.log(`✅ Idempotency record saved for key: ${idempotencyKey.substring(0, 20)}...`)
+
+            if (insertError) {
+                // V3.2: Handle unique constraint violation (code 23505)
+                // This means another request with same key already succeeded
+                if (insertError.code === '23505') {
+                    console.log(`⚠️ Idempotency key already exists (race condition handled): ${idempotencyKey.substring(0, 20)}...`)
+
+                    // Fetch the existing record and return its response
+                    const { data: existing, error: fetchError } = await supabaseAdmin
+                        .from('idempotency_requests')
+                        .select('appointment_id, response_data')
+                        .eq('key', idempotencyKey)
+                        .single()
+
+                    if (existing && !fetchError) {
+                        console.log(`✅ Returning cached response for concurrent request: ${existing.appointment_id}`)
+                        // Return the cached response from the request that won the race
+                        return NextResponse.json(existing.response_data as IntakeBookingResponse, { status: 200 })
                     }
-                })
+                } else {
+                    // Other errors are logged but don't fail the request
+                    console.warn(`⚠️ Failed to save idempotency record: ${insertError.message}`)
+                }
+            } else {
+                console.log(`✅ Idempotency record saved for key: ${idempotencyKey.substring(0, 20)}...`)
+            }
         }
 
         return NextResponse.json(response)

@@ -739,6 +739,40 @@ To sync multiple ROI contacts to IntakeQ, refactor to loop through array and con
 
 ---
 
+## 🔮 FUTURE: Google Meet Integration Infrastructure (Nov 3, 2025)
+
+**STATUS:** 🔮 INFRASTRUCTURE ONLY - Not yet implemented
+
+### Context:
+
+**Infrastructure exists but is not active:**
+- `/src/lib/services/googleMeetService.ts` - Service ready for Google Calendar API integration
+- Booking route has code to generate and save meeting URLs
+- Database has `meeting_url` field on appointments table
+
+**Why it's disabled:**
+- IntakeQ currently generates meeting links automatically
+- Google Calendar API integration requires OAuth setup and service account configuration
+- Not needed for MVP since IntakeQ handles this
+
+**What would be needed to enable:**
+1. Set up Google Cloud project with Calendar API enabled
+2. Create service account with calendar.events scope
+3. Share calendar with service account
+4. Add environment variables:
+   - `GOOGLE_CALENDAR_ID`
+   - `GOOGLE_SERVICE_ACCOUNT_KEY`
+5. Test meet link generation
+
+**Current behavior:**
+- Telehealth appointments rely on IntakeQ-generated meeting links
+- Google Meet code paths are present but return null when env vars missing
+- System continues without Google Meet links - not a blocking error
+
+**Note for developers:** The infrastructure is intentionally left in place for future use. Do not remove the Google Meet code - it will be activated when needed.
+
+---
+
 ## 📧 Handling Duplicate Patient Records (Oct 31, 2025)
 
 **Problem:** Patients sometimes change their email after intake, creating duplicate records when they book again with the new email.

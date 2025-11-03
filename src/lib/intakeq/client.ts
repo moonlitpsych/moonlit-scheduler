@@ -112,27 +112,41 @@ export async function ensureClient(
 
         // ✅ FIX: Add delay to ensure IntakeQ has propagated the client
         // IntakeQ needs time before the client is available for appointments
-        // V3.0: Increased from 2000ms to 5000ms based on production failures
-        // IntakeQ's eventual consistency can take longer than expected
+        // V3.2: Enhanced verification with exponential backoff
+        // IntakeQ's eventual consistency can take 10-30 seconds in edge cases
         console.log('⏳ Waiting 5000ms for IntakeQ client propagation...')
         await new Promise(resolve => setTimeout(resolve, 5000))
 
-        // V3.0: Verify client is queryable before proceeding
+        // V3.2: Verify client is queryable with up to 4 attempts
+        // Exponential backoff: 3s, 6s, 12s, 24s (total 45s additional wait if all fail)
+        const maxVerificationAttempts = 4
+        const backoffMultiplier = 3000 // Base delay in ms
+        let verificationSuccessful = false
+        let lastError: any = null
+
         console.log(`🔍 Verifying IntakeQ client ${intakeqClientId} is queryable...`)
-        try {
-            await intakeQService.makeRequest(`/clients/${intakeqClientId}`, { method: 'GET' })
-            console.log(`✅ Client verification successful`)
-        } catch (verifyError: any) {
-            console.warn(`⚠️ Client verification failed, waiting additional 3s: ${verifyError.message}`)
-            await new Promise(resolve => setTimeout(resolve, 3000))
-            // Try verification one more time
+
+        for (let attempt = 1; attempt <= maxVerificationAttempts; attempt++) {
             try {
                 await intakeQService.makeRequest(`/clients/${intakeqClientId}`, { method: 'GET' })
-                console.log(`✅ Client verification successful on retry`)
-            } catch (retryError: any) {
-                console.error(`❌ Client verification failed twice: ${retryError.message}`)
-                throw new Error(`Client created but not yet available in IntakeQ: ${retryError.message}`)
+                console.log(`✅ Client verification successful on attempt ${attempt}`)
+                verificationSuccessful = true
+                break
+            } catch (error: any) {
+                lastError = error
+                if (attempt < maxVerificationAttempts) {
+                    const delay = backoffMultiplier * Math.pow(2, attempt - 1)
+                    console.warn(`⚠️ Client verification attempt ${attempt} failed, waiting ${delay}ms: ${error.message}`)
+                    await new Promise(resolve => setTimeout(resolve, delay))
+                } else {
+                    console.error(`❌ Client verification failed after ${maxVerificationAttempts} attempts: ${error.message}`)
+                }
             }
+        }
+
+        if (!verificationSuccessful) {
+            // Total time waited: 5s initial + 3s + 6s + 12s + 24s = 50 seconds
+            throw new Error(`Client created but not available in IntakeQ after ${maxVerificationAttempts} attempts: ${lastError?.message}`)
         }
 
         // Update our database with the IntakeQ client ID (upsertPracticeQClient already handles alias storage)
@@ -149,6 +163,11 @@ export async function ensureClient(
         }
 
         console.log(`✅ Persisted IntakeQ client ID for patient ${patientId}: ${intakeqClientId}`)
+
+        // V3.2: Ensure we never return an empty client ID
+        if (!intakeqClientId || intakeqClientId.trim() === '') {
+            throw new Error('IntakeQ client ID is empty after creation - this should never happen')
+        }
 
         return intakeqClientId
 
