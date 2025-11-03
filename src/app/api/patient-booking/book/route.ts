@@ -11,6 +11,7 @@ import { ensureClient, syncClientInsurance, createAppointment } from '@/lib/inta
 import { emailService } from '@/lib/services/emailService'
 import { googleMeetService } from '@/lib/services/googleMeetService'
 import { sendIntakeQuestionnaire } from '@/lib/services/intakeqQuestionnaire'
+import { validateBookingRequest, sanitizePatientForLogging } from '@/lib/validation/bookingSchema'
 
 /**
  * Normalization helpers for identity matching
@@ -211,7 +212,21 @@ async function ensurePatient(input: {
 
 export async function POST(request: NextRequest): Promise<NextResponse<IntakeBookingResponse>> {
     try {
-        const body = await request.json() as IntakeBookingRequest
+        const rawBody = await request.json()
+
+        // V3.2: Validate input with zod schema
+        const validation = validateBookingRequest(rawBody)
+        if (!validation.success) {
+            console.error('❌ Invalid booking request:', validation.errors)
+            return NextResponse.json({
+                success: false,
+                error: 'Invalid request data',
+                validationErrors: validation.errors
+            } as IntakeBookingResponse, { status: 400 })
+        }
+
+        // Use validated data
+        const body = validation.data as IntakeBookingRequest
         const {
             providerId,
             payerId,
@@ -226,12 +241,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             referredByPartnerUserId
         } = body
 
-        // Log insurance enrichment fields received
+        // Log insurance enrichment fields received (with sanitized patient data)
         console.log('[BOOKING REQUEST] Insurance fields:', {
             hasMemberId: !!memberId,
             hasGroupNumber: !!groupNumber,
             memberIdLength: memberId?.length,
             groupNumberLength: groupNumber?.length,
+            patient: body.patient ? sanitizePatientForLogging(body.patient) : undefined
             hasPlanName: !!planName,
             planName: planName || 'not provided'
         })
@@ -383,6 +399,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                     body.memberId,      // Pass member ID for IntakeQ enrichment
                     body.groupNumber    // Pass group number for IntakeQ enrichment
                 )
+
+                // V3.2: Assertion - ensureClient should never return empty string
+                if (!intakeqClientId || intakeqClientId.trim() === '') {
+                    throw new Error('CRITICAL: ensureClient returned empty ID - this should never happen')
+                }
 
                 // Get provider mapping
                 practitionerExternalId = await getIntakeqPractitionerId(providerId)
@@ -641,6 +662,16 @@ This is an automated alert from Moonlit Scheduler.
 
         if (patientCheckError) {
             console.error('⚠️ Could not check patient primary_provider_id:', patientCheckError)
+            // V3.2: Add compensation - update appointment notes with failure
+            await supabaseAdmin
+                .from('appointments')
+                .update({
+                    notes: (notes || '') + `\n\n[COMPENSATION NOTE ${new Date().toISOString()}]\nFailed to check patient primary provider: ${patientCheckError.message}\nManual review needed.`
+                })
+                .eq('id', appointmentId)
+                .then(({ error }) => {
+                    if (error) console.error('Failed to update appointment notes:', error)
+                })
         } else if (!patientData.primary_provider_id) {
             console.log(`📌 Patient has no primary provider, assigning provider ${providerId}...`)
             const { error: updateError } = await supabaseAdmin
@@ -650,6 +681,16 @@ This is an automated alert from Moonlit Scheduler.
 
             if (updateError) {
                 console.error('⚠️ Failed to assign primary provider:', updateError)
+                // V3.2: Add compensation - update appointment notes with failure
+                await supabaseAdmin
+                    .from('appointments')
+                    .update({
+                        notes: (notes || '') + `\n\n[COMPENSATION NOTE ${new Date().toISOString()}]\nFailed to assign primary provider: ${updateError.message}\nPatient needs primary_provider_id set to ${providerId}.`
+                    })
+                    .eq('id', appointmentId)
+                    .then(({ error }) => {
+                        if (error) console.error('Failed to update appointment notes:', error)
+                    })
             } else {
                 console.log(`✅ Assigned primary provider ${providerId} to patient ${patientId}`)
             }
@@ -881,7 +922,39 @@ This is an automated alert from Moonlit Scheduler.
 
         if (updateError) {
             console.error('❌ Error updating appointment with PQ ID:', updateError)
-            throw new Error(`Failed to update appointment: ${updateError.message}`)
+            // V3.2: Don't throw - use compensation instead
+            // The appointment exists, we just couldn't update it with PQ ID
+            await supabaseAdmin
+                .from('appointments')
+                .update({
+                    notes: (notes || '') + `\n\n[COMPENSATION NOTE ${new Date().toISOString()}]\nFailed to update appointment with IntakeQ ID: ${updateError.message}\nIntakeQ appointment ID: ${pqAppointmentId}\nRequires manual DB update.`,
+                    status: 'scheduled' // Still mark as scheduled since appointment exists
+                })
+                .eq('id', appointmentId)
+                .then(({ error }) => {
+                    if (error) console.error('Failed to update appointment notes:', error)
+                })
+
+            // Send admin notification about the failed update
+            await emailService.sendEmail({
+                to: 'hello@trymoonlit.com',
+                subject: `⚠️ DB Update Failed - Appointment ${appointmentId}`,
+                body: `
+⚠️ DATABASE UPDATE FAILED - MANUAL INTERVENTION NEEDED
+
+Appointment ID: ${appointmentId}
+IntakeQ Appointment ID: ${pqAppointmentId}
+
+ISSUE:
+Appointment was created successfully in both our database and IntakeQ,
+but we couldn't update the database with the IntakeQ appointment ID.
+
+ACTION REQUIRED:
+UPDATE appointments SET pq_appointment_id = '${pqAppointmentId}' WHERE id = '${appointmentId}';
+
+This is a non-critical error - the appointment is valid and the patient has been notified.
+                `.trim()
+            }).catch(err => console.error('Failed to send admin notification:', err))
         }
 
         // Step 8.5: Send intake questionnaire to patient (NEW - Production Fix)
@@ -970,6 +1043,37 @@ This is an automated alert from Moonlit Scheduler.
 
                     if (meetingUrlError) {
                         console.error('⚠️ Failed to save meeting URL to database:', meetingUrlError)
+                        // V3.2: Add compensation - update appointment notes with failure
+                        await supabaseAdmin
+                            .from('appointments')
+                            .update({
+                                notes: (notes || '') + `\n\n[COMPENSATION NOTE ${new Date().toISOString()}]\nFailed to save meeting URL: ${meetingUrlError.message}\nGoogle Meet URL: ${meetingUrl}\nRequires manual update.`
+                            })
+                            .eq('id', appointmentId)
+                            .then(({ error }) => {
+                                if (error) console.error('Failed to update appointment notes:', error)
+                            })
+
+                        // Send admin notification about missing meeting URL
+                        await emailService.sendEmail({
+                            to: 'hello@trymoonlit.com',
+                            subject: `⚠️ Meeting URL Not Saved - Appointment ${appointmentId}`,
+                            body: `
+⚠️ MEETING URL NOT SAVED - MANUAL UPDATE NEEDED
+
+Appointment ID: ${appointmentId}
+Google Meet URL: ${meetingUrl}
+
+ISSUE:
+Telehealth appointment was created successfully but the Google Meet URL
+couldn't be saved to the database.
+
+ACTION REQUIRED:
+UPDATE appointments SET meeting_url = '${meetingUrl}' WHERE id = '${appointmentId}';
+
+This is important - patient/provider need this link to join the appointment.
+                            `.trim()
+                        }).catch(err => console.error('Failed to send meeting URL notification:', err))
                     } else {
                         console.log('✅ Meeting URL saved to database')
                     }
@@ -1131,7 +1235,7 @@ This booking was created through the Moonlit Scheduler widget.
 
         // Save idempotency record for future duplicate requests
         if (idempotencyKey) {
-            await supabaseAdmin
+            const { error: insertError } = await supabaseAdmin
                 .from('idempotency_requests')
                 .insert({
                     key: idempotencyKey,
@@ -1139,13 +1243,32 @@ This booking was created through the Moonlit Scheduler widget.
                     request_payload: body,
                     response_data: response
                 })
-                .then(({ error }) => {
-                    if (error) {
-                        console.warn(`⚠️ Failed to save idempotency record: ${error.message}`)
-                    } else {
-                        console.log(`✅ Idempotency record saved for key: ${idempotencyKey.substring(0, 20)}...`)
+
+            if (insertError) {
+                // V3.2: Handle unique constraint violation (code 23505)
+                // This means another request with same key already succeeded
+                if (insertError.code === '23505') {
+                    console.log(`⚠️ Idempotency key already exists (race condition handled): ${idempotencyKey.substring(0, 20)}...`)
+
+                    // Fetch the existing record and return its response
+                    const { data: existing, error: fetchError } = await supabaseAdmin
+                        .from('idempotency_requests')
+                        .select('appointment_id, response_data')
+                        .eq('key', idempotencyKey)
+                        .single()
+
+                    if (existing && !fetchError) {
+                        console.log(`✅ Returning cached response for concurrent request: ${existing.appointment_id}`)
+                        // Return the cached response from the request that won the race
+                        return NextResponse.json(existing.response_data as IntakeBookingResponse, { status: 200 })
                     }
-                })
+                } else {
+                    // Other errors are logged but don't fail the request
+                    console.warn(`⚠️ Failed to save idempotency record: ${insertError.message}`)
+                }
+            } else {
+                console.log(`✅ Idempotency record saved for key: ${idempotencyKey.substring(0, 20)}...`)
+            }
         }
 
         return NextResponse.json(response)

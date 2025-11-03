@@ -1,6 +1,7 @@
 // src/lib/services/intakeQService.ts
 import { intakeQRateLimiter } from './rateLimiter'
 import { intakeQCache } from './intakeQCache'
+import { intakeQCircuitBreaker } from './circuitBreaker'
 import { assertValidIntakeqClientId } from '../intakeq/utils'
 
 interface IntakeQAppointment {
@@ -102,14 +103,26 @@ class IntakeQService {
       })
     }
 
-    // Use production-ready rate limiter with queuing and backoff
-    const response = await intakeQRateLimiter.makeRequest(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Auth-Key': this.apiKey,
-        ...options.headers,
-      },
+    // V3.2: Wrap rate-limited request with circuit breaker
+    const response = await intakeQCircuitBreaker.execute(async () => {
+      const res = await intakeQRateLimiter.makeRequest(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Key': this.apiKey,
+          ...options.headers,
+        },
+      })
+
+      // Check if response indicates service is unhealthy
+      // 5xx errors and 503 (Service Unavailable) should trigger circuit breaker
+      if (res.status >= 500) {
+        const error = new Error(`IntakeQ API error: ${res.status} ${res.statusText}`)
+        ;(error as any).status = res.status
+        throw error
+      }
+
+      return res
     })
 
     // Update legacy counters
@@ -127,6 +140,7 @@ class IntakeQService {
         status: response.status,
         responsePreview: responseText.substring(0, 200)
       })
+      // Don't trigger circuit breaker for non-JSON responses (could be auth issues)
       throw new Error(`IntakeQ API returned ${contentType || 'unknown'} instead of JSON. This usually indicates an API error, maintenance mode, or authentication issue. Status: ${response.status}`)
     }
 
