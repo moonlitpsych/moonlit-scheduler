@@ -661,6 +661,80 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
                 console.error('BOOKING DEBUG – Failed to persist PQ error:', updateError)
             }
 
+            // V3.0: Send notification email to admin about the failure
+            try {
+                // Get patient and provider details for the notification
+                const { data: patientData } = await supabaseAdmin
+                    .from('patients')
+                    .select('first_name, last_name, email, phone')
+                    .eq('id', patientId)
+                    .single()
+
+                const { data: providerData } = await supabaseAdmin
+                    .from('providers')
+                    .select('first_name, last_name')
+                    .eq('id', providerId)
+                    .single()
+
+                if (patientData && providerData) {
+                    const appointmentDate = startDate.toISOString().split('T')[0]
+                    const appointmentTime = startDate.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                        timeZone: 'America/Denver'
+                    })
+
+                    await emailService.sendEmail({
+                        to: 'hello@trymoonlit.com',
+                        subject: `🚨 FAILED BOOKING - ${appointmentDate} - Action Required`,
+                        body: `
+🚨 BOOKING FAILED - MANUAL INTERVENTION REQUIRED
+
+PATIENT INFORMATION:
+• Name: ${patientData.first_name} ${patientData.last_name}
+• Email: ${patientData.email}
+• Phone: ${patientData.phone || 'Not provided'}
+
+APPOINTMENT DETAILS:
+• Provider: ${providerData.first_name} ${providerData.last_name}
+• Date: ${appointmentDate}
+• Time: ${appointmentTime} (Mountain Time)
+• Duration: ${durationMinutes} minutes
+
+ERROR DETAILS:
+• Error Type: ${errorType}
+• IntakeQ Client ID: ${intakeqClientId}
+• Appointment ID: ${appointmentId}
+• Technical Error: ${error.message}
+• Is Client Not Found: ${isClientNotFound ? 'YES - Propagation delay issue' : 'NO'}
+
+WHAT HAPPENED:
+${isClientNotFound
+    ? 'Patient was created in IntakeQ but the system could not create the appointment due to propagation delays. The patient record exists in both our database and IntakeQ.'
+    : 'Unknown error occurred while creating the IntakeQ appointment. The patient record exists in our database.'}
+
+ACTION REQUIRED:
+1. Log into IntakeQ and find client: ${intakeqClientId}
+2. Manually create appointment for this patient
+3. Update appointment ${appointmentId} in Supabase with the IntakeQ appointment ID
+4. Send confirmation email to patient
+
+DATABASE APPOINTMENT ID: ${appointmentId}
+Status has been set to 'error' in the database.
+
+---
+This is an automated alert from Moonlit Scheduler.
+                        `.trim()
+                    })
+
+                    console.log('✅ Failure notification email sent to hello@trymoonlit.com')
+                }
+            } catch (emailError: any) {
+                console.error('❌ Failed to send failure notification email:', emailError.message)
+                // Don't fail the error response if email fails
+            }
+
             // V3.0: Provide user-friendly error message
             const userMessage = isClientNotFound
                 ? 'Your information was saved, but there was a temporary delay syncing with our scheduling system. Our team has been notified and will complete your booking within 1 hour. You will receive a confirmation email once processed.'
