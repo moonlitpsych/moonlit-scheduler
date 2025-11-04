@@ -10,7 +10,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import https from 'https';
 import { extractFinancialBenefits } from './x12-271-financial-parser';
-import { checkMoonlitBillability, type BillabilityResult } from './billabilityService';
+import { parseRejection } from './x12-271-rejection-parser';
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -889,10 +889,13 @@ export async function checkEligibility(
     const payerName = extractPayerName(x12_271);
     const managedCareOrg = extractManagedCareOrg(x12_271);
 
-    // Check Moonlit billability (separate from patient eligibility)
-    console.log('💰 Checking Moonlit billability...');
-    const billability = await checkMoonlitBillability(payerName, managedCareOrg);
-    console.log(`💰 Billability result: ${billability.status} - ${billability.message}`);
+    // Parse rejection details (for failed or problematic eligibility checks)
+    const rejectionAnalysis = parseRejection(x12_271);
+    console.log('📋 Rejection analysis:', {
+      isRejected: rejectionAnalysis.isRejected,
+      subscriberRelationship: rejectionAnalysis.subscriberRelationship,
+      userFriendlyMessage: rejectionAnalysis.userFriendlyMessage
+    });
 
     return {
       isEligible,
@@ -913,7 +916,12 @@ export async function checkEligibility(
         deductibleMet: financialData.deductibleMet,
         deductibleRemaining: financialData.deductibleRemaining
       } : null,
-      moonlitBillability: billability,
+
+      // Rejection analysis
+      rejectionReason: rejectionAnalysis.userFriendlyMessage,
+      subscriberRelationship: rejectionAnalysis.subscriberRelationship,
+      technicalDetails: rejectionAnalysis.technicalDetails,
+
       warnings: [],
       raw270: x12_270,
       raw271: x12_271

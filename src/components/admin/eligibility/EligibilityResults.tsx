@@ -11,7 +11,8 @@
 
 'use client'
 
-import { CheckCircle, XCircle, AlertCircle, DollarSign, Calendar, Clock } from 'lucide-react'
+import { useState } from 'react'
+import { CheckCircle, XCircle, AlertCircle, DollarSign, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react'
 import { EligibilityResult } from '@/hooks/useEligibilityChecker'
 
 interface EligibilityResultsProps {
@@ -27,6 +28,8 @@ export default function EligibilityResults({
   patientName,
   payerName
 }: EligibilityResultsProps) {
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false)
+
   // Format currency
   const formatCurrency = (amount: number | null) => {
     if (amount === null || amount === undefined) return 'N/A'
@@ -72,75 +75,67 @@ export default function EligibilityResults({
         </div>
       </div>
 
-      {/* Moonlit Billability Status - SEPARATE from patient eligibility */}
-      {result.moonlitBillability && (
-        <div className={`p-6 border-b ${
-          result.moonlitBillability.status === 'PLAN_VERIFICATION_NEEDED'
-            ? 'bg-yellow-50 border-yellow-200'
-            : result.moonlitBillability.status === 'ACCEPTED'
-            ? 'bg-green-50 border-green-200'
-            : 'bg-red-50 border-red-200'
-        }`}>
-          <div className="flex items-start gap-4">
-            {result.moonlitBillability.status === 'PLAN_VERIFICATION_NEEDED' ? (
-              <AlertCircle className="w-7 h-7 text-yellow-600 flex-shrink-0" />
-            ) : result.moonlitBillability.status === 'ACCEPTED' ? (
-              <CheckCircle className="w-7 h-7 text-green-600 flex-shrink-0" />
-            ) : (
-              <XCircle className="w-7 h-7 text-red-600 flex-shrink-0" />
-            )}
+      {/* Rejection Details - Only show for failed eligibility */}
+      {!result.isEligible && result.rejectionReason && (
+        <div className="p-6 border-b border-red-200 bg-red-50">
+          <div className="flex items-start gap-3 mb-4">
+            <AlertCircle className="w-6 h-6 text-red-700 flex-shrink-0" />
             <div className="flex-1">
-              <h4 className={`text-lg font-bold mb-1 ${
-                result.moonlitBillability.status === 'PLAN_VERIFICATION_NEEDED'
-                  ? 'text-yellow-900'
-                  : result.moonlitBillability.status === 'ACCEPTED'
-                  ? 'text-green-900'
-                  : 'text-red-900'
-              }`}>
-                Moonlit Billability
+              <h4 className="text-lg font-semibold text-red-900 mb-2">
+                Why This Failed
               </h4>
-              <p className={`text-sm mb-2 ${
-                result.moonlitBillability.status === 'PLAN_VERIFICATION_NEEDED'
-                  ? 'text-yellow-700'
-                  : result.moonlitBillability.status === 'ACCEPTED'
-                  ? 'text-green-700'
-                  : 'text-red-700'
-              }`}>
-                {result.moonlitBillability.message}
+              <p className="text-base text-red-800">
+                {result.rejectionReason}
               </p>
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div>
-                  <p className="text-xs font-medium text-gray-600">Contract Status</p>
-                  <p className={`text-sm font-semibold ${
-                    result.moonlitBillability.hasContract ? 'text-green-700' : 'text-red-700'
-                  }`}>
-                    {result.moonlitBillability.hasContract ? '✓ Contracted' : '✗ Not Contracted'}
-                  </p>
-                </div>
-                {result.moonlitBillability.contractedPayer && (
-                  <div>
-                    <p className="text-xs font-medium text-gray-600">Contracted Payer</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {result.moonlitBillability.contractedPayer}
-                    </p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-xs font-medium text-gray-600">Validation Tier</p>
-                  <p className="text-sm font-semibold text-gray-700">
-                    {result.moonlitBillability.tier || 'N/A'}
-                  </p>
-                </div>
-                {result.moonlitBillability.requiresIntakeVerification && (
-                  <div className="col-span-2">
-                    <p className="text-xs font-medium text-yellow-700 bg-yellow-100 p-2 rounded">
-                      ⚠️ Plan verification required during intake
-                    </p>
-                  </div>
-                )}
-              </div>
+              {result.subscriberRelationship && (
+                <p className="text-sm text-red-700 mt-2">
+                  Patient Relationship: <span className="font-semibold capitalize">{result.subscriberRelationship}</span>
+                </p>
+              )}
             </div>
           </div>
+
+          {/* Expandable Technical Details */}
+          {result.technicalDetails && (
+            <div className="mt-4 border-t border-red-200 pt-4">
+              <button
+                onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+                className="flex items-center gap-2 text-sm font-medium text-red-900 hover:text-red-700"
+              >
+                {showTechnicalDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {showTechnicalDetails ? 'Hide' : 'Show'} Technical Details
+              </button>
+
+              {showTechnicalDetails && (
+                <div className="mt-3 space-y-3 font-mono text-xs">
+                  {result.technicalDetails.aaaSegments && result.technicalDetails.aaaSegments.length > 0 && (
+                    <div>
+                      <p className="font-semibold text-red-900 mb-1">AAA Segments (Rejection Codes):</p>
+                      {result.technicalDetails.aaaSegments.map((seg, i) => (
+                        <p key={i} className="text-red-800 bg-red-100 p-2 rounded">{seg}</p>
+                      ))}
+                    </div>
+                  )}
+                  {result.technicalDetails.insSegments && result.technicalDetails.insSegments.length > 0 && (
+                    <div>
+                      <p className="font-semibold text-red-900 mb-1">INS Segments (Subscriber Relationship):</p>
+                      {result.technicalDetails.insSegments.map((seg, i) => (
+                        <p key={i} className="text-red-800 bg-red-100 p-2 rounded">{seg}</p>
+                      ))}
+                    </div>
+                  )}
+                  {result.technicalDetails.msgSegments && result.technicalDetails.msgSegments.length > 0 && (
+                    <div>
+                      <p className="font-semibold text-red-900 mb-1">MSG Segments (Payer Messages):</p>
+                      {result.technicalDetails.msgSegments.map((seg, i) => (
+                        <p key={i} className="text-red-800 bg-red-100 p-2 rounded">{seg}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

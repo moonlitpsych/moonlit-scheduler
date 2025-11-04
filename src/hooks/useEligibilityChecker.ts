@@ -6,7 +6,6 @@
  */
 
 import { useState } from 'react';
-import type { BillabilityResult } from '@/lib/services/billabilityService';
 
 /**
  * Patient data for eligibility check
@@ -31,6 +30,15 @@ export interface EligibilityCheckRequest extends EligibilityPatientData {
 }
 
 /**
+ * Technical details from X12 271 parsing (for admin debugging)
+ */
+export interface TechnicalDetails {
+  aaaSegments: string[]; // Error/rejection segments
+  insSegments: string[]; // Subscriber relationship indicators
+  msgSegments: string[]; // Payer messages
+}
+
+/**
  * Eligibility check result
  */
 export interface EligibilityResult {
@@ -46,7 +54,12 @@ export interface EligibilityResult {
   copayInfo?: any;
   deductibleInfo?: any;
   financialSummary?: any;
-  moonlitBillability?: BillabilityResult; // Moonlit contract billability (separate from patient eligibility)
+
+  // Rejection analysis (for failed eligibility checks)
+  rejectionReason?: string | null; // User-friendly explanation
+  subscriberRelationship?: 'subscriber' | 'dependent' | 'unknown';
+  technicalDetails?: TechnicalDetails; // For admin debugging
+
   warnings?: string[];
   rawResponse?: string;
 }
