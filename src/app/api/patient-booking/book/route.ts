@@ -262,28 +262,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
         })
 
         // V3.0: Resolve referralCode to partner_user_id if provided
+        // DISABLED: This feature is not in use and was causing production crashes
         let resolvedPartnerUserId = referredByPartnerUserId
         let resolvedOrganizationId = referredByOrganizationId
 
-        if (referralCode && !resolvedPartnerUserId) {
-            console.log(`[V3.0 REFERRAL] Resolving referral code: ${referralCode}`)
-
-            // Look up partner user by email or code
-            const { data: partnerUser } = await supabaseAdmin
-                .from('partner_users')
-                .select('id, organization_id, full_name, role')
-                .eq('email', referralCode.toLowerCase().trim())
-                .eq('is_active', true)
-                .single()
-
-            if (partnerUser) {
-                resolvedPartnerUserId = partnerUser.id
-                resolvedOrganizationId = partnerUser.organization_id
-                console.log(`[V3.0 REFERRAL] ✅ Resolved referral: ${partnerUser.full_name} (${partnerUser.role})`)
-            } else {
-                console.log(`[V3.0 REFERRAL] ⚠️ Referral code not found: ${referralCode}`)
-            }
-        }
+        // Commenting out referralCode processing to prevent crashes
+        // if (referralCode && !resolvedPartnerUserId) { ... }
 
         // Check idempotency key first (before any processing)
         const idempotencyKey = request.headers.get('Idempotency-Key')
@@ -329,9 +313,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             const result = await ensurePatient({
                 patientId: body.patientId,
                 patient: body.patient,
-                // V3.0: Pass referral tracking
-                referredByPartnerUserId: resolvedPartnerUserId,
-                referredByOrganizationId: resolvedOrganizationId
+                // V3.0: Pass referral tracking - DISABLED (not in use, was causing crashes)
+                // referredByPartnerUserId: resolvedPartnerUserId,
+                // referredByOrganizationId: resolvedOrganizationId
             })
             patientId = result.patientId
             patientMatchType = result.matchType || 'none'
