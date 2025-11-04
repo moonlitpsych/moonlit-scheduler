@@ -594,8 +594,15 @@ async function filterIntakeConflictingAppointments(
             // Check local database conflicts for ALL appointments (any service type)
             // A provider can only be in one place at a time regardless of payer/service
             // FIX: Use explicit Mountain Time boundaries converted to UTC
-            const mtStart = DateTime.fromISO(date, { zone: 'America/Denver' }).startOf('day').toUTC().toISO()
-            const mtEnd = DateTime.fromISO(date, { zone: 'America/Denver' }).endOf('day').toUTC().toISO()
+            const mtStartObj = DateTime.fromISO(date, { zone: 'America/Denver' }).startOf('day').toUTC()
+            const mtEndObj = DateTime.fromISO(date, { zone: 'America/Denver' }).endOf('day').toUTC()
+            const mtStart = mtStartObj.toISO()
+            const mtEnd = mtEndObj.toISO()
+
+            if (!mtStart || !mtEnd) {
+                console.error(`❌ Invalid date for timezone conversion: ${date}`)
+                throw new Error(`Invalid date format: ${date}`)
+            }
 
             const { data: localConflicts, error: localError } = await supabaseAdmin
                 .from('appointments')
