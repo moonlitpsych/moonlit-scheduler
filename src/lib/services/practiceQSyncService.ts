@@ -183,6 +183,44 @@ class PracticeQSyncService {
       })
     }
 
+    // 4.5. Extract and save IntakeQ Client ID if not already set
+    if (intakeqAppointments.length > 0) {
+      const firstAppt = intakeqAppointments[0]
+      const clientId = firstAppt.ClientId || firstAppt.ClientNumber
+
+      if (clientId) {
+        // Check if patient already has IntakeQ client ID
+        const { data: currentPatient } = await supabaseAdmin
+          .from('patients')
+          .select('intakeq_client_id')
+          .eq('id', patientId)
+          .single()
+
+        if (currentPatient && !currentPatient.intakeq_client_id) {
+          console.log(`📝 [PracticeQ Sync] Updating IntakeQ client ID for patient ${patientId}: ${clientId}`)
+
+          const { error: updateError } = await supabaseAdmin
+            .from('patients')
+            .update({
+              intakeq_client_id: clientId,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', patientId)
+
+          if (updateError) {
+            // Log warning but don't fail the sync - duplicate constraint is acceptable
+            if (updateError.message.includes('duplicate key value violates unique constraint')) {
+              console.warn(`⚠️ [PracticeQ Sync] IntakeQ client ID ${clientId} already assigned to another patient`)
+            } else {
+              console.warn(`⚠️ [PracticeQ Sync] Failed to update IntakeQ client ID: ${updateError.message}`)
+            }
+          } else {
+            console.log(`✅ [PracticeQ Sync] Successfully saved IntakeQ client ID: ${clientId}`)
+          }
+        }
+      }
+    }
+
     // 5. Process each appointment
     const summary = { new: 0, updated: 0, unchanged: 0, errors: 0 }
     const appointments: SyncResult['appointments'] = []
