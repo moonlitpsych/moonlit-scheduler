@@ -9,6 +9,7 @@ import { resolveIntakeServiceInstance } from '@/lib/services/intakeResolver'
 import { BookableProviderPayer } from '@/types/database'
 import { NextRequest, NextResponse } from 'next/server'
 import { featureFlags } from '@/lib/config/featureFlags'
+import { DateTime } from 'luxon'
 
 // Simplified slot interface for Intake-only (no per-slot service instance)
 interface IntakeSlot {
@@ -592,13 +593,24 @@ async function filterIntakeConflictingAppointments(
         try {
             // Check local database conflicts for ALL appointments (any service type)
             // A provider can only be in one place at a time regardless of payer/service
+            // FIX: Use explicit Mountain Time boundaries converted to UTC
+            const mtStartObj = DateTime.fromISO(date, { zone: 'America/Denver' }).startOf('day').toUTC()
+            const mtEndObj = DateTime.fromISO(date, { zone: 'America/Denver' }).endOf('day').toUTC()
+            const mtStart = mtStartObj.toISO()
+            const mtEnd = mtEndObj.toISO()
+
+            if (!mtStart || !mtEnd) {
+                console.error(`❌ Invalid date for timezone conversion: ${date}`)
+                throw new Error(`Invalid date format: ${date}`)
+            }
+
             const { data: localConflicts, error: localError } = await supabaseAdmin
                 .from('appointments')
                 .select('start_time, end_time')
                 .eq('provider_id', providerId)
                 .eq('status', 'scheduled')
-                .gte('start_time', `${date}T00:00:00Z`)
-                .lt('start_time', `${date}T23:59:59Z`)
+                .gte('start_time', mtStart)
+                .lt('start_time', mtEnd)
 
             if (localError) {
                 console.error(`❌ Error checking local conflicts for provider ${providerId}:`, localError)
@@ -642,7 +654,8 @@ async function filterIntakeConflictingAppointments(
 
             // Filter slots against all conflicts (using resolved Intake duration)
             const availableSlots = providerSlots.filter(slot => {
-                const slotStart = new Date(`${slot.date}T${slot.time}:00`)
+                // FIX: Parse slot time explicitly as Mountain Time, then convert to Date for comparison
+                const slotStart = DateTime.fromISO(`${slot.date}T${slot.time}:00`, { zone: 'America/Denver' }).toJSDate()
                 const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60 * 1000)
 
                 // Check local conflicts
@@ -654,6 +667,27 @@ async function filterIntakeConflictingAppointments(
                 const hasIntakeqConflict = intakeqConflictTimes.some(conflict =>
                     slotStart < conflict.end && slotEnd > conflict.start
                 )
+
+                // DEBUG: Comprehensive logging for timestamp comparisons
+                if (hasLocalConflict || hasIntakeqConflict) {
+                    console.log(`🔍 CONFLICT DEBUG for slot ${slot.time}:`, {
+                        slotStart: slotStart.toISOString(),
+                        slotEnd: slotEnd.toISOString(),
+                        slotStartLocal: slotStart.toString(),
+                        localConflicts: localConflictTimes.map(c => ({
+                            start: c.start.toISOString(),
+                            end: c.end.toISOString(),
+                            overlaps: slotStart < c.end && slotEnd > c.start
+                        })),
+                        intakeqConflicts: intakeqConflictTimes.map(c => ({
+                            start: c.start.toISOString(),
+                            end: c.end.toISOString(),
+                            overlaps: slotStart < c.end && slotEnd > c.start
+                        })),
+                        hasLocalConflict,
+                        hasIntakeqConflict
+                    })
+                }
 
                 if (hasLocalConflict) {
                     console.log(`⚠️ Slot ${slot.time} conflicts with local appointment, removing`)
