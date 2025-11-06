@@ -32,18 +32,43 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
     }
 
-    // 2. Get partner user (with auto-fix for missing auth_user_id)
-    let partnerUser
-    try {
-      partnerUser = await getPartnerUserFromSession(session.user)
-    } catch (error: any) {
-      if (error instanceof PartnerAuthError) {
-        return NextResponse.json({ success: false, error: error.message }, { status: error.status })
-      }
-      throw error
+    // 2. Parse request body (to get partner_user_id for impersonation)
+    const body = await request.json()
+    const { appointment_id, send_email = false, custom_email, partner_user_id } = body
+
+    if (!appointment_id) {
+      return NextResponse.json({ success: false, error: 'appointment_id is required' }, { status: 400 })
     }
 
-    // 3. Verify role (admin or case_manager)
+    // 3. Get partner user (with impersonation support)
+    let partnerUser
+
+    if (partner_user_id) {
+      // Admin impersonating - use provided partner_user_id
+      const { data: impersonatedUser, error: impersonError } = await supabaseAdmin
+        .from('partner_users')
+        .select('id, organization_id, role, is_active, email')
+        .eq('id', partner_user_id)
+        .eq('is_active', true)
+        .single()
+
+      if (impersonError || !impersonatedUser) {
+        return NextResponse.json({ success: false, error: 'Partner user not found' }, { status: 404 })
+      }
+      partnerUser = impersonatedUser
+    } else {
+      // Regular partner user - lookup by session
+      try {
+        partnerUser = await getPartnerUserFromSession(session.user)
+      } catch (error: any) {
+        if (error instanceof PartnerAuthError) {
+          return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+        }
+        throw error
+      }
+    }
+
+    // 4. Verify role (admin or case_manager)
     if (partnerUser.role !== 'partner_admin' && partnerUser.role !== 'partner_case_manager') {
       return NextResponse.json(
         { success: false, error: 'Insufficient permissions' },
@@ -51,15 +76,7 @@ export async function POST(
       )
     }
 
-    // 4. Parse request body
-    const body = await request.json()
-    const { appointment_id, send_email = false, custom_email } = body
-
-    if (!appointment_id) {
-      return NextResponse.json({ success: false, error: 'appointment_id is required' }, { status: 400 })
-    }
-
-    // Validate email if sending
+    // 5. Validate email if sending
     if (send_email && !custom_email) {
       return NextResponse.json(
         { success: false, error: 'custom_email is required when send_email is true' },
@@ -67,7 +84,7 @@ export async function POST(
       )
     }
 
-    // 5. Check ROI consent
+    // 6. Check ROI consent
     const { data: affiliation, error: affiliationError } = await supabaseAdmin
       .from('patient_organization_affiliations')
       .select('consent_on_file, consent_expires_on')
@@ -101,7 +118,7 @@ export async function POST(
       )
     }
 
-    // 6. Check for existing report for this appointment
+    // 7. Check for existing report for this appointment
     const { data: existingReport } = await supabaseAdmin
       .from('medication_reports')
       .select('id, pdf_url, pdf_generated_at')
@@ -114,7 +131,7 @@ export async function POST(
       // Could either return existing or regenerate - let's regenerate for now
     }
 
-    // 7. Generate report
+    // 8. Generate report
     console.log('📋 Generating medication report...', {
       patientId: patientId,
       appointmentId: appointment_id,
@@ -134,7 +151,7 @@ export async function POST(
       )
     }
 
-    // 8. Send email if requested
+    // 9. Send email if requested
     let emailSent = false
     if (send_email && custom_email && result.pdfUrl) {
       try {
@@ -187,7 +204,7 @@ export async function POST(
       }
     }
 
-    // 9. Log activity
+    // 10. Log activity
     await supabaseAdmin.from('patient_activity_log').insert({
       patient_id: patientId,
       activity_type: 'medication_report_generated',

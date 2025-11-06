@@ -26,7 +26,7 @@ export async function getPartnerUserFromSession(sessionUser: User): Promise<any>
   // Try lookup by auth_user_id first (fast path)
   const { data: userByAuth } = await supabaseAdmin
     .from('partner_users')
-    .select('id, organization_id, role, is_active, email, auth_user_id, full_name, notification_preferences, timezone, permissions')
+    .select('id, organization_id, role, is_active, email, auth_user_id, full_name, notification_preferences, timezone')
     .eq('auth_user_id', sessionUser.id)
     .eq('is_active', true)
     .single()
@@ -40,7 +40,7 @@ export async function getPartnerUserFromSession(sessionUser: User): Promise<any>
 
   const { data: userByEmail, error: emailLookupError } = await supabaseAdmin
     .from('partner_users')
-    .select('id, organization_id, role, is_active, email, auth_user_id, full_name, notification_preferences, timezone, permissions')
+    .select('id, organization_id, role, is_active, email, auth_user_id, full_name, notification_preferences, timezone')
     .eq('email', sessionUser.email)
     .eq('is_active', true)
     .single()

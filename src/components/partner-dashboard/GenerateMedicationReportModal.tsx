@@ -138,7 +138,8 @@ export function GenerateMedicationReportModal({
           body: JSON.stringify({
             appointment_id: selectedAppointmentId,
             send_email: sendEmail,
-            custom_email: sendEmail ? customEmail : undefined
+            custom_email: sendEmail ? customEmail : undefined,
+            partner_user_id: partnerUserId // Pass partner_user_id for admin impersonation
           })
         }
       )
