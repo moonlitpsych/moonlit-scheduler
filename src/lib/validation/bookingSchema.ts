@@ -193,10 +193,16 @@ export function validateBookingRequest(data: unknown): {
     } catch (error) {
         if (error instanceof z.ZodError) {
             const errors: Record<string, string> = {}
-            error.errors.forEach(err => {
-                const path = err.path.join('.')
-                errors[path] = err.message
-            })
+            // Add null check for error.errors array
+            if (error.errors && Array.isArray(error.errors)) {
+                error.errors.forEach(err => {
+                    // Also check if err.path exists before calling join()
+                    const path = (err.path && Array.isArray(err.path)) ? err.path.join('.') : 'unknown'
+                    errors[path] = err.message || 'Validation error'
+                })
+            } else {
+                errors.general = 'Validation failed with unknown error structure'
+            }
             return { success: false, errors }
         }
         return {
