@@ -10,6 +10,7 @@ import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateMedicationReport } from '@/lib/services/medicationReportService'
 import emailService from '@/lib/services/emailService'
+import { getPartnerUserFromSession, PartnerAuthError } from '@/lib/partner-auth'
 
 export async function POST(
   request: NextRequest,
@@ -31,16 +32,15 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
     }
 
-    // 2. Get partner user
-    const { data: partnerUser, error: userError } = await supabaseAdmin
-      .from('partner_users')
-      .select('id, organization_id, role, is_active')
-      .eq('auth_user_id', session.user.id)
-      .eq('is_active', true)
-      .single()
-
-    if (userError || !partnerUser) {
-      return NextResponse.json({ success: false, error: 'Partner user not found' }, { status: 404 })
+    // 2. Get partner user (with auto-fix for missing auth_user_id)
+    let partnerUser
+    try {
+      partnerUser = await getPartnerUserFromSession(session.user)
+    } catch (error: any) {
+      if (error instanceof PartnerAuthError) {
+        return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+      }
+      throw error
     }
 
     // 3. Verify role (admin or case_manager)
