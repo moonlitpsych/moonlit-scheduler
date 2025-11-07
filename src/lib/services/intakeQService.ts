@@ -655,7 +655,10 @@ class IntakeQService {
     try {
       assertValidIntakeqClientId(clientId)
 
+      // Use /notes/summary endpoint with clientId as query parameter
       const queryParams = new URLSearchParams()
+      queryParams.append('clientId', clientId)
+
       if (options?.limit) {
         queryParams.append('limit', options.limit.toString())
       }
@@ -663,8 +666,7 @@ class IntakeQService {
         queryParams.append('status', options.status)
       }
 
-      const query = queryParams.toString()
-      const endpoint = `/clients/${clientId}/notes${query ? `?${query}` : ''}`
+      const endpoint = `/notes/summary?${queryParams.toString()}`
 
       const notes = await this.makeRequest<any[]>(endpoint, {
         method: 'GET'
