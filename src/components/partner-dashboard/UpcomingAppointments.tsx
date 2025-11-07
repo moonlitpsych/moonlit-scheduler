@@ -31,13 +31,11 @@ interface Appointment {
 interface UpcomingAppointmentsProps {
   appointments: Appointment[]
   loading?: boolean
-  onRequestChange?: (appointmentId: string) => void
 }
 
-export function UpcomingAppointments({ 
-  appointments, 
-  loading = false,
-  onRequestChange 
+export function UpcomingAppointments({
+  appointments,
+  loading = false
 }: UpcomingAppointmentsProps) {
   const [selectedAppointment, setSelectedAppointment] = useState<string | null>(null)
   const { exportSingleAppointment, exportStatus, exportMessage } = useAppointmentExport()
@@ -177,17 +175,6 @@ export function UpcomingAppointments({
                   </p>
                 </div>
               </div>
-
-              {/* Action button */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onRequestChange?.(appointment.id)
-                }}
-                className="text-moonlit-brown hover:text-moonlit-brown-hover text-sm font-medium font-['Newsreader']"
-              >
-                Request Change
-              </button>
             </div>
 
             {/* Expanded details */}
@@ -215,25 +202,6 @@ export function UpcomingAppointments({
                 </div>
 
                 <div className="flex flex-wrap gap-3 mt-4">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onRequestChange?.(appointment.id)
-                    }}
-                    className="inline-flex items-center px-3 py-2 border border-moonlit-brown text-moonlit-brown text-sm font-medium font-['Newsreader'] rounded-md hover:bg-moonlit-cream transition-colors"
-                  >
-                    Request Reschedule
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      // TODO: Handle cancellation
-                    }}
-                    className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 text-sm font-medium font-['Newsreader'] rounded-md hover:bg-gray-50 transition-colors"
-                  >
-                    Request Cancel
-                  </button>
-                  
                   {/* Individual Export Buttons */}
                   <div className="flex items-center space-x-2 ml-auto">
                     <span className="text-xs text-gray-500 font-['Newsreader']">Export to:</span>

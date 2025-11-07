@@ -126,11 +126,6 @@ export default function PartnerDashboardPage() {
     fetchData()
   }, [])
 
-  const handleRequestChange = (appointmentId: string) => {
-    // TODO: Open change request modal
-    console.log('Request change for appointment:', appointmentId)
-    alert(`Change request for appointment ${appointmentId} - Modal would open here`)
-  }
 
   if (error) {
     return (
@@ -254,7 +249,6 @@ export default function PartnerDashboardPage() {
             <UpcomingAppointments
               appointments={dashboardData?.upcoming_appointments || []}
               loading={loading}
-              onRequestChange={handleRequestChange}
             />
           </div>
 

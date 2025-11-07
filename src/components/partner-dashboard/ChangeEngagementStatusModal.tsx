@@ -10,6 +10,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
+import { useToast } from '@/contexts/ToastContext'
 
 interface ChangeEngagementStatusModalProps {
   patient: {
@@ -43,12 +44,14 @@ export function ChangeEngagementStatusModal({
   userEmail,
   userType = 'partner'
 }: ChangeEngagementStatusModalProps) {
+  const toast = useToast()
   const [selectedStatus, setSelectedStatus] = useState(currentStatus)
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().split('T')[0])
   const [changeReason, setChangeReason] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [markAsTest, setMarkAsTest] = useState(false)
+  const [showConfirmation, setShowConfirmation] = useState(false)
 
   // Reset form when modal opens or patient changes
   useEffect(() => {
@@ -58,10 +61,15 @@ export function ChangeEngagementStatusModal({
       setChangeReason('')
       setError(null)
       setMarkAsTest(false)
+      setShowConfirmation(false)
     }
   }, [isOpen, patient.id, currentStatus])
 
   if (!isOpen) return null
+
+  // List of serious statuses that require confirmation
+  const seriousStatuses = ['deceased', 'discharged', 'inactive']
+  const requiresConfirmation = seriousStatuses.includes(selectedStatus) && selectedStatus !== currentStatus
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,6 +78,12 @@ export function ChangeEngagementStatusModal({
     // Validate reason for non-active statuses
     if (selectedStatus !== 'active' && !changeReason.trim()) {
       setError('Please provide a reason for this status change')
+      return
+    }
+
+    // Show confirmation dialog for serious status changes
+    if (requiresConfirmation && !showConfirmation) {
+      setShowConfirmation(true)
       return
     }
 
@@ -124,13 +138,23 @@ export function ChangeEngagementStatusModal({
         }
       }
 
-      // Show notification if admin will be notified (only for partner users)
+      // Show notification based on user type
       if (data.needs_admin_notification && userType === 'partner') {
-        alert('Status updated. Moonlit admin has been notified of this change.')
+        toast.success(
+          'Status Updated',
+          'Moonlit admin has been notified of this change.'
+        )
       } else if (userType === 'admin') {
-        // For admin users, just show a simple success message
+        // For admin users, show success with optional test data message
         const testMsg = markAsTest ? ' Patient marked as test data.' : ''
-        alert(`Status updated successfully to "${STATUS_OPTIONS.find(o => o.value === selectedStatus)?.label}".${testMsg}`)
+        const statusLabel = STATUS_OPTIONS.find(o => o.value === selectedStatus)?.label
+        toast.success(
+          'Status Updated',
+          `Status changed to "${statusLabel}".${testMsg}`
+        )
+      } else {
+        // Default success message
+        toast.success('Status Updated', 'Patient engagement status has been updated.')
       }
 
       onSuccess()
@@ -278,24 +302,69 @@ export function ChangeEngagementStatusModal({
             </div>
           )}
 
+          {/* Confirmation Dialog */}
+          {showConfirmation && requiresConfirmation && (
+            <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6">
+              <div className="flex items-start space-x-3 mb-4">
+                <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-red-900 text-lg mb-2">
+                    Confirm Status Change
+                  </p>
+                  <p className="text-sm text-red-800 mb-3">
+                    You are about to change {patient.first_name} {patient.last_name}'s status to{' '}
+                    <strong>"{STATUS_OPTIONS.find(o => o.value === selectedStatus)?.label}"</strong>.
+                    {selectedStatus === 'deceased' && ' This is a permanent and serious change.'}
+                    {selectedStatus === 'discharged' && ' This will mark the patient as no longer in active treatment.'}
+                    {selectedStatus === 'inactive' && ' This will mark the patient as no longer seeking care.'}
+                  </p>
+                  <p className="text-sm text-red-800 font-medium">
+                    Are you sure you want to proceed?
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmation(false)}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Go Back
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    // Actually submit the form after confirmation
+                    handleSubmit(e as any)
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                >
+                  Yes, Update Status
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
-          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading || (selectedStatus === currentStatus && !markAsTest)}
-              className="px-4 py-2 bg-moonlit-brown text-white rounded-lg hover:bg-moonlit-brown/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Updating...' : 'Update Status'}
-            </button>
-          </div>
+          {!showConfirmation && (
+            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || (selectedStatus === currentStatus && !markAsTest)}
+                className="px-4 py-2 bg-moonlit-brown text-white rounded-lg hover:bg-moonlit-brown/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Updating...' : requiresConfirmation ? 'Continue' : 'Update Status'}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>
