@@ -14,7 +14,7 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { Users, Calendar, Activity, Building2, UserCheck, Download, RotateCcw, Search } from 'lucide-react'
+import { Users, Calendar, Activity, Building2, UserCheck, Download, RotateCcw, Search, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import { EngagementStatusChip } from '@/components/partner-dashboard/EngagementStatusChip'
 import { AppointmentStatusIndicator } from '@/components/partner-dashboard/AppointmentStatusIndicator'
 import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
@@ -55,6 +55,9 @@ interface Patient {
   payer_state?: string | null
 }
 
+type SortColumn = 'name' | 'status' | 'previous' | 'next' | 'provider' | 'payer' | 'organization' | 'caseManager'
+type SortDirection = 'asc' | 'desc' | null
+
 export default function AdminPatientRoster() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('active')
@@ -66,6 +69,10 @@ export default function AdminPatientRoster() {
   const [sortBy, setSortBy] = useState<string>('patient_name')
   const [page, setPage] = useState(1)
   const limit = 50
+
+  // Client-side column sorting state
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null)
 
   // Build API URL with filters
   const buildApiUrl = () => {
@@ -108,7 +115,7 @@ export default function AdminPatientRoster() {
 
   // CSV Export function
   const handleExportCSV = () => {
-    const csvData = filteredPatients.map(patient => ({
+    const csvData = sortedPatients.map(patient => ({
       name: `${patient.first_name} ${patient.last_name}`,
       email: patient.email || '',
       phone: patient.phone || '',
@@ -232,6 +239,34 @@ export default function AdminPatientRoster() {
     return acc
   }, []).sort((a, b) => a.lastName.localeCompare(b.lastName))
 
+  // Handle column sort
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      // Cycle through: asc -> desc -> null (unsorted)
+      if (sortDirection === 'asc') {
+        setSortDirection('desc')
+      } else if (sortDirection === 'desc') {
+        setSortDirection(null)
+        setSortColumn(null)
+      }
+    } else {
+      // New column, start with ascending
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  // Get sort icon for column header
+  const getSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+    }
+    if (sortDirection === 'asc') {
+      return <ArrowUp className="w-4 h-4 text-moonlit-brown" />
+    }
+    return <ArrowDown className="w-4 h-4 text-moonlit-brown" />
+  }
+
   // Apply client-side filters (search is handled server-side now)
   const filteredPatients = patients.filter((p: Patient) => {
     // Provider filter
@@ -245,6 +280,59 @@ export default function AdminPatientRoster() {
     }
 
     return true
+  })
+
+  // Sort patients after filtering
+  const sortedPatients = [...filteredPatients].sort((a, b) => {
+    if (!sortColumn || !sortDirection) return 0
+
+    let aValue: any
+    let bValue: any
+
+    switch (sortColumn) {
+      case 'name':
+        aValue = `${a.first_name} ${a.last_name}`.toLowerCase()
+        bValue = `${b.first_name} ${b.last_name}`.toLowerCase()
+        break
+      case 'status':
+        aValue = a.engagement_status
+        bValue = b.engagement_status
+        break
+      case 'previous':
+        aValue = a.last_seen_date ? new Date(a.last_seen_date).getTime() : 0
+        bValue = b.last_seen_date ? new Date(b.last_seen_date).getTime() : 0
+        break
+      case 'next':
+        aValue = a.next_appointment_date ? new Date(a.next_appointment_date).getTime() : Number.MAX_SAFE_INTEGER
+        bValue = b.next_appointment_date ? new Date(b.next_appointment_date).getTime() : Number.MAX_SAFE_INTEGER
+        break
+      case 'provider':
+        aValue = a.provider_last_name ? `${a.provider_first_name} ${a.provider_last_name}`.toLowerCase() : ''
+        bValue = b.provider_last_name ? `${b.provider_first_name} ${b.provider_last_name}`.toLowerCase() : ''
+        break
+      case 'payer':
+        aValue = (a.payer_name || '').toLowerCase()
+        bValue = (b.payer_name || '').toLowerCase()
+        break
+      case 'organization':
+        aValue = a.affiliation_details && a.affiliation_details.length > 0
+          ? a.affiliation_details[0].org_name.toLowerCase()
+          : ''
+        bValue = b.affiliation_details && b.affiliation_details.length > 0
+          ? b.affiliation_details[0].org_name.toLowerCase()
+          : ''
+        break
+      case 'caseManager':
+        aValue = (a.case_manager_name || '').toLowerCase()
+        bValue = (b.case_manager_name || '').toLowerCase()
+        break
+      default:
+        return 0
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
+    return 0
   })
 
   if (error) {
@@ -460,7 +548,7 @@ export default function AdminPatientRoster() {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-moonlit-brown mx-auto"></div>
               <p className="mt-4 text-gray-600">Loading patients...</p>
             </div>
-          ) : filteredPatients.length === 0 ? (
+          ) : sortedPatients.length === 0 ? (
             <div className="p-12 text-center">
               <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600">No patients found</p>
@@ -470,36 +558,84 @@ export default function AdminPatientRoster() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                   <tr>
-                    <th style={{ width: columnWidths.patient }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Patient
+                    <th style={{ width: columnWidths.patient }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <button
+                        onClick={() => handleSort('name')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Patient
+                        {getSortIcon('name')}
+                      </button>
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown" onMouseDown={(e) => handleMouseDown('patient', e)} />
                     </th>
-                    <th style={{ width: columnWidths.status }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Status
+                    <th style={{ width: columnWidths.status }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <button
+                        onClick={() => handleSort('status')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Status
+                        {getSortIcon('status')}
+                      </button>
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown" onMouseDown={(e) => handleMouseDown('status', e)} />
                     </th>
-                    <th style={{ width: columnWidths.previous }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Previous Appointment
+                    <th style={{ width: columnWidths.previous }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <button
+                        onClick={() => handleSort('previous')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Previous Appointment
+                        {getSortIcon('previous')}
+                      </button>
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown" onMouseDown={(e) => handleMouseDown('previous', e)} />
                     </th>
-                    <th style={{ width: columnWidths.next }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Next Appointment
+                    <th style={{ width: columnWidths.next }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <button
+                        onClick={() => handleSort('next')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Next Appointment
+                        {getSortIcon('next')}
+                      </button>
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown" onMouseDown={(e) => handleMouseDown('next', e)} />
                     </th>
-                    <th style={{ width: columnWidths.provider }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Provider
+                    <th style={{ width: columnWidths.provider }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <button
+                        onClick={() => handleSort('provider')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Provider
+                        {getSortIcon('provider')}
+                      </button>
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown" onMouseDown={(e) => handleMouseDown('provider', e)} />
                     </th>
-                    <th style={{ width: columnWidths.payer }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Payer
+                    <th style={{ width: columnWidths.payer }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <button
+                        onClick={() => handleSort('payer')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Payer
+                        {getSortIcon('payer')}
+                      </button>
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown" onMouseDown={(e) => handleMouseDown('payer', e)} />
                     </th>
-                    <th style={{ width: columnWidths.organization }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Organization
+                    <th style={{ width: columnWidths.organization }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <button
+                        onClick={() => handleSort('organization')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Organization
+                        {getSortIcon('organization')}
+                      </button>
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown" onMouseDown={(e) => handleMouseDown('organization', e)} />
                     </th>
-                    <th style={{ width: columnWidths.caseManager }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Case Manager
+                    <th style={{ width: columnWidths.caseManager }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <button
+                        onClick={() => handleSort('caseManager')}
+                        className="flex items-center gap-2 hover:text-moonlit-brown transition-colors"
+                      >
+                        Case Manager
+                        {getSortIcon('caseManager')}
+                      </button>
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-moonlit-brown" onMouseDown={(e) => handleMouseDown('caseManager', e)} />
                     </th>
                     <th style={{ width: columnWidths.practiceq }} className="relative px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -513,7 +649,7 @@ export default function AdminPatientRoster() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredPatients.map((patient: Patient) => (
+                  {sortedPatients.map((patient: Patient) => (
                     <tr key={patient.patient_id} className="hover:bg-gray-50">
                       <td style={{ width: columnWidths.patient }} className="px-6 py-4">
                         <div>
@@ -632,9 +768,9 @@ export default function AdminPatientRoster() {
               {/* Pagination Info */}
               <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
                 <p className="text-sm text-gray-600">
-                  {filteredPatients.length === 1
+                  {sortedPatients.length === 1
                     ? 'Showing 1 patient matching filters'
-                    : `Showing all ${filteredPatients.length} patients matching filters`
+                    : `Showing all ${sortedPatients.length} patients matching filters`
                   }
                 </p>
               </div>
