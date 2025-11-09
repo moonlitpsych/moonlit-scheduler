@@ -26,8 +26,14 @@ export interface PartnerImpersonationContext {
 }
 
 class PartnerImpersonationManager {
-  private supabase = createClientComponentClient<Database>()
   private storageKey = 'moonlit_impersonated_partner'
+
+  /**
+   * Lazy initialization of Supabase client to avoid SSR issues
+   */
+  private getSupabase() {
+    return createClientComponentClient<Database>()
+  }
 
   /**
    * Set the partner to impersonate
@@ -100,7 +106,8 @@ class PartnerImpersonationManager {
    * Get partner by ID
    */
   async getPartnerById(partnerId: string): Promise<ImpersonatedPartner | null> {
-    const { data, error } = await this.supabase
+    const supabase = this.getSupabase()
+    const { data, error } = await supabase
       .from('partner_users')
       .select(`
         id,
@@ -142,7 +149,8 @@ class PartnerImpersonationManager {
     if (!impersonation) return
 
     try {
-      const { error } = await this.supabase
+      const supabase = this.getSupabase()
+      const { error } = await supabase
         .from('admin_action_logs')
         .insert({
           admin_email: impersonation.impersonatedBy,
