@@ -11,6 +11,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { UploadROIModal } from '@/components/partner-dashboard/UploadROIModal'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import {
   User,
   ArrowLeft,
@@ -101,26 +102,57 @@ export default function PatientDetailPage() {
           return
         }
 
-        // Fetch partner user data
-        const userResponse = await fetch('/api/partner/me', {
-          headers: { 'x-partner-user-id': user.id }
-        })
+        // Check for admin impersonation
+        const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+        let partnerData: PartnerUser
 
-        if (!userResponse.ok) {
-          setError('Failed to load partner user data')
-          return
+        if (impersonation) {
+          // Admin is impersonating - use impersonated partner data directly
+          const nameParts = impersonation.partner.full_name?.split(' ') || ['', '']
+          partnerData = {
+            id: impersonation.partner.id,
+            auth_user_id: impersonation.partner.auth_user_id,
+            organization_id: impersonation.partner.organization_id,
+            first_name: nameParts[0] || '',
+            last_name: nameParts.slice(1).join(' ') || '',
+            full_name: impersonation.partner.full_name,
+            email: impersonation.partner.email,
+            phone: impersonation.partner.phone,
+            role: impersonation.partner.role,
+            status: impersonation.partner.is_active ? 'active' : 'inactive',
+            timezone: 'America/Denver',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            organization: impersonation.partner.organization,
+            permissions: {},
+            organization_stats: undefined
+          }
+          setPartnerUser(partnerData)
+        } else {
+          // Regular partner user - fetch from API
+          const userResponse = await fetch('/api/partner/me')
+
+          if (!userResponse.ok) {
+            setError('Failed to load partner user data')
+            return
+          }
+
+          const userData = await userResponse.json()
+          if (!userData.success) {
+            setError(userData.error || 'Failed to load user data')
+            return
+          }
+
+          partnerData = userData.data
+          setPartnerUser(partnerData)
         }
 
-        const userData = await userResponse.json()
-        if (!userData.success) {
-          setError(userData.error || 'Failed to load user data')
-          return
-        }
+        // Fetch patient details with impersonation support
+        const patientsUrl = impersonation
+          ? `/api/partner-dashboard/patients?partner_user_id=${impersonation.partner.id}`
+          : '/api/partner-dashboard/patients'
 
-        setPartnerUser(userData.data)
-
-        // Fetch patient details
-        const patientsResponse = await fetch('/api/partner-dashboard/patients')
+        const patientsResponse = await fetch(patientsUrl)
         if (!patientsResponse.ok) {
           setError('Failed to load patient')
           return
