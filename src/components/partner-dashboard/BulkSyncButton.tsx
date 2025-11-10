@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 
 interface BulkSyncButtonProps {
   onSyncComplete?: () => void
@@ -45,7 +46,13 @@ export default function BulkSyncButton({ onSyncComplete }: BulkSyncButtonProps) 
         throw new Error('Not authenticated')
       }
 
-      const response = await fetch('/api/partner-dashboard/patients/sync-all', {
+      // Check for admin impersonation
+      const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+      const url = impersonation
+        ? `/api/partner-dashboard/patients/sync-all?partner_user_id=${impersonation.partner.id}`
+        : '/api/partner-dashboard/patients/sync-all'
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
