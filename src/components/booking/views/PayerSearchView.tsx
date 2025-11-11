@@ -5,6 +5,7 @@ import { Payer } from '@/types/database'
 import { Calendar, Check, Clock, CreditCard, Loader2, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { BookingScenario, BookingIntent } from './WelcomeView'
+import PayerPlansWrapper from '../PayerPlansWrapper'
 
 interface PayerWithCarveout extends Payer {
     displaySubtext?: string
@@ -599,6 +600,12 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                                     </p>
                                                                 </div>
                                                             )}
+
+                                                            {/* Inline plan display */}
+                                                            <PayerPlansWrapper
+                                                                payerId={payer.id}
+                                                                payerName={payer.name}
+                                                            />
                                                         </div>
                                                     </div>
                                                     

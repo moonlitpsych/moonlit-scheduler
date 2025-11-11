@@ -20,10 +20,10 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(
   request: Request,
-  { params }: { params: { payerId: string } }
+  { params }: { params: Promise<{ payerId: string }> }
 ) {
   try {
-    const { payerId } = params
+    const { payerId } = await params
     const { searchParams } = new URL(request.url)
     const providerId = searchParams.get('providerId') || undefined
 
