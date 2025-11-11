@@ -126,9 +126,84 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const patients = data || []
+
+    // Enhance patient data with full appointment objects (for Google Meet functionality)
+    // Get patient IDs that have appointments
+    const patientIds = patients.map((p: any) => p.patient_id)
+
+    if (patientIds.length > 0) {
+      const now = new Date().toISOString()
+
+      // Fetch next appointments (upcoming)
+      const { data: nextAppointments } = await supabase
+        .from('appointments')
+        .select(`
+          id,
+          patient_id,
+          start_time,
+          status,
+          meeting_url,
+          location_info,
+          practiceq_generated_google_meet,
+          providers!appointments_provider_id_fkey (
+            id,
+            first_name,
+            last_name
+          )
+        `)
+        .in('patient_id', patientIds)
+        .in('status', ['scheduled', 'confirmed'])
+        .gte('start_time', now)
+        .order('start_time', { ascending: true })
+
+      // Fetch previous appointments (most recent past)
+      const { data: previousAppointments } = await supabase
+        .from('appointments')
+        .select(`
+          id,
+          patient_id,
+          start_time,
+          status,
+          meeting_url,
+          location_info,
+          practiceq_generated_google_meet,
+          providers!appointments_provider_id_fkey (
+            id,
+            first_name,
+            last_name
+          )
+        `)
+        .in('patient_id', patientIds)
+        .in('status', ['completed', 'confirmed', 'no_show'])
+        .lt('start_time', now)
+        .order('start_time', { ascending: false })
+
+      // Group appointments by patient
+      const nextByPatient = (nextAppointments || []).reduce((acc: any, appt: any) => {
+        if (!acc[appt.patient_id]) {
+          acc[appt.patient_id] = appt // First one is the soonest
+        }
+        return acc
+      }, {})
+
+      const previousByPatient = (previousAppointments || []).reduce((acc: any, appt: any) => {
+        if (!acc[appt.patient_id]) {
+          acc[appt.patient_id] = appt // First one is the most recent
+        }
+        return acc
+      }, {})
+
+      // Enhance patient data with full appointment objects
+      patients.forEach((patient: any) => {
+        patient.next_appointment = nextByPatient[patient.patient_id] || null
+        patient.previous_appointment = previousByPatient[patient.patient_id] || null
+      })
+    }
+
     // Return results with pagination metadata
     return NextResponse.json({
-      patients: data || [],
+      patients,
       pagination: {
         total: count || 0,
         limit,
