@@ -525,7 +525,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                 "
                                             >
                                                 <div className="flex items-center justify-between">
-                                                    <div className="flex items-center space-x-4">
+                                                    <div className="flex items-start space-x-4">
                                                         {isActive ? (
                                                             <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                                                                 <Check className="w-5 h-5 text-green-600" />
