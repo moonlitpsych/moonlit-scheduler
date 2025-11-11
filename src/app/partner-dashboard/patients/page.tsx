@@ -132,7 +132,7 @@ export default function PatientRosterPage() {
     patientsUrl,
     fetcher,
     {
-      revalidateOnFocus: false,
+      revalidateOnFocus: true, // Refetch when navigating back to page
       dedupingInterval: 30000, // 30 seconds
       onSuccess: (data) => {
         if (data.success && page === 1) {
