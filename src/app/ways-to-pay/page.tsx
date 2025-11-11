@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import PayerPlansWrapper from '@/components/booking/PayerPlansWrapper'
 
 interface Payer {
   id: string
@@ -225,6 +226,11 @@ const PayerCard = ({ payer, showStatus = true, isEven = false }: { payer: Payer;
             <StatusText payer={payer} />
           </div>
         )}
+      </div>
+
+      {/* Inline plan display */}
+      <div className="ml-8 mt-2">
+        <PayerPlansWrapper payerId={payer.id} payerName={payer.name} />
       </div>
     </div>
   )
