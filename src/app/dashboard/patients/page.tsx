@@ -1,19 +1,21 @@
 /**
- * Provider Patient Roster Page
+ * Provider Patient Roster Page (Unified)
  *
- * Shows only patients assigned to the logged-in provider
- * with organization and case manager columns
+ * Uses the unified PatientRoster component with provider-specific configuration.
+ * Shows only patients assigned to the logged-in provider.
+ * Replaced 820 lines of inline implementation with ~110 lines.
  *
- * Supports provider impersonation for admin users
+ * Supports provider impersonation for admin users.
  */
 
 'use client'
 
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import ProviderPatientRoster from '@/components/dashboard/ProviderPatientRoster'
+import { PatientRoster } from '@/components/patient-roster'
 import { providerImpersonationManager } from '@/lib/provider-impersonation'
 import { isAdminEmail } from '@/lib/admin-auth'
+import ProviderBulkSyncButton from '@/components/dashboard/ProviderBulkSyncButton'
 
 export default function PatientsPage() {
   const [providerId, setProviderId] = useState<string | null>(null)
@@ -82,5 +84,51 @@ export default function PatientsPage() {
     )
   }
 
-  return <ProviderPatientRoster providerId={providerId} />
+  if (!providerId) {
+    return (
+      <div className="min-h-screen bg-moonlit-cream">
+        <div className="container mx-auto px-4 py-12">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+            <p className="text-yellow-800">No provider ID found. Please contact support.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-moonlit-cream">
+      <div className="container mx-auto px-4 py-8">
+        {/* Page header with ProviderBulkSyncButton */}
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-moonlit-navy mb-2 font-['Newsreader']">
+              My Patients
+            </h1>
+            <p className="text-gray-600 font-['Newsreader'] font-light">
+              View and manage your assigned patients
+            </p>
+          </div>
+          <ProviderBulkSyncButton onSyncComplete={() => {
+            // Roster will auto-refresh via SWR revalidation
+            console.log('Bulk sync completed')
+          }} />
+        </div>
+
+        {/* Unified Patient Roster Component */}
+        <PatientRoster
+          userType="provider"
+          userId={providerId}
+
+          // Provider-specific features
+          showCaseManagerColumn={true}
+          showOrganizationColumn={true}
+
+          // Configuration
+          title="My Patients"
+          defaultPageSize={20}
+        />
+      </div>
+    </div>
+  )
 }
