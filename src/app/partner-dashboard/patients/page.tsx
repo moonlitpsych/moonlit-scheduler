@@ -16,13 +16,14 @@ import { EngagementStatusChip } from '@/components/partner-dashboard/EngagementS
 import { AppointmentStatusIndicator } from '@/components/partner-dashboard/AppointmentStatusIndicator'
 import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
 import { GenerateMedicationReportModal } from '@/components/partner-dashboard/GenerateMedicationReportModal'
+import { AppointmentDetailsModal } from '@/components/shared/AppointmentDetailsModal'
 import SyncAppointmentsButton from '@/components/partner-dashboard/SyncAppointmentsButton'
 import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
 import AppointmentLocationDisplay from '@/components/partner-dashboard/AppointmentLocationDisplay'
 import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
-import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity, Download, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { Users, Calendar, CheckCircle, AlertCircle, UserCheck, Bell, FileText, Activity, Download, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown, Copy } from 'lucide-react'
 import Link from 'next/link'
 import { useResizableColumns } from '@/hooks/useResizableColumns'
 import { exportToCSV, formatDateForCSV, formatRelativeTime } from '@/utils/csvExport'
@@ -72,6 +73,9 @@ interface PatientWithDetails {
     id: string
     start_time: string
     status: string
+    meeting_url?: string | null
+    location_info?: any
+    practiceq_generated_google_meet?: string | null
     providers?: {
       first_name: string
       last_name: string
@@ -83,6 +87,7 @@ interface PatientWithDetails {
     status: string
     meeting_url?: string | null
     location_info?: any
+    practiceq_generated_google_meet?: string | null
     providers?: {
       first_name: string
       last_name: string
@@ -242,6 +247,14 @@ export default function PatientRosterPage() {
   // Change engagement status modal state
   const [changeStatusModalOpen, setChangeStatusModalOpen] = useState(false)
   const [changeStatusPatient, setChangeStatusPatient] = useState<PatientWithDetails | null>(null)
+
+  // Appointment details modal state
+  const [appointmentModalOpen, setAppointmentModalOpen] = useState(false)
+  const [selectedAppointment, setSelectedAppointment] = useState<PatientWithDetails['next_appointment']>(null)
+  const [appointmentPatientName, setAppointmentPatientName] = useState<string>('')
+
+  // Google Meet link copy state
+  const [copiedAppointmentId, setCopiedAppointmentId] = useState<string | null>(null)
 
   // Function to refresh patient data (used by sync button)
   const refreshPatientData = async () => {
@@ -484,6 +497,66 @@ export default function PatientRosterPage() {
   const handleMedicationReportSuccess = async () => {
     // Optional: Refresh if needed
     await refreshPatientData()
+  }
+
+  // Appointment details modal handlers
+  const handleOpenAppointmentModal = (appointment: PatientWithDetails['next_appointment'], patientName: string) => {
+    setSelectedAppointment(appointment)
+    setAppointmentPatientName(patientName)
+    setAppointmentModalOpen(true)
+  }
+
+  const handleCloseAppointmentModal = () => {
+    setAppointmentModalOpen(false)
+    setSelectedAppointment(null)
+    setAppointmentPatientName('')
+  }
+
+  const handleAppointmentUpdate = (appointmentId: string, newLink: string | null) => {
+    // Optimistically update the local patient data
+    setAllPatients(prev => prev.map(patient => {
+      // Check if it's the next appointment
+      if (patient.next_appointment?.id === appointmentId) {
+        return {
+          ...patient,
+          next_appointment: {
+            ...patient.next_appointment,
+            practiceq_generated_google_meet: newLink
+          }
+        }
+      }
+      // Check if it's the previous appointment
+      if (patient.previous_appointment?.id === appointmentId) {
+        return {
+          ...patient,
+          previous_appointment: {
+            ...patient.previous_appointment,
+            practiceq_generated_google_meet: newLink
+          }
+        }
+      }
+      return patient
+    }))
+
+    // Also update the selectedAppointment if it matches
+    if (selectedAppointment?.id === appointmentId) {
+      setSelectedAppointment(prev => prev ? {
+        ...prev,
+        practiceq_generated_google_meet: newLink
+      } : null)
+    }
+  }
+
+  // Handle copying Google Meet link
+  const handleCopyMeetLink = async (appointmentId: string, link: string, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent opening the modal
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopiedAppointmentId(appointmentId)
+      setTimeout(() => setCopiedAppointmentId(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
   }
 
   if (error) {
@@ -803,28 +876,36 @@ export default function PatientRosterPage() {
                       {/* 3. Previous Appointment */}
                       <td style={{ width: columnWidths.previous }} className="px-6 py-4">
                         {patient.previous_appointment ? (
-                          <div className="flex flex-col space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-900">
-                                {new Date(patient.previous_appointment.start_time).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric'
-                                })}
-                              </span>
-                              {patient.previous_appointment.status === 'no_show' && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
-                                  No-show
+                          <div
+                            onClick={() => handleOpenAppointmentModal(
+                              patient.previous_appointment,
+                              `${patient.first_name} ${patient.last_name}`
+                            )}
+                            className="cursor-pointer hover:bg-gray-50 rounded px-2 py-1 -mx-2 -my-1 transition-colors"
+                          >
+                            <div className="flex flex-col space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-900">
+                                  {new Date(patient.previous_appointment.start_time).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
                                 </span>
-                              )}
+                                {patient.previous_appointment.status === 'no_show' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                                    No-show
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {(() => {
+                                  const diffMs = new Date().getTime() - new Date(patient.previous_appointment.start_time).getTime()
+                                  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+                                  return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`
+                                })()}
+                              </span>
                             </div>
-                            <span className="text-xs text-gray-500">
-                              {(() => {
-                                const diffMs = new Date().getTime() - new Date(patient.previous_appointment.start_time).getTime()
-                                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-                                return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`
-                              })()}
-                            </span>
                           </div>
                         ) : (
                           <span className="text-sm text-gray-400">—</span>
@@ -834,26 +915,64 @@ export default function PatientRosterPage() {
                       <td style={{ width: columnWidths.next }} className="px-6 py-4">
                         {patient.next_appointment ? (
                           <div className="space-y-1">
-                            <div className="flex flex-col space-y-0.5">
-                              <AppointmentLocationDisplay
-                                meetingUrl={patient.next_appointment.meeting_url}
-                                locationInfo={patient.next_appointment.location_info}
-                                startTime={patient.next_appointment.start_time}
-                                compact={true}
-                              />
-                              <span className="text-xs text-gray-500">
-                                {(() => {
-                                  const diffMs = new Date(patient.next_appointment.start_time).getTime() - new Date().getTime()
-                                  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-                                  return `in ${diffDays} ${diffDays === 1 ? 'day' : 'days'}`
-                                })()}
-                              </span>
-                            </div>
-                            {patient.next_appointment.providers && (
-                              <div className="text-xs text-gray-500">
-                                Dr. {patient.next_appointment.providers.last_name}
+                            <div
+                              onClick={() => handleOpenAppointmentModal(
+                                patient.next_appointment,
+                                `${patient.first_name} ${patient.last_name}`
+                              )}
+                              className="cursor-pointer hover:bg-gray-50 rounded px-2 py-1 -mx-2 -my-1 transition-colors"
+                            >
+                              <div className="flex flex-col space-y-0.5">
+                                <AppointmentLocationDisplay
+                                  meetingUrl={patient.next_appointment.meeting_url}
+                                  locationInfo={patient.next_appointment.location_info}
+                                  startTime={patient.next_appointment.start_time}
+                                  compact={true}
+                                />
+                                <span className="text-xs text-gray-500">
+                                  {(() => {
+                                    const diffMs = new Date(patient.next_appointment.start_time).getTime() - new Date().getTime()
+                                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+                                    return `in ${diffDays} ${diffDays === 1 ? 'day' : 'days'}`
+                                  })()}
+                                </span>
                               </div>
-                            )}
+                              {patient.next_appointment.providers && (
+                                <div className="text-xs text-gray-500">
+                                  Dr. {patient.next_appointment.providers.last_name}
+                                </div>
+                              )}
+                            </div>
+                            {/* Google Meet Link Chip */}
+                            <div className="mt-2 px-2">
+                              {patient.next_appointment.practiceq_generated_google_meet ? (
+                                <button
+                                  onClick={(e) => handleCopyMeetLink(
+                                    patient.next_appointment!.id,
+                                    patient.next_appointment!.practiceq_generated_google_meet!,
+                                    e
+                                  )}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors border border-green-200"
+                                >
+                                  {copiedAppointmentId === patient.next_appointment.id ? (
+                                    <>
+                                      <CheckCircle className="w-3 h-3" />
+                                      Copied!
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3" />
+                                      Copy Meet Link
+                                    </>
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                                  <AlertCircle className="w-3 h-3" />
+                                  No meet link added
+                                </span>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           <span className="text-sm text-gray-400">No upcoming</span>
@@ -1032,6 +1151,17 @@ export default function PatientRosterPage() {
           onClose={handleCloseMedicationReportModal}
           onSuccess={handleMedicationReportSuccess}
           partnerUserId={partnerUserId}
+        />
+      )}
+
+      {/* Appointment Details Modal */}
+      {selectedAppointment && (
+        <AppointmentDetailsModal
+          appointment={selectedAppointment}
+          patientName={appointmentPatientName}
+          isOpen={appointmentModalOpen}
+          onClose={handleCloseAppointmentModal}
+          onUpdate={handleAppointmentUpdate}
         />
       )}
     </div>
