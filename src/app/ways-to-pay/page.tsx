@@ -241,6 +241,11 @@ const PayerCard = ({ payer, showStatus = true, isEven = false }: { payer: Payer;
           <PayerPlansWrapper payerId={payer.id} payerName={payer.name} />
         </div>
       </div>
+
+      {/* Inline plan display */}
+      <div className="ml-8 mt-2">
+        <PayerPlansWrapper payerId={payer.id} payerName={payer.name} />
+      </div>
     </div>
   )
 }

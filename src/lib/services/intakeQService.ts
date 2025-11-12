@@ -641,6 +641,61 @@ class IntakeQService {
       throw error
     }
   }
+
+  /**
+   * Get client notes (clinical notes)
+   * @param clientId - IntakeQ client ID
+   * @param options - Query options (limit, status filter, etc.)
+   * @returns List of notes
+   */
+  async getClientNotes(clientId: string, options?: {
+    limit?: number
+    status?: string
+  }): Promise<any[]> {
+    try {
+      assertValidIntakeqClientId(clientId)
+
+      // Use /notes/summary endpoint with clientId as query parameter
+      const queryParams = new URLSearchParams()
+      queryParams.append('clientId', clientId)
+
+      if (options?.limit) {
+        queryParams.append('limit', options.limit.toString())
+      }
+      if (options?.status) {
+        queryParams.append('status', options.status)
+      }
+
+      const endpoint = `/notes/summary?${queryParams.toString()}`
+
+      const notes = await this.makeRequest<any[]>(endpoint, {
+        method: 'GET'
+      })
+
+      return notes || []
+    } catch (error: any) {
+      console.error(`❌ Failed to get notes for client ${clientId}:`, error.message)
+      throw error
+    }
+  }
+
+  /**
+   * Get full content of a single note
+   * @param noteId - IntakeQ note ID
+   * @returns Note with full content
+   */
+  async getNote(noteId: string): Promise<any> {
+    try {
+      const note = await this.makeRequest<any>(`/notes/${noteId}`, {
+        method: 'GET'
+      })
+
+      return note
+    } catch (error: any) {
+      console.error(`❌ Failed to get note ${noteId}:`, error.message)
+      throw error
+    }
+  }
 }
 
 // Create and export singleton instance

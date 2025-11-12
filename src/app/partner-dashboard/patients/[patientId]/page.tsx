@@ -9,8 +9,10 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { UploadROIModal } from '@/components/partner-dashboard/UploadROIModal'
+import { GoogleMeetLinkEditor } from '@/components/shared/GoogleMeetLinkEditor'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import {
   User,
   ArrowLeft,
@@ -55,6 +57,7 @@ interface PatientWithDetails {
     id: string
     start_time: string
     status: string
+    practiceq_generated_google_meet?: string | null
     providers?: {
       first_name: string
       last_name: string
@@ -101,26 +104,57 @@ export default function PatientDetailPage() {
           return
         }
 
-        // Fetch partner user data
-        const userResponse = await fetch('/api/partner/me', {
-          headers: { 'x-partner-user-id': user.id }
-        })
+        // Check for admin impersonation
+        const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+        let partnerData: PartnerUser
 
-        if (!userResponse.ok) {
-          setError('Failed to load partner user data')
-          return
+        if (impersonation) {
+          // Admin is impersonating - use impersonated partner data directly
+          const nameParts = impersonation.partner.full_name?.split(' ') || ['', '']
+          partnerData = {
+            id: impersonation.partner.id,
+            auth_user_id: impersonation.partner.auth_user_id,
+            organization_id: impersonation.partner.organization_id,
+            first_name: nameParts[0] || '',
+            last_name: nameParts.slice(1).join(' ') || '',
+            full_name: impersonation.partner.full_name,
+            email: impersonation.partner.email,
+            phone: impersonation.partner.phone,
+            role: impersonation.partner.role,
+            status: impersonation.partner.is_active ? 'active' : 'inactive',
+            timezone: 'America/Denver',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            organization: impersonation.partner.organization,
+            permissions: {},
+            organization_stats: undefined
+          }
+          setPartnerUser(partnerData)
+        } else {
+          // Regular partner user - fetch from API
+          const userResponse = await fetch('/api/partner/me')
+
+          if (!userResponse.ok) {
+            setError('Failed to load partner user data')
+            return
+          }
+
+          const userData = await userResponse.json()
+          if (!userData.success) {
+            setError(userData.error || 'Failed to load user data')
+            return
+          }
+
+          partnerData = userData.data
+          setPartnerUser(partnerData)
         }
 
-        const userData = await userResponse.json()
-        if (!userData.success) {
-          setError(userData.error || 'Failed to load user data')
-          return
-        }
+        // Fetch patient details with impersonation support
+        const patientsUrl = impersonation
+          ? `/api/partner-dashboard/patients?partner_user_id=${impersonation.partner.id}`
+          : '/api/partner-dashboard/patients'
 
-        setPartnerUser(userData.data)
-
-        // Fetch patient details
-        const patientsResponse = await fetch('/api/partner-dashboard/patients')
+        const patientsResponse = await fetch(patientsUrl)
         if (!patientsResponse.ok) {
           setError('Failed to load patient')
           return
@@ -469,7 +503,7 @@ export default function PatientDetailPage() {
                 <div className="space-y-3">
                   <div className="flex items-start space-x-3">
                     <Calendar className="w-5 h-5 text-moonlit-brown mt-0.5" />
-                    <div>
+                    <div className="flex-1">
                       <p className="font-medium text-gray-900">
                         {formatDate(patient.next_appointment.start_time)}
                       </p>
@@ -482,6 +516,24 @@ export default function PatientDetailPage() {
                         {patient.next_appointment.status}
                       </span>
                     </div>
+                  </div>
+
+                  {/* Google Meet Link Editor */}
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <GoogleMeetLinkEditor
+                      appointmentId={patient.next_appointment.id}
+                      currentLink={patient.next_appointment.practiceq_generated_google_meet || null}
+                      onUpdate={(newLink) => {
+                        // Update local state
+                        setPatient(prev => prev ? {
+                          ...prev,
+                          next_appointment: prev.next_appointment ? {
+                            ...prev.next_appointment,
+                            practiceq_generated_google_meet: newLink
+                          } : null
+                        } : null)
+                      }}
+                    />
                   </div>
 
                   {patient.upcoming_appointment_count > 1 && (

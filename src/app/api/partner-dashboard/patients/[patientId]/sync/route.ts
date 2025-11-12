@@ -39,19 +39,31 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // 2. Get partner user and verify access
-    const { data: partnerUser, error: partnerError } = await supabaseAdmin
+    // 2. Check for impersonation (admin viewing as partner)
+    const { searchParams } = new URL(request.url)
+    const partnerUserId = searchParams.get('partner_user_id')
+
+    // 3. Get partner user and verify access
+    let partnerUserQuery = supabaseAdmin
       .from('partner_users')
       .select('id, organization_id, role, is_active')
-      .eq('auth_user_id', user.id)
       .eq('is_active', true)
-      .single()
+
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', user.id)
+    }
+
+    const { data: partnerUser, error: partnerError } = await partnerUserQuery.single()
 
     if (partnerError || !partnerUser) {
       return NextResponse.json({ error: 'Partner user not found' }, { status: 403 })
     }
 
-    // 3. Verify patient is affiliated with partner's organization
+    // 4. Verify patient is affiliated with partner's organization
     const { data: affiliation, error: affError } = await supabaseAdmin
       .from('patient_organization_affiliations')
       .select('id')
@@ -67,7 +79,7 @@ export async function POST(
       )
     }
 
-    // 4. Parse request body (optional date range)
+    // 5. Parse request body (optional date range)
     let dateRange: { startDate: string; endDate: string } | undefined
     try {
       const body = await request.json()
@@ -78,7 +90,7 @@ export async function POST(
       // No body or invalid JSON - use default date range
     }
 
-    // 5. Sync appointments
+    // 6. Sync appointments
     console.log(`🔄 [Sync API] Starting sync for patient ${patientId}`)
     const result = await practiceQSyncService.syncPatientAppointments(
       patientId,
@@ -86,7 +98,7 @@ export async function POST(
       dateRange
     )
 
-    // 6. Log activity
+    // 7. Log activity
     await supabaseAdmin.from('patient_activity_log').insert({
       patient_id: patientId,
       organization_id: partnerUser.organization_id,
@@ -102,7 +114,7 @@ export async function POST(
       created_at: new Date().toISOString()
     })
 
-    // 7. If there are warnings about missing providers, notify admin
+    // 8. If there are warnings about missing providers, notify admin
     if (result.warnings.length > 0) {
       console.warn('⚠️ [Sync API] Warnings during sync:', result.warnings)
       // TODO: Send email to admin about missing practitioner mappings

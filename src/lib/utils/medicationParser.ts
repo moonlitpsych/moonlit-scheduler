@@ -41,9 +41,13 @@ export function parseMedicationsFromNote(note: any): ParsedMedicationData {
     q.Text?.toLowerCase().includes('history of present illness')
   )
 
+  // Find "Assessment and Plan:" specifically (not "Risk Assessment:")
   const assessmentQuestion = note.Questions.find((q: any) =>
-    q.Text?.toLowerCase().includes('assessment') ||
-    q.Text?.toLowerCase().includes('plan')
+    q.Text?.toLowerCase().includes('assessment and plan')
+  ) || note.Questions.find((q: any) =>
+    // Fallback: Look for "plan" but exclude "risk assessment"
+    q.Text?.toLowerCase().includes('plan') &&
+    !q.Text?.toLowerCase().includes('risk assessment')
   )
 
   if (!hpiQuestion && !assessmentQuestion) {
@@ -162,8 +166,8 @@ function extractMedications(text: string): MedicationChange[] {
 
   // Patterns for medication changes
   const patterns = [
-    // "Increase sertraline from 50 mg to 100 mg"
-    /increase\s+(\w+)\s+(?:from\s+)?(\d+\s*mg)\s+to\s+(\d+\s*mg)[^.]*?(?:\.|\n|$)/gi,
+    // "Increase Depakote dose to 1000 mg" or "Increase sertraline from 50 mg to 100 mg"
+    /increase\s+(\w+)(?:\s+dose)?\s+(?:from\s+)?(?:(\d+\s*mg)\s+)?to\s+(\d+\s*mg)[^.]*?(?:\.|\n|$)/gi,
 
     // "Decrease prazosin 3 mg to 2 mg"
     /decrease\s+(\w+)\s+(?:from\s+)?(\d+\s*mg)\s+to\s+(\d+\s*mg)[^.]*?(?:\.|\n|$)/gi,
@@ -174,8 +178,8 @@ function extractMedications(text: string): MedicationChange[] {
     // "Discontinue trazodone"
     /(?:discontinue|stop|d\/c)\s+(\w+)[^.]*?(?:\.|\n|$)/gi,
 
-    // "Continue naltrexone 50 mg"
-    /continue\s+(\w+)\s+(\d+\s*mg)[^.]*?(?:\.|\n|$)/gi,
+    // "Continue naltrexone 50 mg" or "Continue current mirtazapine"
+    /continue\s+(?:current\s+)?(\w+)(?:\s+and\s+(\w+))?(?:\s+(\d+\s*mg))?[^.]*?(?:\.|\n|$)/gi,
 
     // "Restart sertraline at 25 mg"
     /restart\s+(\w+)\s+(?:at\s+)?(\d+\s*mg)[^.]*?(?:\.|\n|$)/gi,
@@ -188,8 +192,8 @@ function extractMedications(text: string): MedicationChange[] {
     let match
     while ((match = pattern.exec(cleanText)) !== null) {
       const medication = match[1]
-      const dosage1 = match[2]
-      const dosage2 = match[3]
+      const secondMed = match[2] // For "continue X and Y" pattern
+      const dosage = match[3] || match[2] // Dosage might be in match[2] or match[3]
 
       let changeType: MedicationChange['changeType'] = 'continued'
       let previousDosage: string | undefined
@@ -199,32 +203,35 @@ function extractMedications(text: string): MedicationChange[] {
 
       if (contextLower.includes('increase')) {
         changeType = 'increased'
-        previousDosage = dosage1
-        newDosage = dosage2
+        // For increase pattern: match[2] = old dose, match[3] = new dose
+        previousDosage = match[2]?.includes('mg') ? match[2] : undefined
+        newDosage = match[3]
       } else if (contextLower.includes('decrease')) {
         changeType = 'decreased'
-        previousDosage = dosage1
-        newDosage = dosage2
+        previousDosage = match[2]
+        newDosage = match[3]
       } else if (contextLower.includes('start') || contextLower.includes('initiate') || contextLower.includes('begin')) {
         changeType = 'added'
-        newDosage = dosage1
+        newDosage = match[2]
       } else if (contextLower.includes('restart')) {
         changeType = 'restarted'
-        newDosage = dosage1
+        newDosage = match[2]
       } else if (contextLower.includes('discontinue') || contextLower.includes('stop') || contextLower.includes('d/c')) {
         changeType = 'removed'
       } else if (contextLower.includes('continue')) {
         changeType = 'continued'
-        newDosage = dosage1
+        // For continue pattern: dosage is optional, might be in match[3]
+        newDosage = match[3]?.includes('mg') ? match[3] : undefined
       } else {
         // Default: assume current medication
         changeType = 'continued'
-        newDosage = dosage1
+        newDosage = match[2]?.includes('mg') ? match[2] : undefined
       }
 
       // Extract frequency and timing from the full match context
       const { frequency, timing } = extractFrequencyAndTiming(match[0])
 
+      // Add the primary medication
       medications.push({
         medication,
         changeType,
@@ -234,6 +241,19 @@ function extractMedications(text: string): MedicationChange[] {
         timing,
         notes: match[0].trim()
       })
+
+      // If "continue X and Y" pattern, add second medication
+      if (secondMed && contextLower.includes('continue') && !secondMed.includes('mg')) {
+        medications.push({
+          medication: secondMed,
+          changeType: 'continued',
+          previousDosage: undefined,
+          newDosage: undefined,
+          frequency,
+          timing,
+          notes: match[0].trim()
+        })
+      }
     }
   })
 
@@ -261,11 +281,37 @@ function extractPreviousMeds(hpiText: string): string[] {
  */
 function extractCurrentMeds(assessmentText: string): string[] {
   const cleanText = assessmentText.replace(/<[^>]*>/g, ' ')
-  const medPattern = /-\s*(\w+)\s+\d+\s*mg/gi
-  const matches = cleanText.matchAll(medPattern)
-
   const meds: string[] = []
-  for (const match of matches) {
+
+  // Pattern 1: Bullet list format "- medication dose"
+  const bulletPattern = /-\s*(\w+)\s+\d+\s*mg/gi
+  for (const match of cleanText.matchAll(bulletPattern)) {
+    meds.push(match[1])
+  }
+
+  // Pattern 2: "including X, Y, and Z" format
+  const includingPattern = /including\s+([\w\s,]+?)(?:regimen|and\s+[\w\s]+patch)/gi
+  for (const match of cleanText.matchAll(includingPattern)) {
+    const medList = match[1]
+    // Split on commas and "and"
+    const individualMeds = medList.split(/,\s*|\s+and\s+/)
+    for (const med of individualMeds) {
+      const trimmed = med.trim()
+      if (trimmed && trimmed.length > 2) {
+        meds.push(trimmed)
+      }
+    }
+  }
+
+  // Pattern 3: "Continue X" format
+  const continuePattern = /continue\s+(?:current\s+)?(\w+)/gi
+  for (const match of cleanText.matchAll(continuePattern)) {
+    meds.push(match[1])
+  }
+
+  // Pattern 4: "Increase X to..." format (X is current med)
+  const increasePattern = /increase\s+(\w+)/gi
+  for (const match of cleanText.matchAll(increasePattern)) {
     meds.push(match[1])
   }
 

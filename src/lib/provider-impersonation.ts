@@ -6,13 +6,13 @@ import { Database } from '@/types/database'
 
 export interface ImpersonatedProvider {
   id: string
-  first_name: string
-  last_name: string
-  email: string
-  title: string
-  role: string
+  first_name: string | null
+  last_name: string | null
+  email: string | null
+  title: string | null
+  role: string | null
   auth_user_id: string | null
-  is_active: boolean
+  is_active: boolean | null
 }
 
 export interface ImpersonationContext {
@@ -22,8 +22,14 @@ export interface ImpersonationContext {
 }
 
 class ProviderImpersonationManager {
-  private supabase = createClientComponentClient<Database>()
   private storageKey = 'moonlit_impersonated_provider'
+
+  /**
+   * Lazy initialization of Supabase client to avoid SSR issues
+   */
+  private getSupabase() {
+    return createClientComponentClient<Database>()
+  }
 
   /**
    * Set the provider to impersonate
@@ -76,7 +82,8 @@ class ProviderImpersonationManager {
    * Get all providers for selection (including inactive)
    */
   async getAllProviders(): Promise<ImpersonatedProvider[]> {
-    const { data, error } = await this.supabase
+    const supabase = this.getSupabase()
+    const { data, error } = await supabase
       .from('providers')
       .select('id, first_name, last_name, email, title, role, auth_user_id, is_active')
       .order('last_name', { ascending: true })
@@ -94,7 +101,8 @@ class ProviderImpersonationManager {
    * Get provider by ID
    */
   async getProviderById(providerId: string): Promise<ImpersonatedProvider | null> {
-    const { data, error } = await this.supabase
+    const supabase = this.getSupabase()
+    const { data, error } = await supabase
       .from('providers')
       .select('id, first_name, last_name, email, title, role, auth_user_id, is_active')
       .eq('id', providerId)
@@ -123,7 +131,8 @@ class ProviderImpersonationManager {
     if (!impersonation) return
 
     try {
-      const { error } = await this.supabase
+      const supabase = this.getSupabase()
+      const { error } = await supabase
         .from('admin_action_logs')
         .insert({
           admin_email: impersonation.impersonatedBy,

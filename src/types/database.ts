@@ -6,6 +6,10 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+// Acceptance status for insurance plans (practice-level or provider-level)
+// Used for UI display only - does NOT affect booking validation
+export type AcceptanceStatus = 'in_network' | 'not_in_network' | 'unknown'
+
 export type Database = {
   // Allows to automatically instanciate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -27,6 +31,7 @@ export type Database = {
           notes: string | null
           patient_info: Json
           payer_id: string | null
+          practiceq_generated_google_meet: string | null
           provider_id: string
           rendering_provider_id: string | null
           roi_contacts: Json | null
@@ -48,6 +53,7 @@ export type Database = {
           notes?: string | null
           patient_info: Json
           payer_id?: string | null
+          practiceq_generated_google_meet?: string | null
           provider_id: string
           rendering_provider_id?: string | null
           roi_contacts?: Json | null
@@ -69,6 +75,7 @@ export type Database = {
           notes?: string | null
           patient_info?: Json
           payer_id?: string | null
+          practiceq_generated_google_meet?: string | null
           provider_id?: string
           rendering_provider_id?: string | null
           roi_contacts?: Json | null
@@ -536,6 +543,7 @@ export type Database = {
       }
       payer_plans: {
         Row: {
+          acceptance_status: AcceptanceStatus
           created_at: string
           effective_date: string | null
           expiration_date: string | null
@@ -550,6 +558,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          acceptance_status?: AcceptanceStatus
           created_at?: string
           effective_date?: string | null
           expiration_date?: string | null
@@ -564,6 +573,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          acceptance_status?: AcceptanceStatus
           created_at?: string
           effective_date?: string | null
           expiration_date?: string | null
@@ -590,6 +600,51 @@ export type Database = {
             columns: ["payer_id"]
             isOneToOne: false
             referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      provider_plan_overrides: {
+        Row: {
+          acceptance_status: AcceptanceStatus
+          created_at: string
+          id: string
+          notes: string | null
+          plan_id: string
+          provider_id: string
+          updated_at: string
+        }
+        Insert: {
+          acceptance_status: AcceptanceStatus
+          created_at?: string
+          id?: string
+          notes?: string | null
+          plan_id: string
+          provider_id: string
+          updated_at?: string
+        }
+        Update: {
+          acceptance_status?: AcceptanceStatus
+          created_at?: string
+          id?: string
+          notes?: string | null
+          plan_id?: string
+          provider_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_plan_overrides_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "payer_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_plan_overrides_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
             referencedColumns: ["id"]
           },
         ]

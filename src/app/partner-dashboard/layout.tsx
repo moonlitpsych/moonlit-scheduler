@@ -11,6 +11,7 @@ import { AccountSettingsModal } from '@/components/shared/AccountSettingsModal'
 import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import { isAdminEmail } from '@/lib/admin-auth'
 import PartnerSelector from '@/components/admin/PartnerSelector'
+import { ToastProvider } from '@/contexts/ToastContext'
 
 export default function PartnerDashboardLayout({
   children,
@@ -121,7 +122,8 @@ export default function PartnerDashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-moonlit-cream flex">
+    <ToastProvider>
+      <div className="min-h-screen bg-moonlit-cream flex">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -274,6 +276,7 @@ export default function PartnerDashboardLayout({
         onClose={() => setIsAccountSettingsOpen(false)}
         userEmail={user?.email}
       />
-    </div>
+      </div>
+    </ToastProvider>
   )
 }
