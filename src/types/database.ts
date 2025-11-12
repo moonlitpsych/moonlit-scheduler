@@ -369,6 +369,7 @@ export type Database = {
           status_code: string | null
           effective_date: string | null
           id: string
+          intakeq_location_id: string | null
           name: string | null
           notes: string | null
           payer_type: string | null
@@ -382,6 +383,7 @@ export type Database = {
           status_code?: string | null
           effective_date?: string | null
           id?: string
+          intakeq_location_id?: string | null
           name?: string | null
           notes?: string | null
           payer_type?: string | null
@@ -395,6 +397,7 @@ export type Database = {
           status_code?: string | null
           effective_date?: string | null
           id?: string
+          intakeq_location_id?: string | null
           name?: string | null
           notes?: string | null
           payer_type?: string | null

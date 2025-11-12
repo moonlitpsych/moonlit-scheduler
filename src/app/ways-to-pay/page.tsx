@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import PayerPlansWrapper from '@/components/booking/PayerPlansWrapper'
 
 interface Payer {
   id: string
@@ -112,47 +113,54 @@ const SearchResultCard = ({ payer }: { payer: Payer }) => {
 
   return (
     <div className="w-full p-3 sm:p-4 border-2 border-gray-200 rounded-xl hover:border-[#BF9C73] hover:bg-[#BF9C73]/5 transition-all duration-200 bg-white">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-        <div className="flex items-center space-x-3 sm:space-x-4">
-          {/* Status Icon */}
-          <div className={`flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${
-            status.type === 'active'
-              ? 'bg-green-100'
-              : status.type === 'future'
-                ? 'bg-blue-100'
-                : 'bg-gray-100'
-          }`}>
-            {status.icon === 'check' && (
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-            )}
-            {status.icon === 'calendar' && (
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            )}
-            {status.icon === 'clock' && (
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            )}
-          </div>
+      <div className="flex flex-col space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            {/* Status Icon */}
+            <div className={`flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${
+              status.type === 'active'
+                ? 'bg-green-100'
+                : status.type === 'future'
+                  ? 'bg-blue-100'
+                  : 'bg-gray-100'
+            }`}>
+              {status.icon === 'check' && (
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              )}
+              {status.icon === 'calendar' && (
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              )}
+              {status.icon === 'clock' && (
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+            </div>
 
-          {/* Payer Info */}
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-900 text-sm sm:text-base" style={{ fontFamily: 'Newsreader, serif' }}>
-              {payer.name}
-            </h3>
-            <p className="text-xs sm:text-sm text-gray-500" style={{ fontFamily: 'Newsreader, serif' }}>
-              {status.text}
-            </p>
-            {payer.state && (
-              <p className="text-xs text-gray-400 mt-1" style={{ fontFamily: 'Newsreader, serif' }}>
-                State: {payer.state}
+            {/* Payer Info */}
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-900 text-sm sm:text-base" style={{ fontFamily: 'Newsreader, serif' }}>
+                {payer.name}
+              </h3>
+              <p className="text-xs sm:text-sm text-gray-500" style={{ fontFamily: 'Newsreader, serif' }}>
+                {status.text}
               </p>
-            )}
+              {payer.state && (
+                <p className="text-xs text-gray-400 mt-1" style={{ fontFamily: 'Newsreader, serif' }}>
+                  State: {payer.state}
+                </p>
+              )}
+            </div>
           </div>
+        </div>
+
+        {/* Plan details */}
+        <div className="ml-11 sm:ml-14">
+          <PayerPlansWrapper payerId={payer.id} payerName={payer.name} />
         </div>
       </div>
     </div>
@@ -207,24 +215,31 @@ const PayerCard = ({ payer, showStatus = true, isEven = false }: { payer: Payer;
   
   return (
     <div className={`py-2 px-2 sm:px-3 -mx-2 sm:-mx-3 rounded ${isEven ? 'bg-[#FEF8F1]/30' : 'bg-transparent'}`}>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-        <div className="flex items-center flex-1 min-w-0">
-          {getStatusIcon()}
-          <div className={`inline-block px-3 py-1 rounded-lg text-sm font-medium mr-2 sm:mr-4 ${
-            isActive
-              ? 'bg-transparent text-gray-900 border border-[#f28c69] shadow-sm'
-              : hasFutureDate
-                ? 'bg-transparent text-gray-700 border border-[#f28c69]/60 shadow-sm'
-                : 'bg-gray-100 text-gray-600'
-          }`} style={{ fontFamily: 'Newsreader, serif' }}>
-            {payer.name}
+      <div className="flex flex-col space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+          <div className="flex items-center flex-1 min-w-0">
+            {getStatusIcon()}
+            <div className={`inline-block px-3 py-1 rounded-lg text-sm font-medium mr-2 sm:mr-4 ${
+              isActive
+                ? 'bg-transparent text-gray-900 border border-[#f28c69] shadow-sm'
+                : hasFutureDate
+                  ? 'bg-transparent text-gray-700 border border-[#f28c69]/60 shadow-sm'
+                  : 'bg-gray-100 text-gray-600'
+            }`} style={{ fontFamily: 'Newsreader, serif' }}>
+              {payer.name}
+            </div>
           </div>
+          {showStatus && (
+            <div className="text-left sm:text-right text-xs sm:text-sm flex-shrink-0 ml-7 sm:ml-0">
+              <StatusText payer={payer} />
+            </div>
+          )}
         </div>
-        {showStatus && (
-          <div className="text-left sm:text-right text-xs sm:text-sm flex-shrink-0 ml-7 sm:ml-0">
-            <StatusText payer={payer} />
-          </div>
-        )}
+
+        {/* Plan details */}
+        <div className="ml-7 sm:ml-8">
+          <PayerPlansWrapper payerId={payer.id} payerName={payer.name} />
+        </div>
       </div>
     </div>
   )
