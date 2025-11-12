@@ -64,13 +64,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // 2. Get partner user and verify access
-    const { data: partnerUser, error: partnerError } = await supabaseAdmin
+    // 2. Check for impersonation (admin viewing as partner)
+    const { searchParams } = new URL(request.url)
+    const partnerUserId = searchParams.get('partner_user_id')
+
+    // 3. Get partner user and verify access
+    let partnerUserQuery = supabaseAdmin
       .from('partner_users')
       .select('id, organization_id, role, is_active, full_name, organizations(id, name)')
-      .eq('auth_user_id', user.id)
       .eq('is_active', true)
-      .single()
+
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', user.id)
+    }
+
+    const { data: partnerUser, error: partnerError } = await partnerUserQuery.single()
 
     if (partnerError || !partnerUser) {
       return NextResponse.json({ error: 'Partner user not found' }, { status: 403 })
@@ -82,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔄 [Bulk Sync] ${partnerUser.full_name} initiated bulk sync for ${organization.name}`)
 
-    // 3. Create sync log entry
+    // 4. Create sync log entry
     const { data: syncLog, error: logError } = await supabaseAdmin
       .from('sync_logs')
       .insert({
@@ -99,7 +111,7 @@ export async function POST(request: NextRequest) {
       throw new Error(`Failed to create sync log: ${logError?.message}`)
     }
 
-    // 4. Parse request body (optional date range)
+    // 5. Parse request body (optional date range)
     let dateRange: { startDate: string; endDate: string } | undefined
     try {
       const body = await request.json()
@@ -110,7 +122,7 @@ export async function POST(request: NextRequest) {
       // No body or invalid JSON - use default date range
     }
 
-    // 5. Get all active patients for this organization
+    // 6. Get all active patients for this organization
     const { data: affiliations, error: affiliationError } = await supabaseAdmin
       .from('patient_organization_affiliations')
       .select(`
@@ -136,7 +148,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`  👥 [Bulk Sync] Found ${patients.length} active patients with email`)
 
-    // 6. Sync each patient
+    // 7. Sync each patient
     const results: BulkSyncResult = {
       success: true,
       syncLogId: syncLog.id,
@@ -195,7 +207,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 7. Update sync log
+    // 8. Update sync log
     const duration = Date.now() - startTime
     await supabaseAdmin
       .from('sync_logs')
@@ -215,7 +227,7 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', syncLog.id)
 
-    // 8. Log activity
+    // 9. Log activity
     await supabaseAdmin.from('patient_activity_log').insert({
       organization_id: partnerUser.organization_id,
       activity_type: 'practiceq_bulk_sync',

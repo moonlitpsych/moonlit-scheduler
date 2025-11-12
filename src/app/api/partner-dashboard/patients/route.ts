@@ -228,6 +228,7 @@ export async function GET(request: NextRequest) {
           status,
           meeting_url,
           location_info,
+          practiceq_generated_google_meet,
           providers!appointments_provider_id_fkey (
             id,
             first_name,
@@ -249,6 +250,7 @@ export async function GET(request: NextRequest) {
           status,
           meeting_url,
           location_info,
+          practiceq_generated_google_meet,
           providers!appointments_provider_id_fkey (
             id,
             first_name,
@@ -256,7 +258,7 @@ export async function GET(request: NextRequest) {
           )
         `)
         .in('patient_id', patientIds)
-        .in('status', ['completed', 'confirmed'])
+        .in('status', ['completed', 'confirmed', 'no_show'])
         .lt('start_time', now)
         .order('start_time', { ascending: false })
     ])

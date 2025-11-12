@@ -31,6 +31,7 @@ export type Database = {
           notes: string | null
           patient_info: Json
           payer_id: string | null
+          practiceq_generated_google_meet: string | null
           provider_id: string
           rendering_provider_id: string | null
           roi_contacts: Json | null
@@ -52,6 +53,7 @@ export type Database = {
           notes?: string | null
           patient_info: Json
           payer_id?: string | null
+          practiceq_generated_google_meet?: string | null
           provider_id: string
           rendering_provider_id?: string | null
           roi_contacts?: Json | null
@@ -73,6 +75,7 @@ export type Database = {
           notes?: string | null
           patient_info?: Json
           payer_id?: string | null
+          practiceq_generated_google_meet?: string | null
           provider_id?: string
           rendering_provider_id?: string | null
           roi_contacts?: Json | null

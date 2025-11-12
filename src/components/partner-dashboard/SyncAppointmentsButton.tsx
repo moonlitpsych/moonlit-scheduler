@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 
 interface SyncAppointmentsButtonProps {
   patientId: string
@@ -69,8 +70,14 @@ export default function SyncAppointmentsButton({
         throw new Error('Not authenticated')
       }
 
+      // Check for admin impersonation
+      const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+      const url = impersonation
+        ? `/api/partner-dashboard/patients/${patientId}/sync?partner_user_id=${impersonation.partner.id}`
+        : `/api/partner-dashboard/patients/${patientId}/sync`
+
       // Call sync API
-      const response = await fetch(`/api/partner-dashboard/patients/${patientId}/sync`, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
