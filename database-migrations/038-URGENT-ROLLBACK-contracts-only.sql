@@ -32,30 +32,17 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- STEP 2: Delete cloned supervision relationships for Commercial SelectHealth
+-- STEP 2: Keep supervision relationships (they represent clinical scope)
 -- ============================================================================
+-- Supervision relationships should remain for both payers because:
+-- - They represent clinical supervision scope, not contracts
+-- - If Dr. Sweeney is supervised by Dr. Privratsky for SelectHealth,
+--   he should be bookable for BOTH Medicaid and Commercial SelectHealth
+-- - Bookability is handled by v_bookable_provider_payer view
 
 DO $$
-DECLARE
-    v_commercial_id UUID;
-    v_deleted_count INTEGER;
 BEGIN
-    SELECT id INTO v_commercial_id
-    FROM payers
-    WHERE name = 'SelectHealth' AND payer_type = 'Private';
-
-    IF v_commercial_id IS NULL THEN
-        RAISE NOTICE 'Commercial SelectHealth payer not found. Nothing to rollback.';
-        RETURN;
-    END IF;
-
-    -- Delete ALL supervision_relationships entries for commercial payer
-    DELETE FROM supervision_relationships
-    WHERE payer_id = v_commercial_id;
-
-    GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
-
-    RAISE NOTICE '✅ Deleted % cloned supervision relationships for commercial payer', v_deleted_count;
+    RAISE NOTICE '✅ Supervision relationships preserved (represent clinical scope, not contracts)';
 END $$;
 
 -- ============================================================================
@@ -90,11 +77,13 @@ BEGIN
     RAISE NOTICE '   • SelectHealth (Commercial) contracts: %', v_commercial_contracts;
     RAISE NOTICE '';
     RAISE NOTICE '✅ Contract cloning has been reversed';
+    RAISE NOTICE '✅ Supervision relationships preserved (clinical scope, not contracts)';
     RAISE NOTICE '✅ Payer split remains (two payers still exist)';
     RAISE NOTICE '✅ Plan moves remain (6 commercial plans with new payer)';
     RAISE NOTICE '';
-    RAISE NOTICE '⚠️  IMPORTANT: If you have ONE contract covering both Medicaid and Commercial,';
-    RAISE NOTICE '   the provider_payer_networks row should reference the Medicaid payer ID only.';
-    RAISE NOTICE '   Providers will be bookable for Commercial via the v_bookable_provider_payer view.';
+    RAISE NOTICE '⚠️  BOOKABILITY:';
+    RAISE NOTICE '   • Providers bookable via existing provider_payer_networks with Medicaid payer';
+    RAISE NOTICE '   • v_bookable_provider_payer view handles bookability for both payers';
+    RAISE NOTICE '   • Supervised providers bookable for both Medicaid and Commercial';
     RAISE NOTICE '';
 END $$;
