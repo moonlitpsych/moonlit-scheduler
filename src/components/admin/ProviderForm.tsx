@@ -52,6 +52,7 @@ export default function ProviderForm({ mode, provider, onSuccess, onCancel }: Pr
 
     // Profile
     about: '',
+    profile_image_url: '',
     languages_spoken: [] as string[],
 
     // Education
@@ -62,6 +63,11 @@ export default function ProviderForm({ mode, provider, onSuccess, onCancel }: Pr
     // Integration IDs
     athena_provider_id: '',
   })
+
+  // Image upload state
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
 
   // Fetch metadata from database on mount
   useEffect(() => {
@@ -104,12 +110,17 @@ export default function ProviderForm({ mode, provider, onSuccess, onCancel }: Pr
         accepts_new_patients: provider.accepts_new_patients !== false,
         telehealth_enabled: provider.telehealth_enabled !== false,
         about: provider.about || '',
+        profile_image_url: provider.profile_image_url || '',
         languages_spoken: provider.languages_spoken || ['en'],
         med_school_org: provider.med_school_org || '',
         med_school_grad_year: provider.med_school_grad_year ? String(provider.med_school_grad_year) : '',
         residency_org: provider.residency_org || '',
         athena_provider_id: provider.athena_provider_id || ''
       })
+      // Set initial preview if provider has an image
+      if (provider.profile_image_url) {
+        setImagePreview(provider.profile_image_url)
+      }
     }
   }, [mode, provider])
 
@@ -122,6 +133,38 @@ export default function ProviderForm({ mode, provider, onSuccess, onCancel }: Pr
     }))
   }
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file')
+      return
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be less than 5MB')
+      return
+    }
+
+    setImageFile(file)
+
+    // Create preview
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    setFormData(prev => ({ ...prev, profile_image_url: '' }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -129,9 +172,36 @@ export default function ProviderForm({ mode, provider, onSuccess, onCancel }: Pr
     setValidationErrors([])
 
     try {
+      // Upload image first if a new file was selected
+      let imageUrl = formData.profile_image_url
+      if (imageFile) {
+        setUploadingImage(true)
+        const uploadFormData = new FormData()
+        uploadFormData.append('file', imageFile)
+        uploadFormData.append('providerId', provider?.id || 'new')
+        uploadFormData.append('providerName', `${formData.first_name}-${formData.last_name}`)
+
+        const uploadResponse = await fetch('/api/admin/providers/upload-image', {
+          method: 'POST',
+          body: uploadFormData
+        })
+
+        const uploadResult = await uploadResponse.json()
+        setUploadingImage(false)
+
+        if (!uploadResult.success) {
+          setError(uploadResult.error || 'Failed to upload image')
+          setLoading(false)
+          return
+        }
+
+        imageUrl = uploadResult.data.url
+      }
+
       // Prepare payload
       const payload = {
         ...formData,
+        profile_image_url: imageUrl,
         med_school_grad_year: formData.med_school_grad_year ? parseInt(formData.med_school_grad_year) : null,
         languages_spoken: formData.languages_spoken.length > 0 ? formData.languages_spoken : ['en']
       }
@@ -303,6 +373,78 @@ export default function ProviderForm({ mode, provider, onSuccess, onCancel }: Pr
                       <option key={title} value={title}>{title}</option>
                     ))}
                   </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Profile Image Section */}
+            <div>
+              <h3 className="text-lg font-semibold text-moonlit-navy mb-4 border-b pb-2">
+                Profile Image
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Upload Headshot
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Recommended: Background-removed professional headshot, PNG or JPG, max 5MB
+                  </p>
+
+                  <div className="flex items-start gap-6">
+                    {/* Image Preview */}
+                    {imagePreview ? (
+                      <div className="relative">
+                        <img
+                          src={imagePreview}
+                          alt="Provider headshot preview"
+                          className="w-32 h-40 object-cover rounded-lg border-2 border-gray-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleRemoveImage}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-32 h-40 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
+                        <span className="text-gray-400 text-xs text-center px-2">
+                          No image<br/>selected
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Upload Button */}
+                    <div className="flex-1">
+                      <input
+                        type="file"
+                        id="image-upload"
+                        accept="image/*"
+                        onChange={handleImageSelect}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="image-upload"
+                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+                      >
+                        {uploadingImage ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          'Choose Image'
+                        )}
+                      </label>
+                      {formData.profile_image_url && (
+                        <p className="text-xs text-green-600 mt-2">
+                          ✓ Image saved: {formData.profile_image_url}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
