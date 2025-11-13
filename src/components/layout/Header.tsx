@@ -8,7 +8,7 @@ import { Menu, X } from 'lucide-react'
 export default function Header() {
     const [isMenuOpen, setIsMenuOpen] = useState(false)
     const [scrolled, setScrolled] = useState(false)
-    const bookNavPath = process.env.NEXT_PUBLIC_BOOK_NAV_PATH || '/book-now'
+    const bookNavPath = '/book-now'
 
     useEffect(() => {
         const handleScroll = () => {
