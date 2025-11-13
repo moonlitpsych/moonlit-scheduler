@@ -300,7 +300,7 @@ export async function PUT(request: NextRequest) {
 
     // Verify patient is affiliated with organization
     const { data: affiliation, error: affiliationError } = await supabaseAdmin
-      .from('patient_affiliations')
+      .from('patient_organization_affiliations')
       .select('id, status')
       .eq('patient_id', patient_id)
       .eq('organization_id', partnerUser.organization_id)
@@ -489,7 +489,7 @@ async function getAvailableProviders(organizationId: string) {
           .select('primary_provider_id')
           .in('id',
             supabaseAdmin
-              .from('patient_affiliations')
+              .from('patient_organization_affiliations')
               .select('patient_id')
               .eq('organization_id', organizationId)
               .eq('status', 'active')

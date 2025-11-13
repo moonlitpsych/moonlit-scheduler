@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     // 3. Get count of patient affiliations
     const { count: affiliationCount, error: affiliationError } = await supabaseAdmin
-      .from('patient_affiliations')
+      .from('patient_organization_affiliations')
       .select('*', { count: 'exact', head: true })
     
     if (affiliationError) {
@@ -85,7 +85,7 @@ export async function DELETE(request: NextRequest) {
     // Delete patient affiliations first
     if (organization_ids && organization_ids.length > 0) {
       const { count: deletedAffiliations, error: affiliationError } = await supabaseAdmin
-        .from('patient_affiliations')
+        .from('patient_organization_affiliations')
         .delete({ count: 'exact' })
         .in('organization_id', organization_ids)
       

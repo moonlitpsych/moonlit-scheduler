@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     // Build affiliations query
     let query = supabaseAdmin
-      .from('patient_affiliations')
+      .from('patient_organization_affiliations')
       .select(`
         id,
         patient_id,
@@ -299,7 +299,7 @@ export async function POST(request: NextRequest) {
 
     // Check if affiliation already exists
     const { data: existingAffiliation } = await supabaseAdmin
-      .from('patient_affiliations')
+      .from('patient_organization_affiliations')
       .select('id, status')
       .eq('patient_id', patient_id)
       .eq('organization_id', partnerUser.organization_id)
@@ -330,7 +330,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: newAffiliation, error: createError } = await supabaseAdmin
-      .from('patient_affiliations')
+      .from('patient_organization_affiliations')
       .insert(affiliationData)
       .select(`
         *,
@@ -449,7 +449,7 @@ export async function PUT(request: NextRequest) {
 
     // Get existing affiliation and verify organization access
     const { data: currentAffiliation, error: affiliationError } = await supabaseAdmin
-      .from('patient_affiliations')
+      .from('patient_organization_affiliations')
       .select(`
         *,
         patients(
@@ -541,7 +541,7 @@ export async function PUT(request: NextRequest) {
 
     // Update affiliation
     const { data: updatedAffiliation, error: updateError } = await supabaseAdmin
-      .from('patient_affiliations')
+      .from('patient_organization_affiliations')
       .update(updates)
       .eq('id', affiliation_id)
       .select(`
