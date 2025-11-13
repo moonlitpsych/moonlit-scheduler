@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
       try {
         // Get patient count affiliated with this organization
         const { count: patientCount } = await supabaseAdmin
-          .from('patient_affiliations')
+          .from('patient_organization_affiliations')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', partnerUser.organization_id)
           .eq('status', 'active')
