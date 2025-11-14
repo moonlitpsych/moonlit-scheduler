@@ -47,7 +47,7 @@ class AuthContextManager {
     }
 
     const availableRoles: UserRole[] = []
-    const userIsAdmin = isAdminEmail(user.email || '')
+    const userIsAdmin = await isAdminEmail(user.email || '')
 
     // Check admin role
     if (userIsAdmin) {
