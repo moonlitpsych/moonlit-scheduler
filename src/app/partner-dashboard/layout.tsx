@@ -11,6 +11,7 @@ import { AccountSettingsModal } from '@/components/shared/AccountSettingsModal'
 import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import { isAdminEmail } from '@/lib/admin-auth'
 import PartnerSelector from '@/components/admin/PartnerSelector'
+import ErrorBoundary from '@/components/partner-dashboard/ErrorBoundary'
 import { ToastProvider } from '@/contexts/ToastContext'
 
 export default function PartnerDashboardLayout({
@@ -266,7 +267,9 @@ export default function PartnerDashboardLayout({
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
 

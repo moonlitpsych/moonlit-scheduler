@@ -56,6 +56,13 @@ export function TransferPatientModal({
   const fetchTeamMembers = async () => {
     try {
       const response = await fetch('/api/partner-dashboard/team')
+
+      if (!response.ok) {
+        console.error('Team API returned error:', response.status)
+        setError(`Failed to load team members (${response.status})`)
+        return
+      }
+
       const data = await response.json()
 
       if (data.success) {
@@ -65,7 +72,7 @@ export function TransferPatientModal({
         )
         setTeamMembers(availableMembers)
       } else {
-        setError('Failed to load team members')
+        setError(data.error || 'Failed to load team members')
       }
     } catch (err) {
       console.error('Error fetching team members:', err)
@@ -93,6 +100,14 @@ export function TransferPatientModal({
           notes: notes || null
         })
       })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Transfer API error:', response.status, errorText)
+        setError(`Transfer failed (${response.status})`)
+        setLoading(false)
+        return
+      }
 
       const data = await response.json()
 

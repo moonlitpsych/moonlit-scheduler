@@ -11,7 +11,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 export async function POST(request: NextRequest) {
   try {
     // Get authenticated user
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
@@ -45,8 +45,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get request body
-    const body = await request.json()
+    // Get request body with error handling
+    let body
+    try {
+      body = await request.json()
+    } catch (err) {
+      console.error('Invalid JSON in request body:', err)
+      return NextResponse.json(
+        { success: false, error: 'Invalid request body' },
+        { status: 400 }
+      )
+    }
+
     const { patient_id, from_user_id, to_user_id, notes } = body
 
     if (!patient_id || !to_user_id) {

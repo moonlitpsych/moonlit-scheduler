@@ -56,12 +56,19 @@ export function AssignProviderModal({
       // Fetch all providers directly from the database (not filtered by bookability)
       // For admin assignment, we want to see ALL providers
       const response = await fetch('/api/partner-dashboard/providers')
+
+      if (!response.ok) {
+        console.error('Providers API returned error:', response.status)
+        setError(`Failed to load providers (${response.status})`)
+        return
+      }
+
       const data = await response.json()
 
       if (data.success) {
         setProviders(data.data)
       } else {
-        setError('Failed to load providers')
+        setError(data.error || 'Failed to load providers')
       }
     } catch (err) {
       console.error('Error fetching providers:', err)
@@ -86,6 +93,14 @@ export function AssignProviderModal({
           provider_id: selectedProviderId
         })
       })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Assign provider API error:', response.status, errorText)
+        setError(`Failed to assign provider (${response.status})`)
+        setLoading(false)
+        return
+      }
 
       const data = await response.json()
 
