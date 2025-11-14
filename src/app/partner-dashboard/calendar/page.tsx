@@ -24,10 +24,20 @@ export default function CalendarSubscriptionPage() {
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
 
   useEffect(() => {
-    fetchCalendarToken()
+    const abortController = new AbortController()
+
+    const loadData = async () => {
+      await fetchCalendarToken(abortController.signal)
+    }
+
+    loadData()
+
+    return () => {
+      abortController.abort()
+    }
   }, [])
 
-  const fetchCalendarToken = async () => {
+  const fetchCalendarToken = async (signal?: AbortSignal) => {
     try {
       setLoading(true)
       setError(null)
@@ -43,44 +53,61 @@ export default function CalendarSubscriptionPage() {
 
       // Fetch partner user data
       const userResponse = await fetch('/api/partner/me', {
-        headers: { 'x-partner-user-id': user.id }
+        headers: { 'x-partner-user-id': user.id },
+        signal
       })
 
       if (!userResponse.ok) {
-        setError('Failed to load partner user data')
+        if (!signal?.aborted) {
+          setError('Failed to load partner user data')
+        }
         return
       }
 
       const userData = await userResponse.json()
       if (!userData.success) {
-        setError(userData.error || 'Failed to load user data')
+        if (!signal?.aborted) {
+          setError(userData.error || 'Failed to load user data')
+        }
         return
       }
 
-      setPartnerUser(userData.data)
+      if (!signal?.aborted) {
+        setPartnerUser(userData.data)
+      }
 
       // Fetch calendar token and feed URL
-      const tokenResponse = await fetch('/api/partner-dashboard/calendar/token')
+      const tokenResponse = await fetch('/api/partner-dashboard/calendar/token', { signal })
 
       if (!tokenResponse.ok) {
-        setError('Failed to load calendar feed')
+        if (!signal?.aborted) {
+          setError('Failed to load calendar feed')
+        }
         return
       }
 
       const tokenData = await tokenResponse.json()
       if (!tokenData.success) {
-        setError(tokenData.error || 'Failed to load calendar feed')
+        if (!signal?.aborted) {
+          setError(tokenData.error || 'Failed to load calendar feed')
+        }
         return
       }
 
-      setFeedUrl(tokenData.data.feed_url)
-      setInstructions(tokenData.data.instructions)
+      if (!signal?.aborted) {
+        setFeedUrl(tokenData.data.feed_url)
+        setInstructions(tokenData.data.instructions)
+      }
 
     } catch (err: any) {
-      console.error('Error fetching calendar token:', err)
-      setError('Failed to load calendar subscription')
+      if (err.name !== 'AbortError') {
+        console.error('Error fetching calendar token:', err)
+        setError('Failed to load calendar subscription')
+      }
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+      }
     }
   }
 
