@@ -206,10 +206,9 @@ async function fetchPartnerPatients(
           status,
           updated_at
         ),
-        primary_insurance_payer:payers (
+        primary_payer:payers!primary_payer_id (
           id,
           name,
-          type,
           state
         )
       )
@@ -285,8 +284,8 @@ async function fetchPartnerPatients(
       primary_provider_id: patient.primary_provider_id,
       primary_provider: patient.primary_provider,
 
-      primary_payer_id: patient.primary_insurance_payer?.id,
-      primary_payer: patient.primary_insurance_payer,
+      primary_payer_id: patient.primary_payer?.id,
+      primary_payer: patient.primary_payer,
 
       next_appointment: next[patient.id],
       previous_appointment: previous[patient.id],
