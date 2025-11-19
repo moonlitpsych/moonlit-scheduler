@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Plus, Edit, Eye, FileText, Users, Calendar } from 'lucide-react'
+import { Search, Plus, Edit, Eye, FileText, Users, Calendar, AlertCircle } from 'lucide-react'
 import PayerDetailModal from '@/components/admin/PayerDetailModal'
 import PayerEditorModalEnhanced from '@/components/admin/PayerEditorModalEnhanced'
+import AddOONPayerModal from '@/components/admin/AddOONPayerModal'
 
 interface Payer {
   id: string
@@ -29,6 +30,7 @@ export default function PayersPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedPayer, setSelectedPayer] = useState<Payer | null>(null)
   const [editingPayer, setEditingPayer] = useState<Payer | null>(null)
+  const [showOONModal, setShowOONModal] = useState(false)
 
   // Fetch payers data
   const fetchPayers = async () => {
@@ -133,14 +135,26 @@ export default function PayersPage() {
           </div>
         </div>
 
-        {/* Create New Payer Button */}
-        <button
-          onClick={() => setEditingPayer({} as Payer)} // Empty object for new payer
-          className="flex items-center space-x-2 px-4 py-2 bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-white rounded-lg transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Payer</span>
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center space-x-3">
+          {/* Add Out-of-Network Button */}
+          <button
+            onClick={() => setShowOONModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+          >
+            <AlertCircle className="h-4 w-4" />
+            <span>Add Out-of-Network</span>
+          </button>
+
+          {/* Create New Payer Button */}
+          <button
+            onClick={() => setEditingPayer({} as Payer)} // Empty object for new payer
+            className="flex items-center space-x-2 px-4 py-2 bg-[#BF9C73] hover:bg-[#BF9C73]/90 text-white rounded-lg transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Payer</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -309,6 +323,13 @@ export default function PayersPage() {
           onUpdate={handlePayerUpdate}
         />
       )}
+
+      {/* Add Out-of-Network Payer Modal */}
+      <AddOONPayerModal
+        isOpen={showOONModal}
+        onClose={() => setShowOONModal(false)}
+        onSuccess={handlePayerUpdate}
+      />
     </div>
   )
 }
