@@ -22,33 +22,44 @@ END $$;
 -- STEP 2: INSERT BEAR RIVER BEHAVIORAL HEALTH PAYER
 -- ============================================================================
 
-INSERT INTO payers (
-    name,
-    payer_type,
-    state,
-    status_code,
-    requires_attending,
-    requires_individual_contract,
-    effective_date,
-    projected_effective_date,
-    notes
-)
-VALUES (
-    'Bear River Behavioral Health',
-    'medicaid',
-    'UT',
-    'not_in_network',  -- Indicates we don't have a contract
-    FALSE,             -- No attending requirement (not applicable)
-    FALSE,             -- No individual contract requirement (we're not in network)
-    NULL,              -- No effective date (no contract)
-    NULL,              -- No projected effective date
-    'Medicaid mental health authority for northern Utah. We are NOT in-network with this payer. This entry exists for search/reference purposes only.'
-)
-ON CONFLICT (name) DO UPDATE SET
-    payer_type = EXCLUDED.payer_type,
-    state = EXCLUDED.state,
-    status_code = EXCLUDED.status_code,
-    notes = EXCLUDED.notes;
+-- Check if payer already exists, if not insert it
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM payers WHERE name = 'Bear River Behavioral Health') THEN
+        INSERT INTO payers (
+            name,
+            payer_type,
+            state,
+            status_code,
+            requires_attending,
+            requires_individual_contract,
+            effective_date,
+            projected_effective_date,
+            notes
+        )
+        VALUES (
+            'Bear River Behavioral Health',
+            'medicaid',
+            'UT',
+            'not_in_network',  -- Indicates we don't have a contract
+            FALSE,             -- No attending requirement (not applicable)
+            FALSE,             -- No individual contract requirement (we're not in network)
+            NULL,              -- No effective date (no contract)
+            NULL,              -- No projected effective date
+            'Medicaid mental health authority for northern Utah. We are NOT in-network with this payer. This entry exists for search/reference purposes only.'
+        );
+        RAISE NOTICE 'Bear River Behavioral Health payer inserted';
+    ELSE
+        -- Update existing record
+        UPDATE payers SET
+            payer_type = 'medicaid',
+            state = 'UT',
+            status_code = 'not_in_network',
+            notes = 'Medicaid mental health authority for northern Utah. We are NOT in-network with this payer. This entry exists for search/reference purposes only.'
+        WHERE name = 'Bear River Behavioral Health';
+        RAISE NOTICE 'Bear River Behavioral Health payer updated';
+    END IF;
+END $$;
 
 -- ============================================================================
 -- VERIFICATION
