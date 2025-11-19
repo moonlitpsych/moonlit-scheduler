@@ -31,10 +31,10 @@ export default function SelectProviderPage() {
     } else {
       const query = searchQuery.toLowerCase()
       const filtered = providers.filter(provider =>
-        provider.first_name.toLowerCase().includes(query) ||
-        provider.last_name.toLowerCase().includes(query) ||
-        provider.email.toLowerCase().includes(query) ||
-        provider.title.toLowerCase().includes(query)
+        provider.first_name?.toLowerCase().includes(query) ||
+        provider.last_name?.toLowerCase().includes(query) ||
+        provider.email?.toLowerCase().includes(query) ||
+        provider.title?.toLowerCase().includes(query)
       )
       setFilteredProviders(filtered)
     }
@@ -73,7 +73,7 @@ export default function SelectProviderPage() {
     await providerImpersonationManager.logAdminAction({
       providerId: provider.id,
       actionType: 'impersonation_start',
-      description: `Admin ${currentUser.email} started viewing as ${provider.first_name} ${provider.last_name}`
+      description: `Admin ${currentUser.email} started viewing as ${provider.first_name || 'Unknown'} ${provider.last_name || 'Unknown'}`
     })
 
     // Navigate to dashboard
@@ -180,17 +180,17 @@ export default function SelectProviderPage() {
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 bg-gradient-to-br from-[#BF9C73] to-[#F6B398] rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
                     <span className="text-white font-semibold text-lg">
-                      {provider.first_name[0]}{provider.last_name[0]}
+                      {provider.first_name?.[0] || '?'}{provider.last_name?.[0] || '?'}
                     </span>
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-[#091747] font-['Newsreader']">
-                      {provider.first_name} {provider.last_name}
+                      {provider.first_name || 'Unknown'} {provider.last_name || 'Unknown'}
                       {isCurrentAdmin(provider) && (
                         <span className="ml-2 text-sm text-[#BF9C73] font-normal">(You)</span>
                       )}
                     </h3>
-                    <p className="text-sm text-[#091747]/60">{provider.title}</p>
+                    <p className="text-sm text-[#091747]/60">{provider.title || 'No title'}</p>
                   </div>
                 </div>
                 {getProviderStatusChip(provider)}
@@ -199,11 +199,11 @@ export default function SelectProviderPage() {
               <div className="space-y-1">
                 <div className="flex items-center text-sm text-[#091747]/70">
                   <span className="font-medium mr-2">Email:</span>
-                  <span>{provider.email}</span>
+                  <span>{provider.email || 'No email'}</span>
                 </div>
                 <div className="flex items-center text-sm text-[#091747]/70">
                   <span className="font-medium mr-2">Role:</span>
-                  <span className="capitalize">{provider.role.replace('_', ' ')}</span>
+                  <span className="capitalize">{provider.role?.replace('_', ' ') || 'No role'}</span>
                 </div>
               </div>
 

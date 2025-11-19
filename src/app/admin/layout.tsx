@@ -225,6 +225,21 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <span>Analytics</span>
             <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
           </Link>
+
+          {/* System Section */}
+          <div className="py-2">
+            <div className="px-3 py-1 text-xs font-medium text-[#091747]/50 uppercase tracking-wider">
+              System
+            </div>
+          </div>
+
+          <Link
+            href="/admin/admin-users"
+            className={getNavLinkClasses('/admin/admin-users')}
+          >
+            <Shield className="h-4 w-4" />
+            <span>Admin Users</span>
+          </Link>
         </nav>
 
         {/* Admin User Info & Logout */}

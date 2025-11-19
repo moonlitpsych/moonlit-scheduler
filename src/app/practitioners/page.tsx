@@ -109,28 +109,48 @@ export default function PractitionersPage() {
     fetchFilteredProviders()
   }, [fetchFilteredProviders])
 
-  const filteredProviders = (Array.isArray(providers) ? providers : []).filter(provider => {
-    // Search filter
-    if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase()
-      const fullName = provider.full_name || `${provider.first_name} ${provider.last_name}`
-      const matchesName = fullName.toLowerCase().includes(searchLower)
-      const matchesSpecialty = provider.specialties?.some(s => s.toLowerCase().includes(searchLower)) ||
-                               provider.specialty?.toLowerCase().includes(searchLower)
-      
-      if (!matchesName && !matchesSpecialty) return false
-    }
-    
-    // State filter
-    if (selectedState !== 'all') {
-      const hasStateLicense = provider.state_licenses?.some(
-        license => license.toLowerCase().includes(selectedState.toLowerCase())
-      )
-      if (!hasStateLicense) return false
-    }
-    
-    return true
-  })
+  const filteredProviders = (Array.isArray(providers) ? providers : [])
+    .filter(provider => {
+      // Search filter
+      if (searchQuery) {
+        const searchLower = searchQuery.toLowerCase()
+        const fullName = provider.full_name || `${provider.first_name} ${provider.last_name}`
+        const matchesName = fullName.toLowerCase().includes(searchLower)
+        const matchesSpecialty = provider.specialties?.some(s => s.toLowerCase().includes(searchLower)) ||
+                                 provider.specialty?.toLowerCase().includes(searchLower)
+
+        if (!matchesName && !matchesSpecialty) return false
+      }
+
+      // State filter
+      if (selectedState !== 'all') {
+        const hasStateLicense = provider.state_licenses?.some(
+          license => license.toLowerCase().includes(selectedState.toLowerCase())
+        )
+        if (!hasStateLicense) return false
+      }
+
+      return true
+    })
+    .sort((a, b) => {
+      // Sort by patient acceptance status
+      // Priority: Accepting New Patients > Established Patients Only > Not Accepting
+      const getAcceptancePriority = (provider: Provider) => {
+        if (!provider.is_bookable) return 3 // Not accepting at all (lowest priority)
+        if (provider.accepts_new_patients) return 1 // Accepting new patients (highest priority)
+        return 2 // Established patients only (middle priority)
+      }
+
+      const priorityA = getAcceptancePriority(a)
+      const priorityB = getAcceptancePriority(b)
+
+      // If same priority, sort alphabetically by last name
+      if (priorityA === priorityB) {
+        return (a.last_name || '').localeCompare(b.last_name || '')
+      }
+
+      return priorityA - priorityB
+    })
 
   if (loading) {
     return (
@@ -449,7 +469,7 @@ export default function PractitionersPage() {
                       provider.is_bookable !== false ? {
                         text: `Book ${provider.first_name ? `Dr. ${provider.last_name}` : 'Appointment'}`,
                         onClick: () => {
-                          window.location.href = `/see-a-psychiatrist-widget`
+                          window.location.href = `/book-now`
                         },
                         variant: 'primary'
                       } : undefined // Non-bookable providers get no Book button
@@ -485,7 +505,7 @@ export default function PractitionersPage() {
                   Book your appointment with any of our practitioners today.
                 </p>
                 <Link
-                  href="/see-a-psychiatrist-widget"
+                  href="/book-now"
                   className="inline-block px-6 lg:px-8 py-3 lg:py-4 bg-[#BF9C73] hover:bg-[#A8865F] text-white text-base lg:text-lg font-['Newsreader'] rounded-xl transition-colors hover:shadow-lg"
                 >
                   Start Booking Process

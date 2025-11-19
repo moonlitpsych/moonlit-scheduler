@@ -17,7 +17,7 @@ export async function POST(
     const patientId = params.patientId
 
     // Get authenticated user
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 

@@ -4,12 +4,69 @@
 import { supabaseAdmin } from './supabase'
 import { NextRequest } from 'next/server'
 import { PartnerUser } from '@/types/partner-types'
+import type { User } from '@supabase/supabase-js'
 
 export class PartnerAuthError extends Error {
   constructor(message: string, public status: number = 401) {
     super(message)
     this.name = 'PartnerAuthError'
   }
+}
+
+/**
+ * Get partner user from authenticated session user
+ * Includes fallback to email lookup and auto-fixes auth_user_id if needed
+ *
+ * @param sessionUser - The authenticated user from session
+ * @returns Partner user record or throws PartnerAuthError
+ */
+export async function getPartnerUserFromSession(sessionUser: User): Promise<any> {
+  let partnerUser = null
+
+  // Try lookup by auth_user_id first (fast path)
+  const { data: userByAuth } = await supabaseAdmin
+    .from('partner_users')
+    .select('id, organization_id, role, is_active, email, auth_user_id, full_name, notification_preferences, timezone')
+    .eq('auth_user_id', sessionUser.id)
+    .eq('is_active', true)
+    .single()
+
+  if (userByAuth) {
+    return userByAuth
+  }
+
+  // Fallback: Try lookup by email and auto-fix auth_user_id
+  console.log('⚠️ Partner user not found by auth_user_id, trying email lookup for:', sessionUser.email)
+
+  const { data: userByEmail, error: emailLookupError } = await supabaseAdmin
+    .from('partner_users')
+    .select('id, organization_id, role, is_active, email, auth_user_id, full_name, notification_preferences, timezone')
+    .eq('email', sessionUser.email)
+    .eq('is_active', true)
+    .single()
+
+  if (userByEmail) {
+    // Auto-fix: Update auth_user_id if it's missing or wrong
+    if (!userByEmail.auth_user_id || userByEmail.auth_user_id !== sessionUser.id) {
+      console.log('🔧 Auto-fixing auth_user_id for partner user:', userByEmail.email)
+      await supabaseAdmin
+        .from('partner_users')
+        .update({ auth_user_id: sessionUser.id })
+        .eq('id', userByEmail.id)
+
+      userByEmail.auth_user_id = sessionUser.id
+    }
+    return userByEmail
+  }
+
+  // Not found
+  console.error('❌ Partner user not found:', {
+    authUserId: sessionUser.id,
+    email: sessionUser.email,
+    error: emailLookupError?.message
+  })
+
+  throw new PartnerAuthError('Partner user not found', 404)
 }
 
 /**

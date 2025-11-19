@@ -21,14 +21,21 @@ export interface AuthContextData {
 }
 
 class AuthContextManager {
-  private supabase = createClientComponentClient<Database>()
   private storageKey = 'moonlit_active_context'
+
+  /**
+   * Lazy initialization of Supabase client to avoid SSR issues
+   */
+  private getSupabase() {
+    return createClientComponentClient<Database>()
+  }
 
   /**
    * Get the user's available roles and current context
    */
   async getUserAuthContext(): Promise<AuthContextData> {
-    const { data: { user } } = await this.supabase.auth.getUser()
+    const supabase = this.getSupabase()
+    const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
       return {
@@ -40,7 +47,7 @@ class AuthContextManager {
     }
 
     const availableRoles: UserRole[] = []
-    const userIsAdmin = isAdminEmail(user.email || '')
+    const userIsAdmin = await isAdminEmail(user.email || '')
 
     // Check admin role
     if (userIsAdmin) {
@@ -52,7 +59,7 @@ class AuthContextManager {
 
     // Check provider role
     try {
-      const { data: providerData, error } = await this.supabase
+      const { data: providerData, error} = await supabase
         .from('providers')
         .select('*')
         .eq('auth_user_id', user.id)
@@ -89,7 +96,7 @@ class AuthContextManager {
 
     // Check partner role
     try {
-      const { data: partnerData, error } = await this.supabase
+      const { data: partnerData, error } = await supabase
         .from('partner_users')
         .select(`
           id,

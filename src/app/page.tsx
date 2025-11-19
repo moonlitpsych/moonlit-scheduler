@@ -32,14 +32,14 @@ export default function HomePage() {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 mb-16">
             <Link
-              href="/see-a-psychiatrist-widget"
+              href="/book-now"
               className="bg-[#BF9C73] hover:bg-[#A8865F] text-white px-6 py-3 rounded-lg font-['Newsreader'] transition-all duration-300 hover:shadow-md text-center focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/30"
               aria-label="Start booking your appointment"
             >
               Book now
             </Link>
             <Link
-              href="/see-a-psychiatrist-widget"
+              href="/book-now"
               className="bg-[#FEF8F1] hover:bg-[#f8f4f0] text-[#BF9C73] px-6 py-3 rounded-lg font-['Newsreader'] border border-[#BF9C73] hover:border-[#A8865F] transition-all duration-300 hover:shadow-md text-center focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/30"
               aria-label="View available practitioners"
             >

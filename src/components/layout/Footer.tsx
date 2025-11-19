@@ -5,7 +5,7 @@ import Image from 'next/image'
 
 export default function Footer() {
     const currentYear = new Date().getFullYear()
-    const bookNavPath = process.env.NEXT_PUBLIC_BOOK_NAV_PATH || '/see-a-psychiatrist-widget'
+    const bookNavPath = '/book-now'
 
     return (
         <footer 

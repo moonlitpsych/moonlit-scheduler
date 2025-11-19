@@ -10,8 +10,10 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
 import { Calendar, Copy, RefreshCw, Check, ExternalLink, AlertCircle } from 'lucide-react'
+import { useToast } from '@/contexts/ToastContext'
 
 export default function CalendarSubscriptionPage() {
+  const toast = useToast()
   const [partnerUser, setPartnerUser] = useState<PartnerUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [feedUrl, setFeedUrl] = useState<string>('')
@@ -19,12 +21,23 @@ export default function CalendarSubscriptionPage() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
 
   useEffect(() => {
-    fetchCalendarToken()
+    const abortController = new AbortController()
+
+    const loadData = async () => {
+      await fetchCalendarToken(abortController.signal)
+    }
+
+    loadData()
+
+    return () => {
+      abortController.abort()
+    }
   }, [])
 
-  const fetchCalendarToken = async () => {
+  const fetchCalendarToken = async (signal?: AbortSignal) => {
     try {
       setLoading(true)
       setError(null)
@@ -40,44 +53,61 @@ export default function CalendarSubscriptionPage() {
 
       // Fetch partner user data
       const userResponse = await fetch('/api/partner/me', {
-        headers: { 'x-partner-user-id': user.id }
+        headers: { 'x-partner-user-id': user.id },
+        signal
       })
 
       if (!userResponse.ok) {
-        setError('Failed to load partner user data')
+        if (!signal?.aborted) {
+          setError('Failed to load partner user data')
+        }
         return
       }
 
       const userData = await userResponse.json()
       if (!userData.success) {
-        setError(userData.error || 'Failed to load user data')
+        if (!signal?.aborted) {
+          setError(userData.error || 'Failed to load user data')
+        }
         return
       }
 
-      setPartnerUser(userData.data)
+      if (!signal?.aborted) {
+        setPartnerUser(userData.data)
+      }
 
       // Fetch calendar token and feed URL
-      const tokenResponse = await fetch('/api/partner-dashboard/calendar/token')
+      const tokenResponse = await fetch('/api/partner-dashboard/calendar/token', { signal })
 
       if (!tokenResponse.ok) {
-        setError('Failed to load calendar feed')
+        if (!signal?.aborted) {
+          setError('Failed to load calendar feed')
+        }
         return
       }
 
       const tokenData = await tokenResponse.json()
       if (!tokenData.success) {
-        setError(tokenData.error || 'Failed to load calendar feed')
+        if (!signal?.aborted) {
+          setError(tokenData.error || 'Failed to load calendar feed')
+        }
         return
       }
 
-      setFeedUrl(tokenData.data.feed_url)
-      setInstructions(tokenData.data.instructions)
+      if (!signal?.aborted) {
+        setFeedUrl(tokenData.data.feed_url)
+        setInstructions(tokenData.data.instructions)
+      }
 
     } catch (err: any) {
-      console.error('Error fetching calendar token:', err)
-      setError('Failed to load calendar subscription')
+      if (err.name !== 'AbortError') {
+        console.error('Error fetching calendar token:', err)
+        setError('Failed to load calendar subscription')
+      }
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+      }
     }
   }
 
@@ -92,13 +122,10 @@ export default function CalendarSubscriptionPage() {
   }
 
   const handleRegenerateToken = async () => {
-    if (!confirm('Regenerating your calendar token will invalidate the old URL. You will need to update your calendar subscription. Continue?')) {
-      return
-    }
-
     try {
       setRegenerating(true)
       setError(null)
+      setShowRegenerateConfirm(false)
 
       const response = await fetch('/api/partner-dashboard/calendar/token', {
         method: 'POST'
@@ -108,7 +135,10 @@ export default function CalendarSubscriptionPage() {
 
       if (data.success) {
         setFeedUrl(data.data.feed_url)
-        alert('Calendar token regenerated successfully. Please update your calendar subscription with the new URL.')
+        toast.success(
+          'Calendar Token Regenerated',
+          'Please update your calendar subscription with the new URL below.'
+        )
       } else {
         setError(data.error || 'Failed to regenerate token')
       }
@@ -163,7 +193,7 @@ export default function CalendarSubscriptionPage() {
               <span>Your Calendar Feed</span>
             </h2>
             <button
-              onClick={handleRegenerateToken}
+              onClick={() => setShowRegenerateConfirm(true)}
               disabled={regenerating}
               className="text-sm text-gray-600 hover:text-gray-900 flex items-center space-x-1 disabled:opacity-50"
             >
@@ -171,6 +201,42 @@ export default function CalendarSubscriptionPage() {
               <span>Regenerate</span>
             </button>
           </div>
+
+          {/* Regenerate Confirmation Dialog */}
+          {showRegenerateConfirm && (
+            <div className="mb-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+              <div className="flex items-start space-x-3 mb-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-yellow-900 mb-2">
+                    Regenerate Calendar Token?
+                  </p>
+                  <p className="text-sm text-yellow-800">
+                    This will invalidate your current calendar subscription URL. You'll need to update
+                    the subscription in your calendar app with the new URL. Your calendar will stop syncing
+                    until you update it.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowRegenerateConfirm(false)}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRegenerateToken}
+                  disabled={regenerating}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium disabled:opacity-50"
+                >
+                  {regenerating ? 'Regenerating...' : 'Yes, Regenerate Token'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
             <code className="text-sm text-gray-800 break-all">{feedUrl}</code>

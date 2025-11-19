@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
         `, { count: 'exact' })
         .in('patient_id', 
           supabaseAdmin
-            .from('patient_affiliations')
+            .from('patient_organization_affiliations')
             .select('patient_id')
             .eq('organization_id', partnerUser.organization_id)
             .eq('status', 'active')
@@ -270,7 +270,7 @@ async function getAvailableProviders(organizationId: string) {
           .select('provider_id')
           .in('patient_id',
             supabaseAdmin
-              .from('patient_affiliations')
+              .from('patient_organization_affiliations')
               .select('patient_id')
               .eq('organization_id', organizationId)
               .eq('status', 'active')

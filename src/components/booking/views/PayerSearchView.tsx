@@ -5,6 +5,7 @@ import { Payer } from '@/types/database'
 import { Calendar, Check, Clock, CreditCard, Loader2, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { BookingScenario, BookingIntent } from './WelcomeView'
+import PayerPlansWrapper from '../PayerPlansWrapper'
 
 interface PayerWithCarveout extends Payer {
     displaySubtext?: string
@@ -178,7 +179,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
 
             console.log('✅ Found payers:', payers?.length || 0, isMedicaidSearch ? '(medicaid-aware search)' : isRegenceSearch ? '(carve-out-aware search)' : '(normal search)')
             
-            // Sort results by acceptance priority: active > future > waitlist > not-accepted
+            // Sort results by: 1) acceptance priority, 2) state (UT before ID), 3) name
             const sortedPayers = (payers || []).sort((a, b) => {
                 const getAcceptancePriority = (payer: any) => {
                     const statusCode = payer.status_code
@@ -186,7 +187,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                     const now = new Date()
 
                     // Not accepted (lowest priority)
-                    if (['denied', 'blocked', 'withdrawn', 'on_pause'].includes(statusCode || '') || 
+                    if (['denied', 'blocked', 'withdrawn', 'on_pause'].includes(statusCode || '') ||
                         (!statusCode || !['approved', 'waiting_on_them', 'in_progress', 'not_started'].includes(statusCode))) {
                         return 4
                     }
@@ -194,8 +195,8 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                     else if (statusCode === 'approved' && effectiveDate && effectiveDate <= now) {
                         return 1
                     }
-                    // Future (second priority)  
-                    else if (statusCode === 'approved' && effectiveDate && effectiveDate > now && 
+                    // Future (second priority)
+                    else if (statusCode === 'approved' && effectiveDate && effectiveDate > now &&
                              Math.ceil((effectiveDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 21) {
                         return 2
                     }
@@ -205,7 +206,24 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                     }
                 }
 
-                return getAcceptancePriority(a) - getAcceptancePriority(b)
+                const priorityA = getAcceptancePriority(a)
+                const priorityB = getAcceptancePriority(b)
+
+                // First sort by acceptance priority
+                if (priorityA !== priorityB) {
+                    return priorityA - priorityB
+                }
+
+                // Then sort by state (Utah before Idaho)
+                const stateA = a.state || ''
+                const stateB = b.state || ''
+                if (stateA === 'UT' && stateB !== 'UT') return -1
+                if (stateA !== 'UT' && stateB === 'UT') return 1
+                if (stateA === 'ID' && stateB !== 'ID' && stateB !== 'UT') return -1
+                if (stateA !== 'ID' && stateA !== 'UT' && stateB === 'ID') return 1
+
+                // Finally sort alphabetically by name
+                return (a.name || '').localeCompare(b.name || '')
             })
             
             setState(prev => ({
@@ -356,7 +374,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
         } else {
             switch (bookingScenario) {
                 case 'self':
-                    return 'What insurance do you have?'
+                    return 'How do you intend to pay for your visit?'
                 case 'case-manager':
                     return 'What insurance does the patient have?'
                 case 'referral':
@@ -382,7 +400,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
         } else {
             switch (bookingScenario) {
                 case 'self':
-                    return 'Search for your insurance provider below'
+                    return 'Search for your insurance provider below.'
                 case 'case-manager':
                     return 'Search for the patient\'s insurance provider'
                 case 'referral':
@@ -394,7 +412,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-stone-50 via-orange-50/30 to-stone-100">
+        <div className="min-h-screen bg-[#FEF8F1]">
             <div className="max-w-4xl mx-auto px-6 py-12">
                 {/* Header */}
                 <div className="text-center mb-12">
@@ -524,7 +542,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                 "
                                             >
                                                 <div className="flex items-center justify-between">
-                                                    <div className="flex items-center space-x-4">
+                                                    <div className="flex items-start space-x-4">
                                                         {isActive ? (
                                                             <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                                                                 <Check className="w-5 h-5 text-green-600" />
@@ -599,6 +617,12 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                                     </p>
                                                                 </div>
                                                             )}
+
+                                                            {/* Inline plan display */}
+                                                            <PayerPlansWrapper
+                                                                payerId={payer.id}
+                                                                payerName={payer.name}
+                                                            />
                                                         </div>
                                                     </div>
                                                     
@@ -642,9 +666,6 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
 
                     {/* Cash Payment Option */}
                     <div className="border-t border-stone-200 pt-6">
-                        <h3 className="text-lg font-semibold text-slate-800 mb-3">
-                            No insurance? No problem.
-                        </h3>
                         <button
                             onClick={handleCashPayment}
                             className="

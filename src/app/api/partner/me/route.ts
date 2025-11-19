@@ -22,10 +22,18 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('👤 Fetching partner user info for auth user:', session.user.id)
+    // Check for impersonation (admin viewing as partner)
+    const { searchParams } = new URL(request.url)
+    const partnerUserId = searchParams.get('partner_user_id')
+
+    if (partnerUserId) {
+      console.log('👤 Admin impersonating partner user:', partnerUserId)
+    } else {
+      console.log('👤 Fetching partner user info for auth user:', session.user.id)
+    }
 
     // Get partner user with organization details
-    const { data: partnerUser, error } = await supabaseAdmin
+    let partnerUserQuery = supabaseAdmin
       .from('partner_users')
       .select(`
         id,
@@ -45,9 +53,17 @@ export async function GET(request: NextRequest) {
           created_at
         )
       `)
-      .eq('auth_user_id', session.user.id)
       .eq('is_active', true)
-      .single()
+
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', session.user.id)
+    }
+
+    const { data: partnerUser, error } = await partnerUserQuery.single()
 
     if (error || !partnerUser) {
       console.error('❌ Partner user not found:', error)
@@ -78,7 +94,7 @@ export async function GET(request: NextRequest) {
       try {
         // Get patient count affiliated with this organization
         const { count: patientCount } = await supabaseAdmin
-          .from('patient_affiliations')
+          .from('patient_organization_affiliations')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', partnerUser.organization_id)
           .eq('status', 'active')

@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
 
     // Verify patient is affiliated with organization
     const { data: patientAffiliation } = await supabaseAdmin
-      .from('patient_affiliations')
+      .from('patient_organization_affiliations')
       .select('id, status')
       .eq('patient_id', patient_id)
       .eq('organization_id', partnerUser.organization_id)

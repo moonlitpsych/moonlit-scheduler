@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (testOrgs && testOrgs.length > 0) {
       const testOrgIds = testOrgs.map(org => org.id)
       const { data: affiliations, error: affiliationError } = await supabaseAdmin
-        .from('patient_affiliations')
+        .from('patient_organization_affiliations')
         .select(`
           id,
           organization_id,
@@ -128,7 +128,7 @@ export async function DELETE(request: NextRequest) {
       const testOrgIds = testOrgs.map(org => org.id)
       
       const { count: deletedAffiliations, error: deleteAffiliationsError } = await supabaseAdmin
-        .from('patient_affiliations')
+        .from('patient_organization_affiliations')
         .delete({ count: 'exact' })
         .in('organization_id', testOrgIds)
       
