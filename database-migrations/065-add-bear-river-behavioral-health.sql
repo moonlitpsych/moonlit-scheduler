@@ -4,7 +4,22 @@
 -- Date: 2025-11-19
 
 -- ============================================================================
--- INSERT BEAR RIVER BEHAVIORAL HEALTH PAYER
+-- STEP 1: Ensure notes column exists (may not be in production yet)
+-- ============================================================================
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'payers' AND column_name = 'notes'
+    ) THEN
+        ALTER TABLE payers ADD COLUMN notes TEXT;
+        RAISE NOTICE 'Added notes column to payers table';
+    END IF;
+END $$;
+
+-- ============================================================================
+-- STEP 2: INSERT BEAR RIVER BEHAVIORAL HEALTH PAYER
 -- ============================================================================
 
 INSERT INTO payers (
