@@ -170,9 +170,11 @@ export function UpcomingAppointments({
                   <p className="text-sm text-gray-600 mt-1 font-['Newsreader']">
                     {formatDateTime(appointment.start_time)}
                   </p>
-                  <p className="text-sm text-gray-500 font-['Newsreader'] font-light">
-                    with Dr. {appointment.providers.first_name} {appointment.providers.last_name}
-                  </p>
+                  {appointment.providers && (
+                    <p className="text-sm text-gray-500 font-['Newsreader'] font-light">
+                      with Dr. {appointment.providers.first_name} {appointment.providers.last_name}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

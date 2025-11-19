@@ -16,7 +16,7 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
   const statCards = [
     {
       title: 'Total Patients',
-      value: stats.total_patients,
+      value: stats?.total_patients || 0,
       icon: '👥',
       description: 'Patients affiliated with your organization',
       color: 'bg-moonlit-cream border-moonlit-brown/20',
@@ -25,7 +25,7 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
     },
     {
       title: 'Active Patients',
-      value: stats.active_patients,
+      value: stats?.active_patients || 0,
       icon: '✅',
       description: 'Patients with valid ROI consent',
       color: 'bg-moonlit-peach/20 border-moonlit-peach/40',
@@ -34,7 +34,7 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
     },
     {
       title: 'This Week\'s Appointments',
-      value: stats.appointments_this_week,
+      value: stats?.appointments_this_week || 0,
       icon: '📅',
       description: 'Appointments scheduled this week',
       color: 'bg-moonlit-brown/10 border-moonlit-brown/30',
