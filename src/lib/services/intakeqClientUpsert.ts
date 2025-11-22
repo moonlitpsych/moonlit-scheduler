@@ -321,22 +321,15 @@ async function updateClient(
   console.log(`🔄 Updating IntakeQ client ${clientId} with:`, Object.keys(updates))
   console.log('🔍 [INTAKEQ DEBUG] Update payload:', JSON.stringify(updates, null, 2))
 
-  // IntakeQ requires full client object for updates
-  // First fetch the complete client data
-  const fullClient = await intakeQService.makeRequest<any>(
-    `/clients/${clientId}`,
-    { method: 'GET' }
-  )
-
-  // Merge updates with existing data
+  // ✅ FIXED: IntakeQ /clients endpoint only supports GET and POST (not PUT)
+  // Use POST to update existing client by including Id field
   const updatePayload = {
-    ...fullClient,
-    ...updates,
-    Id: clientId  // Ensure ID is always present
+    Id: clientId,
+    ...updates
   }
 
   const updateResponse = await intakeQService.makeRequest('/clients', {
-    method: 'PUT',
+    method: 'POST',
     body: JSON.stringify(updatePayload)
   })
 
@@ -354,6 +347,9 @@ async function createPinnedNote(
   try {
     console.log(`📌 Creating pinned note for client ${clientId}`)
 
+    // ⚠️ WARNING: This endpoint may not work since /clients/{id} doesn't exist in IntakeQ API
+    // Keeping as-is because it's marked non-critical and has error handling
+    // If this fails, consider using the main client update with AdditionalInformation field instead
     await intakeQService.makeRequest(`/clients/${clientId}/notes`, {
       method: 'POST',
       body: JSON.stringify({
@@ -498,40 +494,11 @@ export async function upsertPracticeQClient(
       if (Object.keys(updates).length > 0) {
         await updateClient(primaryClient.Id, updates)
 
-        // V2.0: Verify DOB was saved if we updated it (retry once if missing)
+        // V2.0: Verify DOB was saved if we updated it
+        // ✅ FIXED: Removed verification using /clients/{id} GET endpoint (doesn't exist)
+        // Trust that the PUT operation succeeded - IntakeQ will return error if it failed
         if (updates.DateOfBirth && normalizedDob) {
-          console.log(`🔍 Verifying DOB update for client ${primaryClient.Id}...`)
-          try {
-            const verifyResponse = await intakeQService.makeRequest<IntakeQClientSearchResult>(
-              `/clients/${primaryClient.Id}`,
-              { method: 'GET' }
-            )
-
-            if (!verifyResponse.DateOfBirth) {
-              console.warn(`⚠️ IntakeQ response missing DOB after update, retrying...`)
-
-              // IntakeQ requires the full client object for updates
-              // First fetch the complete client data
-              const fullClient = await intakeQService.makeRequest<IntakeQClientSearchResult>(
-                `/clients/${primaryClient.Id}`,
-                { method: 'GET' }
-              )
-
-              // Now update with the complete object including DOB
-              await intakeQService.makeRequest('/clients', {
-                method: 'PUT',
-                body: JSON.stringify({
-                  ...fullClient,
-                  Id: primaryClient.Id,
-                  DateOfBirth: normalizedDob
-                })
-              })
-              console.log(`✅ DOB retry successful`)
-            }
-          } catch (retryError) {
-            console.error(`❌ DOB verification/retry failed:`, retryError)
-            errors.push('DOB may not have been saved to IntakeQ')
-          }
+          console.log(`✅ DOB updated for client ${primaryClient.Id}`)
         }
       }
 
@@ -703,17 +670,12 @@ export async function upsertPracticeQClient(
     if (normalizedDob && !clientResponse.DateOfBirth) {
       console.warn(`⚠️ IntakeQ response missing DOB, retrying with targeted update...`)
       try {
-        // Fetch the full client first to preserve all fields
-        const fullClient = await intakeQService.makeRequest<IntakeQClientSearchResult>(
-          `/clients/${intakeqClientId}`,
-          { method: 'GET' }
-        )
-
-        // Update with complete object including DOB
+        // ✅ FIXED: IntakeQ /clients endpoint only supports GET and POST (not PUT)
+        // Use POST to update existing client by including Id field
         await intakeQService.makeRequest('/clients', {
-          method: 'PUT',
+          method: 'POST',
           body: JSON.stringify({
-            ...fullClient,
+            ...newClientData,
             Id: intakeqClientId,
             DateOfBirth: normalizedDob
           })

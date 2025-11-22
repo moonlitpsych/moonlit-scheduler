@@ -284,17 +284,15 @@ class IntakeQService {
     }
   }
 
+  /**
+   * @deprecated DO NOT USE - IntakeQ API doesn't support GET /clients/{id}
+   * Use search endpoint instead: /clients?search={email}
+   */
   async getClient(clientId: string): Promise<any> {
-    console.log(`🔍 Fetching IntakeQ client: ${clientId}`)
-
-    try {
-      const response = await this.makeRequest<any>(`/clients/${clientId}`)
-      console.log(`✅ IntakeQ client fetched: ${clientId}`)
-      return response
-    } catch (error: any) {
-      console.error('❌ Failed to fetch IntakeQ client:', error.message)
-      throw error
-    }
+    throw new Error(
+      'getClient() is deprecated - IntakeQ API does not support GET /clients/{id}. ' +
+      'Use /clients?search={email} instead.'
+    )
   }
 
   async getAppointment(appointmentId: string): Promise<IntakeQAppointmentResponse> {
@@ -495,9 +493,14 @@ class IntakeQService {
     console.log(`🔄 Updating insurance for IntakeQ client ${clientId}...`)
 
     try {
-      await this.makeRequest(`/clients/${clientId}`, {
-        method: 'PUT',
-        body: JSON.stringify(insuranceData),
+      // ✅ FIXED: IntakeQ /clients endpoint only supports GET and POST (not PUT)
+      // Use POST to update existing client by including Id field
+      await this.makeRequest(`/clients`, {
+        method: 'POST',
+        body: JSON.stringify({
+          Id: clientId,
+          ...insuranceData
+        }),
       })
 
       console.log(`✅ IntakeQ client ${clientId} insurance updated`)

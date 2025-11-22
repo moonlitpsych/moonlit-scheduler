@@ -28,36 +28,18 @@ export async function ensureCacheExists(
   try {
     console.log(`🔍 Checking cache for ${startDate} to ${endDate}...`)
 
-    // Check if cache already exists for this date range
-    const { data: existingCache, error: checkError } = await supabase
-      .from('provider_availability_cache')
-      .select('date, provider_id')
-      .gte('date', startDate)
-      .lte('date', endDate)
-
-    if (checkError) {
-      console.error('❌ Error checking cache:', checkError)
-      return { success: false, recordsCreated: 0, error: checkError.message }
-    }
-
-    // Get all dates in the range
+    // Get all dates in the range - always repopulate, rely on UPSERT deduplication
     const start = new Date(startDate)
     const end = new Date(endDate)
     const datesToPopulate = []
 
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().split('T')[0]
-
-      // Check if this date has cache entries
-      const hasCache = existingCache?.some(c => c.date === dateStr)
-
-      if (!hasCache) {
-        datesToPopulate.push(dateStr)
-      }
+      datesToPopulate.push(dateStr)
     }
 
     if (datesToPopulate.length === 0) {
-      console.log(`✅ Cache already exists for ${startDate} to ${endDate}`)
+      console.log(`⚠️ No dates to populate between ${startDate} and ${endDate}`)
       return { success: true, recordsCreated: 0 }
     }
 

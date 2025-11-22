@@ -20,6 +20,7 @@ import { sendIntakeQuestionnaire, buildQuestionnaireUrl } from '@/lib/services/i
 import { emailService } from '@/lib/services/emailService'
 import { logIntakeqSync } from '@/lib/services/intakeqAudit'
 import { featureFlags } from '@/lib/config/featureFlags'
+import type { ROIContact } from '@/types/database'
 
 interface V2BookingRequest {
   // Patient data
@@ -42,6 +43,9 @@ interface V2BookingRequest {
     email?: string
     phone?: string
   }
+
+  // NEW: ROI contacts array to persist in appointments.roi_contacts
+  roiContacts?: ROIContact[]
 
   // Booking data
   providerId: string
@@ -631,7 +635,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<V2Booking
       patient_info: patientInfo, // Required non-null snapshot
       insurance_info: insuranceInfo, // Required non-null snapshot
       notes: body.notes || null,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      // NEW: ROI contacts array
+      roi_contacts: body.roiContacts && body.roiContacts.length > 0 ? body.roiContacts : null
     }
 
     console.log(`🔍 V2.0: Appointment insert payload:`, {

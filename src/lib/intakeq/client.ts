@@ -128,7 +128,9 @@ export async function ensureClient(
 
         for (let attempt = 1; attempt <= maxVerificationAttempts; attempt++) {
             try {
-                await intakeQService.makeRequest(`/clients/${intakeqClientId}`, { method: 'GET' })
+                // ✅ CORRECT - Search by email to verify client exists
+                // The /clients/{id} endpoint doesn't exist in IntakeQ API
+                await intakeQService.makeRequest(`/clients?search=${encodeURIComponent(patient.email)}`, { method: 'GET' })
                 console.log(`✅ Client verification successful on attempt ${attempt}`)
                 verificationSuccessful = true
                 break

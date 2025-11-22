@@ -67,9 +67,21 @@ export default function PayerPlansInlineDisplay({
               </>
             )}
           </div>
-          <button
-            onClick={() => setIsExpanded(true)}
-            className="text-xs text-[#BF9C73] hover:text-[#A8865F] font-medium flex items-center gap-1 transition-colors"
+          <div
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded(true)
+            }}
+            className="text-xs text-[#BF9C73] hover:text-[#A8865F] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation()
+                e.preventDefault()
+                setIsExpanded(true)
+              }
+            }}
             aria-expanded="false"
             aria-label="View plan details"
           >
@@ -77,7 +89,7 @@ export default function PayerPlansInlineDisplay({
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
-          </button>
+          </div>
         </div>
       )}
 
@@ -86,9 +98,21 @@ export default function PayerPlansInlineDisplay({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-xs font-medium text-slate-600">Plan details</div>
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="text-xs text-[#BF9C73] hover:text-[#A8865F] font-medium flex items-center gap-1 transition-colors"
+            <div
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsExpanded(false)
+              }}
+              className="text-xs text-[#BF9C73] hover:text-[#A8865F] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation()
+                  e.preventDefault()
+                  setIsExpanded(false)
+                }
+              }}
               aria-expanded="true"
               aria-label="Hide plan details"
             >
@@ -96,7 +120,7 @@ export default function PayerPlansInlineDisplay({
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
               </svg>
-            </button>
+            </div>
           </div>
           {renderPlanSections(accepted, notAccepted, needsReview, brandName)}
         </div>

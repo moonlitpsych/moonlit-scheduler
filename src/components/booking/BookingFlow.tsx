@@ -193,10 +193,8 @@ export default function BookingFlow({
             bookingScenario: newScenario
         })
 
-        // TEMPORARILY DISABLED (Oct 27, 2025): ROI contacts feature
-        // UI collects data but backend doesn't persist it - see ROI_CONTACTS_ANALYSIS_REPORT.md
-        // To re-enable: change 'appointment-summary' back to 'roi' and implement backend save
-        goToStep('appointment-summary')  // Skip ROI step until backend is ready
+        // Re-enabled ROI step now that backend persistence is implemented
+        goToStep('roi')
     }
 
     const handleROISubmitted = async (roiContacts: ROIContact[]) => {
@@ -263,6 +261,10 @@ export default function BookingFlow({
             }
             const idempotencyKey = btoa(JSON.stringify(idempotencyData))
 
+            // Prepare ROI contacts
+            const roiContacts = state.roiContacts || []
+            const primaryRoiContact = roiContacts.length > 0 ? roiContacts[0] : undefined
+
             // Intake-only payload (server resolves serviceInstanceId)
             // Send EITHER patientId (if exists) OR patient object (for new patients)
             const payload = {
@@ -285,7 +287,19 @@ export default function BookingFlow({
                 notes: patient?.notes || undefined,
                 // Insurance enrichment fields (IntakeQ client upsert)
                 memberId: patient?.insuranceId || undefined,  // Map insuranceId → memberId
-                groupNumber: patient?.groupNumber || undefined
+                groupNumber: patient?.groupNumber || undefined,
+
+                // NEW: ROI contacts array (for appointments.roi_contacts)
+                roiContacts: roiContacts.length > 0 ? roiContacts : undefined,
+
+                // NEW: primary contact for IntakeQ
+                contact: primaryRoiContact
+                    ? {
+                        name: primaryRoiContact.name,
+                        email: primaryRoiContact.email,
+                        phone: primaryRoiContact.phone
+                    }
+                    : undefined
             }
 
             // Log payload for debugging

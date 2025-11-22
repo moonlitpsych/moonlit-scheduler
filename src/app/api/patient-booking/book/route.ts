@@ -21,6 +21,7 @@ import { emailService } from '@/lib/services/emailService'
 import { googleMeetService } from '@/lib/services/googleMeetService'
 import { sendIntakeQuestionnaire } from '@/lib/services/intakeqQuestionnaire'
 import { sanitizePatientForLogging } from '@/lib/validation/bookingSchema'
+import type { ROIContact } from '@/types/database'
 
 /**
  * Normalization helpers for identity matching
@@ -60,6 +61,14 @@ interface IntakeBookingRequest {
     referralCode?: string // Partner user email or code
     referredByOrganizationId?: string // Organization ID (for Eddie referrals)
     referredByPartnerUserId?: string // Partner user ID (for Eddie referrals)
+    // Contact/case manager
+    contact?: {
+        name?: string
+        email?: string
+        phone?: string
+    }
+    // ROI contacts array
+    roiContacts?: ROIContact[]
 }
 
 interface IntakeBookingResponse {
@@ -254,7 +263,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<IntakeBoo
             planName,
             referralCode,
             referredByOrganizationId,
-            referredByPartnerUserId
+            referredByPartnerUserId,
+            contact,
+            roiContacts
         } = body
 
         // Log insurance enrichment fields received (with sanitized patient data)
@@ -618,7 +629,9 @@ This is an automated alert from Moonlit Scheduler.
             },
             notes: notes || '',
             booking_source: 'patient_portal',
-            is_test: false
+            is_test: false,
+            // ROI contacts array
+            roi_contacts: roiContacts && roiContacts.length > 0 ? roiContacts : null
         }
 
         // Log exact columns being inserted for verification
