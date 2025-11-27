@@ -30,6 +30,9 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Admin fetching partner users for impersonation')
 
     // Fetch all partner users using admin client (bypasses RLS)
+    // Must explicitly specify the FK relationship because there are two:
+    // 1. partner_users.organization_id -> organizations.id (the one we want)
+    // 2. organizations.default_case_manager_id -> partner_users.id
     const { data: partners, error } = await supabaseAdmin
       .from('partner_users')
       .select(`
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
         phone,
         role,
         is_active,
-        organization:organizations(
+        organization:organizations!partner_users_organization_id_fkey(
           id,
           name
         )

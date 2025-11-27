@@ -69,9 +69,12 @@ export async function POST(request: NextRequest) {
     const partnerUserId = searchParams.get('partner_user_id')
 
     // 3. Get partner user and verify access
+    // Must explicitly specify the FK relationship because there are two:
+    // 1. partner_users.organization_id -> organizations.id (the one we want)
+    // 2. organizations.default_case_manager_id -> partner_users.id
     let partnerUserQuery = supabaseAdmin
       .from('partner_users')
-      .select('id, organization_id, role, is_active, full_name, organizations(id, name)')
+      .select('id, organization_id, role, is_active, full_name, organizations!partner_users_organization_id_fkey(id, name)')
       .eq('is_active', true)
 
     if (partnerUserId) {

@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       .from('partner_users')
       .select(`
         *,
-        organization:organizations(
+        organization:organizations!partner_users_organization_id_fkey(
           id,
           name,
           slug,
@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
       .from('partner_users')
       .select(`
         *,
-        organization:organizations(
+        organization:organizations!partner_users_organization_id_fkey(
           id,
           name,
           slug,
