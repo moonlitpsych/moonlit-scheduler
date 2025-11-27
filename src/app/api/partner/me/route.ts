@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         wants_org_broadcasts,
         created_at,
         updated_at,
-        organization:organizations(
+        organization:organizations!partner_users_organization_id_fkey(
           id,
           name,
           created_at

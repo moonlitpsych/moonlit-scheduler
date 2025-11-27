@@ -18,7 +18,7 @@ async function getPartnerUserFromAuth(request: NextRequest) {
     .from('partner_users')
     .select(`
       *,
-      organization:organizations(*)
+      organization:organizations!partner_users_organization_id_fkey(*)
     `)
     .eq('id', partnerUserId)
     .eq('status', 'active')

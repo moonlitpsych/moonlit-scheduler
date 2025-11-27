@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
         role,
         is_active,
         organization_id,
-        organization:organizations(
+        organization:organizations!partner_users_organization_id_fkey(
           id,
           name,
           slug,

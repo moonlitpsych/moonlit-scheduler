@@ -118,7 +118,7 @@ class PartnerImpersonationManager {
         phone,
         role,
         is_active,
-        organization:organizations(
+        organization:organizations!partner_users_organization_id_fkey(
           id,
           name
         )

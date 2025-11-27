@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         role,
         is_active,
         organization_id,
-        organization:organizations(
+        organization:organizations!partner_users_organization_id_fkey(
           id,
           name,
           slug,
@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
 
     const { data: partnerUser } = await supabaseAdmin
       .from('partner_users')
-      .select('id, full_name, organization:organizations(name, slug)')
+      .select('id, full_name, organization:organizations!partner_users_organization_id_fkey(name, slug)')
       .eq('email', normalizedEmail)
       .eq('is_active', true)
       .single()
