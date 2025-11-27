@@ -9,7 +9,7 @@
  * 2. meeting_url (auto-generated or from other sources)
  */
 
-import { Copy, CheckCircle, AlertCircle, Video, Plus } from 'lucide-react'
+import { Copy, CheckCircle, Video } from 'lucide-react'
 import { AppointmentDetails } from '@/types/patient-roster'
 import { formatDate, formatDateShort, formatRelativeTime } from '@/utils/patient-roster-helpers'
 
@@ -135,19 +135,12 @@ export function AppointmentCell({
                 </div>
               )
             } else if (isTelehealth) {
-              // Telehealth appointment but no link - show prominent warning with action
+              // Telehealth appointment but no link yet
               return (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onAppointmentClick?.()
-                  }}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
-                  title="Click to add Google Meet link"
-                >
-                  <Plus className="w-3 h-3" />
-                  Add Meet Link
-                </button>
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-500">
+                  <Video className="w-3 h-3" />
+                  No link
+                </span>
               )
             } else {
               // In-person appointment - no meeting link needed
