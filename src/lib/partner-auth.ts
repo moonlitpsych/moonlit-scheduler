@@ -86,7 +86,7 @@ export async function getPartnerUserFromRequest(request: NextRequest): Promise<P
     .from('partner_users')
     .select(`
       *,
-      organization:organizations(
+      organization:organizations!partner_users_organization_id_fkey(
         id,
         name,
         slug,

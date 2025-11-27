@@ -16,7 +16,7 @@ async function getPartnerUserFromAuth(request: NextRequest) {
     .from('partner_users')
     .select(`
       *,
-      organization:organizations(*)
+      organization:organizations!partner_users_organization_id_fkey(*)
     `)
     .eq('id', partnerUserId)
     .eq('status', 'active')
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
           first_name,
           last_name,
           email,
-          organization:organizations(name)
+          organization:organizations!partner_users_organization_id_fkey(name)
         )
       `)
       .single()

@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       .from('partner_users')
       .select(`
         *,
-        organization:organizations(*)
+        organization:organizations!partner_users_organization_id_fkey(*)
       `)
       .eq('invitation_token', token)
       .is('auth_user_id', null) // User hasn't accepted invitation yet
@@ -223,7 +223,7 @@ export async function GET(request: NextRequest) {
         full_name,
         role,
         invitation_expires,
-        organization:organizations(
+        organization:organizations!partner_users_organization_id_fkey(
           id,
           name,
           slug
