@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     // 3. Get partner user and verify access
     let partnerUserQuery = supabaseAdmin
       .from('partner_users')
-      .select('id, organization_id, role, is_active, full_name, organizations(id, name)')
+      .select('id, organization_id, role, is_active, full_name, organizations!partner_users_organization_id_fkey(id, name)')
       .eq('is_active', true)
 
     if (partnerUserId) {
