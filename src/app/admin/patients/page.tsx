@@ -41,6 +41,8 @@ export default function AdminPatientsPage() {
           showOrganizationColumn={true}
           enableProviderFilter={true}
           enableTestPatientToggle={true}
+          enableBulkSelect={true}
+          enableDiscoverPatients={true}
 
           // Configuration
           title="All Patients"

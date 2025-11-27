@@ -42,6 +42,17 @@ export interface OrganizationAffiliation {
 }
 
 /**
+ * Location information for appointments
+ */
+export interface LocationInfo {
+  locationId?: string
+  locationName?: string
+  locationType?: 'telehealth' | 'office' | 'home' | string
+  placeOfService?: string  // CMS Place of Service codes: '02' = telehealth (not home), '10' = telehealth (home), '11' = office
+  meetingUrl?: string
+}
+
+/**
  * Appointment details
  */
 export interface AppointmentDetails {
@@ -51,7 +62,7 @@ export interface AppointmentDetails {
   end_time?: string
   status: AppointmentStatus
   meeting_url?: string | null
-  location_info?: string | { locationId: string; locationName: string } | null
+  location_info?: LocationInfo | null
   practiceq_generated_google_meet?: string | null
   providers?: ProviderInfo
 }
@@ -233,6 +244,7 @@ export interface PatientRosterProps {
   enableProviderFilter?: boolean
   enableTestPatientToggle?: boolean
   enableDiscoverPatients?: boolean
+  enableBulkSelect?: boolean  // Enable multi-select checkboxes for bulk operations
 
   // Customization
   title?: string
