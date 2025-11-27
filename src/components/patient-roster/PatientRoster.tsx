@@ -8,7 +8,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, RotateCcw, FileText, UserCheck, Bell } from 'lucide-react'
+import { Download, RotateCcw, FileText, UserCheck, Bell, Building2, X, Search } from 'lucide-react'
 import { PatientRosterProps, PatientRosterItem } from '@/types/patient-roster'
 import { usePatientRosterData } from '@/hooks/usePatientRosterData'
 import { exportPatientRosterToCSV } from '@/utils/patient-roster-helpers'
@@ -24,6 +24,10 @@ import { AssignProviderModal } from '@/components/partner-dashboard/AssignProvid
 import { ChangeEngagementStatusModal } from '@/components/partner-dashboard/ChangeEngagementStatusModal'
 import { GenerateMedicationReportModal } from '@/components/partner-dashboard/GenerateMedicationReportModal'
 import SyncAppointmentsButton from '@/components/partner-dashboard/SyncAppointmentsButton'
+
+// Admin-specific modals
+import { BulkAffiliateModal } from '@/components/admin/BulkAffiliateModal'
+import { DiscoverPatientsModal } from '@/components/admin/DiscoverPatientsModal'
 
 // Shared modals
 import { AppointmentDetailsModal } from '@/components/shared/AppointmentDetailsModal'
@@ -42,16 +46,19 @@ export function PatientRoster({
   enableProviderFilter = false,
   enableTestPatientToggle = false,
   enableDiscoverPatients = false,
+  enableBulkSelect = false,
   title = 'Patient Roster',
   defaultPageSize = 20,
   apiEndpoint
 }: PatientRosterProps) {
-  // Use the unified data hook
+  // Use the unified data hook with retry support
   const {
     patients,
     stats,
     loading,
     error,
+    isValidating,
+    retryCount,
     page,
     hasMore,
     loadMore,
@@ -94,6 +101,36 @@ export function PatientRoster({
 
   const [medicationReportModalOpen, setMedicationReportModalOpen] = useState(false)
   const [medicationReportPatient, setMedicationReportPatient] = useState<PatientRosterItem | null>(null)
+
+  // Bulk selection state (admin only)
+  const [selectedPatientIds, setSelectedPatientIds] = useState<Set<string>>(new Set())
+  const [bulkAffiliateModalOpen, setBulkAffiliateModalOpen] = useState(false)
+
+  // Discover patients modal state (admin only)
+  const [discoverModalOpen, setDiscoverModalOpen] = useState(false)
+
+  // Bulk selection handlers
+  const handleSelectionChange = (newSelection: Set<string>) => {
+    setSelectedPatientIds(newSelection)
+  }
+
+  const handleClearSelection = () => {
+    setSelectedPatientIds(new Set())
+  }
+
+  const handleOpenBulkAffiliateModal = () => {
+    setBulkAffiliateModalOpen(true)
+  }
+
+  const handleCloseBulkAffiliateModal = () => {
+    setBulkAffiliateModalOpen(false)
+  }
+
+  const handleBulkAffiliateSuccess = async () => {
+    // Clear selection and refresh data
+    setSelectedPatientIds(new Set())
+    await refresh()
+  }
 
   // CSV Export handler
   const handleExportCSV = () => {
@@ -220,8 +257,11 @@ export function PatientRoster({
     await refresh()
   }
 
-  // Loading state
-  if (loading) {
+  // Initial loading state - ONLY on very first load with no data
+  // After first load, we always show content and use inline indicators
+  const showInitialSkeleton = loading && patients.length === 0
+
+  if (showInitialSkeleton) {
     return (
       <div className="min-h-screen bg-moonlit-cream">
         <div className="animate-pulse">
@@ -235,15 +275,54 @@ export function PatientRoster({
     )
   }
 
-  // Error state
+  // Error state with retry option
   if (error) {
     return (
       <div className="min-h-screen bg-moonlit-cream">
         <div className="container mx-auto px-4 py-12">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <p className="text-red-800">
-              {error.message || 'Failed to load patient roster'}
-            </p>
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-red-800">
+                  Failed to load patient roster
+                </h3>
+                <p className="mt-1 text-sm text-red-700">
+                  {error.message || 'An unexpected error occurred'}
+                </p>
+                {retryCount > 0 && (
+                  <p className="mt-1 text-xs text-red-600">
+                    Retry attempts: {retryCount}
+                  </p>
+                )}
+                <div className="mt-4">
+                  <button
+                    onClick={() => refresh()}
+                    disabled={isValidating}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                  >
+                    {isValidating ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-red-700" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Retrying...
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Try Again
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -266,6 +345,17 @@ export function PatientRoster({
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Discover Patients button - Admin only */}
+            {enableDiscoverPatients && (
+              <button
+                onClick={() => setDiscoverModalOpen(true)}
+                className="inline-flex items-center px-4 py-2 bg-moonlit-brown text-white rounded-md shadow-sm text-sm font-medium hover:bg-moonlit-brown/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-moonlit-brown"
+                title="Import new patients from PracticeQ"
+              >
+                <Search className="w-4 h-4 mr-2" />
+                Discover from PracticeQ
+              </button>
+            )}
             <button
               onClick={handleExportCSV}
               className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-moonlit-brown"
@@ -293,8 +383,46 @@ export function PatientRoster({
         {/* Filters and search */}
         <FilterBar filters={filters} onFilterChange={updateFilter} userType={userType} />
 
-        {/* Patient table */}
-        <RosterTable
+        {/* Bulk action toolbar - Admin only */}
+        {enableBulkSelect && selectedPatientIds.size > 0 && (
+          <div className="mb-4 bg-moonlit-brown/10 border border-moonlit-brown/20 rounded-lg p-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-moonlit-brown">
+                {selectedPatientIds.size} patient{selectedPatientIds.size === 1 ? '' : 's'} selected
+              </span>
+              <button
+                onClick={handleClearSelection}
+                className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1"
+              >
+                <X className="w-4 h-4" />
+                Clear selection
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleOpenBulkAffiliateModal}
+                className="inline-flex items-center px-4 py-2 bg-moonlit-brown text-white rounded-md hover:bg-moonlit-brown/90 transition-colors text-sm font-medium"
+              >
+                <Building2 className="w-4 h-4 mr-2" />
+                Associate with Organization
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Patient table with inline loading indicator */}
+        <div className="relative">
+          {/* Inline loading overlay - shown during filter changes */}
+          {isValidating && patients.length > 0 && (
+            <div className="absolute top-0 right-0 z-20 px-3 py-1 bg-moonlit-brown/90 text-white text-sm rounded-bl-lg flex items-center gap-2">
+              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Updating...
+            </div>
+          )}
+          <RosterTable
           patients={patients}
           userType={userType}
           sortColumn={sortColumn}
@@ -302,6 +430,10 @@ export function PatientRoster({
           onSort={handleSort}
           enablePatientLinks={enablePatientLinks}
           enableStatusEdit={userType === 'partner'}
+          enableBulkSelect={enableBulkSelect}
+          showOrganizationColumn={showOrganizationColumn}
+          selectedPatientIds={selectedPatientIds}
+          onSelectionChange={handleSelectionChange}
           onStatusClick={handleOpenChangeStatusModal}
           onAppointmentClick={handleOpenAppointmentModal}
           onCopyMeetLink={handleCopyMeetLink}
@@ -384,6 +516,7 @@ export function PatientRoster({
               : undefined // Provider and admin don't have actions column yet
           }
         />
+        </div>
 
         {/* Load more button */}
         {hasMore && (
@@ -503,6 +636,28 @@ export function PatientRoster({
                 onClose={handleCloseMedicationReportModal}
                 onSuccess={handleMedicationReportSuccess}
                 partnerUserId={userId}
+              />
+            )}
+          </>
+        )}
+
+        {/* Admin-specific modals */}
+        {userType === 'admin' && (
+          <>
+            {enableBulkSelect && (
+              <BulkAffiliateModal
+                selectedPatientIds={Array.from(selectedPatientIds)}
+                patients={patients.filter(p => selectedPatientIds.has(p.id))}
+                isOpen={bulkAffiliateModalOpen}
+                onClose={handleCloseBulkAffiliateModal}
+                onSuccess={handleBulkAffiliateSuccess}
+              />
+            )}
+            {enableDiscoverPatients && (
+              <DiscoverPatientsModal
+                isOpen={discoverModalOpen}
+                onClose={() => setDiscoverModalOpen(false)}
+                onSuccess={() => refresh()}
               />
             )}
           </>

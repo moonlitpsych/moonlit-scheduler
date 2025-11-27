@@ -453,7 +453,7 @@ async function fetchProviderPatients(
   }
 
   const stats = {
-    total: filtered.length,
+    total: count || 0, // Use actual database count, not page size
     active: filtered.filter(p => p.engagement_status === 'active').length,
     no_future_appointment: filtered.filter(p => !p.has_future_appointment).length,
     with_case_management: filtered.filter(p => p.primary_case_manager_id).length
@@ -569,7 +569,7 @@ async function fetchAdminPatients(
   }
 
   const stats = {
-    total: filtered.length,
+    total: count || 0, // Use actual database count, not page size
     active: filtered.filter(p => p.engagement_status === 'active').length,
     no_future_appointment: filtered.filter(p => !p.has_future_appointment).length,
     with_organizations: filtered.filter(p => (p.shared_with_org_ids || []).length > 0).length

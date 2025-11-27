@@ -5,6 +5,7 @@
  * Adapts to different user roles (partner, provider, admin).
  */
 
+import { useState, useEffect, useRef } from 'react'
 import { RosterFilters, UserRole, EngagementStatus } from '@/types/patient-roster'
 
 interface FilterBarProps {
@@ -14,16 +15,49 @@ interface FilterBarProps {
 }
 
 export function FilterBar({ filters, onFilterChange, userType }: FilterBarProps) {
+  // Local state for search input to enable debouncing
+  const [localSearchTerm, setLocalSearchTerm] = useState(filters.searchTerm || '')
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Sync local state if parent filter changes (e.g., on reset)
+  useEffect(() => {
+    setLocalSearchTerm(filters.searchTerm || '')
+  }, [filters.searchTerm])
+
+  // Debounced search - only update parent filter after 300ms of no typing
+  const handleSearchChange = (value: string) => {
+    setLocalSearchTerm(value)
+
+    // Clear any existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current)
+    }
+
+    // Set new timeout to update parent filter
+    debounceTimeoutRef.current = setTimeout(() => {
+      onFilterChange('searchTerm', value)
+    }, 300)
+  }
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+    }
+  }, [])
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
       <div className="flex flex-col md:flex-row gap-4">
-        {/* Search input */}
+        {/* Search input with debouncing */}
         <div className="flex-1">
           <input
             type="text"
             placeholder="Search patients by name, email, or phone..."
-            value={filters.searchTerm || ''}
-            onChange={(e) => onFilterChange('searchTerm', e.target.value)}
+            value={localSearchTerm}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-moonlit-brown focus:border-transparent"
           />
         </div>

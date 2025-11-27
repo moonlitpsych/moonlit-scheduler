@@ -2,7 +2,13 @@
  * usePatientRosterData Hook
  *
  * Unified data fetching hook for patient roster across all user roles.
- * Handles SWR caching, pagination, filtering, and sorting.
+ * Handles SWR caching, pagination, filtering, sorting, and error recovery.
+ *
+ * Features:
+ * - Automatic retry on failure (3 attempts with exponential backoff)
+ * - Error recovery with retry button
+ * - Deduplication to prevent duplicate requests
+ * - Background revalidation for fresh data
  */
 
 import { useState, useMemo, useCallback } from 'react'
@@ -15,8 +21,48 @@ import {
   SortColumn
 } from '@/types/patient-roster'
 
-// SWR fetcher function
-const fetcher = (url: string) => fetch(url).then(res => res.json())
+/**
+ * SWR fetcher with timeout and error handling
+ * Times out after 30 seconds to prevent hanging requests
+ */
+const fetcher = async (url: string) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`API Error ${response.status}: ${errorText || response.statusText}`)
+    }
+
+    const data = await response.json()
+
+    // Validate response structure
+    if (!data || (typeof data === 'object' && data.error)) {
+      throw new Error(data?.error || 'Invalid API response')
+    }
+
+    return data
+  } catch (error: any) {
+    clearTimeout(timeoutId)
+
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out. Please try again.')
+    }
+
+    throw error
+  }
+}
 
 interface UsePatientRosterDataOptions {
   userType: UserRole
@@ -33,6 +79,8 @@ interface UsePatientRosterDataReturn {
   // Loading and errors
   loading: boolean
   error: Error | null
+  isValidating: boolean  // True when revalidating in background
+  retryCount: number     // Number of retry attempts made
 
   // Pagination
   page: number
@@ -125,25 +173,41 @@ export function usePatientRosterData(
     return `/api/patients/roster?${params.toString()}`
   }, [userType, userId, filters, page, pageSize])
 
-  // SWR data fetching with caching
-  const { data, error, mutate } = useSWR<PatientRosterResponse>(
+  // Track retry count for error display
+  const [retryCount, setRetryCount] = useState(0)
+
+  // Track if we've ever successfully loaded data (for initial skeleton vs filter loading)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
+
+  // SWR data fetching with caching and retry logic
+  const { data, error, mutate, isValidating } = useSWR<PatientRosterResponse>(
     apiUrl,
     fetcher,
     {
       revalidateOnFocus: true,
       dedupingInterval: 30000, // 30 seconds
+      errorRetryCount: 3, // Retry up to 3 times on failure
+      errorRetryInterval: 2000, // Start with 2 second delay
+      shouldRetryOnError: true,
+      keepPreviousData: true, // Keep showing old data while fetching new data
       onSuccess: (responseData) => {
+        setRetryCount(0) // Reset retry count on success
+        setHasLoadedOnce(true) // Mark that we've loaded data at least once
         if (page === 1) {
           setAllPatients(responseData.patients)
         } else if (page > 1) {
           setAllPatients(prev => [...prev, ...responseData.patients])
         }
+      },
+      onError: (err) => {
+        console.error('Patient roster fetch error:', err)
+        setRetryCount(prev => prev + 1)
       }
     }
   )
 
-  // Loading state
-  const loading = !data && !error
+  // Only show full loading skeleton on initial load, not on filter changes
+  const loading = !hasLoadedOnce && !data && !error
 
   // Pagination helpers
   const totalPages = data?.pagination?.totalPages || 0
@@ -157,7 +221,8 @@ export function usePatientRosterData(
 
   const resetPagination = useCallback(() => {
     setPage(1)
-    setAllPatients([])
+    // Don't clear allPatients here - let the new data replace it in onSuccess
+    // This prevents the "No patients" flash while filtering
   }, [])
 
   // Filter management
@@ -210,7 +275,7 @@ export function usePatientRosterData(
   // Refresh helper
   const refresh = useCallback(async () => {
     setPage(1)
-    setAllPatients([])
+    // Don't clear allPatients - let keepPreviousData show current data while refreshing
     await mutate()
   }, [mutate])
 
@@ -286,6 +351,8 @@ export function usePatientRosterData(
     stats: data?.stats || { total: 0, active: 0, no_future_appointment: 0 },
     loading,
     error: error || null,
+    isValidating,
+    retryCount,
     page,
     totalPages,
     hasMore,

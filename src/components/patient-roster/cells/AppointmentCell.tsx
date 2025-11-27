@@ -3,9 +3,13 @@
  *
  * Displays appointment details with optional Google Meet link.
  * Handles both previous and upcoming appointments.
+ *
+ * Meeting URL Priority:
+ * 1. practiceq_generated_google_meet (manually entered from IntakeQ UI)
+ * 2. meeting_url (auto-generated or from other sources)
  */
 
-import { Copy, CheckCircle, AlertCircle } from 'lucide-react'
+import { Copy, CheckCircle, AlertCircle, Video, Plus } from 'lucide-react'
 import { AppointmentDetails } from '@/types/patient-roster'
 import { formatDate, formatDateShort, formatRelativeTime } from '@/utils/patient-roster-helpers'
 
@@ -15,6 +19,22 @@ interface AppointmentCellProps {
   onAppointmentClick?: () => void
   onCopyMeetLink?: (appointmentId: string, link: string) => void
   copiedAppointmentId?: string | null
+}
+
+/**
+ * Get the best available meeting URL for an appointment
+ * Prioritizes practiceq_generated_google_meet over meeting_url
+ */
+function getMeetingUrl(appointment: AppointmentDetails): string | null {
+  // Priority 1: Manually entered link from IntakeQ UI
+  if (appointment.practiceq_generated_google_meet) {
+    return appointment.practiceq_generated_google_meet
+  }
+  // Priority 2: Auto-generated or other meeting URL
+  if (appointment.meeting_url) {
+    return appointment.meeting_url
+  }
+  return null
 }
 
 export function AppointmentCell({
@@ -70,38 +90,70 @@ export function AppointmentCell({
         )}
       </div>
 
-      {/* Google Meet Link Chip */}
+      {/* Google Meet Link Chip - Show for future telehealth appointments */}
       {type === 'next' && (
         <div className="mt-2 px-2">
-          {appointment.practiceq_generated_google_meet ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onCopyMeetLink?.(
-                  appointment.id,
-                  appointment.practiceq_generated_google_meet!
-                )
-              }}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100"
-            >
-              {copiedAppointmentId === appointment.id ? (
-                <>
-                  <CheckCircle className="w-3 h-3" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3 h-3" />
-                  Copy Meet Link
-                </>
-              )}
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600">
-              <AlertCircle className="w-3 h-3" />
-              No meet link
-            </span>
-          )}
+          {(() => {
+            const meetingUrl = getMeetingUrl(appointment)
+            const isTelehealth = appointment.location_info?.locationType === 'telehealth' ||
+                                 appointment.location_info?.placeOfService === '02' ||
+                                 appointment.location_info?.placeOfService === '10'
+
+            if (meetingUrl) {
+              return (
+                <div className="flex items-center gap-1">
+                  {/* Join button */}
+                  <a
+                    href={meetingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    title="Open video call"
+                  >
+                    <Video className="w-3 h-3" />
+                    Join
+                  </a>
+                  {/* Copy button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onCopyMeetLink?.(appointment.id, meetingUrl)
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100"
+                    title="Copy meeting link"
+                  >
+                    {copiedAppointmentId === appointment.id ? (
+                      <>
+                        <CheckCircle className="w-3 h-3" />
+                        Copied!
+                      </>
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+              )
+            } else if (isTelehealth) {
+              // Telehealth appointment but no link - show prominent warning with action
+              return (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onAppointmentClick?.()
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
+                  title="Click to add Google Meet link"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add Meet Link
+                </button>
+              )
+            } else {
+              // In-person appointment - no meeting link needed
+              return null
+            }
+          })()}
         </div>
       )}
     </div>

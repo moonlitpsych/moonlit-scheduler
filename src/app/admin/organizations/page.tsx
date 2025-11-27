@@ -365,14 +365,14 @@ export default function AdminOrganizationsPage() {
                   
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[org.type as keyof typeof TYPE_COLORS] || 'bg-gray-100 text-gray-800'}`}>
-                      {getTypeIcon(org.type)}
-                      <span className="capitalize">{org.type.replace('_', ' ')}</span>
+                      {getTypeIcon(org.type || 'other')}
+                      <span className="capitalize">{(org.type || 'unspecified').replace('_', ' ')}</span>
                     </div>
                   </td>
 
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[org.status as keyof typeof STATUS_COLORS] || 'bg-gray-100 text-gray-800'}`}>
-                      {org.status}
+                      {org.status || 'unknown'}
                     </span>
                   </td>
 

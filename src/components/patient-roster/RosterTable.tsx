@@ -13,7 +13,8 @@ import {
   EngagementStatusCell,
   AppointmentCell,
   ProviderCell,
-  ContactCell
+  ContactCell,
+  OrganizationCell
 } from './cells'
 
 interface RosterTableProps {
@@ -27,6 +28,12 @@ interface RosterTableProps {
   // Feature flags
   enablePatientLinks?: boolean
   enableStatusEdit?: boolean
+  enableBulkSelect?: boolean
+  showOrganizationColumn?: boolean
+
+  // Bulk selection
+  selectedPatientIds?: Set<string>
+  onSelectionChange?: (selectedIds: Set<string>) => void
 
   // Event handlers
   onPatientClick?: (patient: PatientRosterItem) => void
@@ -48,6 +55,10 @@ export function RosterTable({
   onResetWidths,
   enablePatientLinks = false,
   enableStatusEdit = false,
+  enableBulkSelect = false,
+  showOrganizationColumn = false,
+  selectedPatientIds = new Set(),
+  onSelectionChange,
   onStatusClick,
   onAppointmentClick,
   onCopyMeetLink,
@@ -73,6 +84,33 @@ export function RosterTable({
     storageKey,
     defaultWidths
   )
+
+  // Checkbox handlers
+  const allSelected = patients.length > 0 && patients.every(p => selectedPatientIds.has(p.id))
+  const someSelected = patients.some(p => selectedPatientIds.has(p.id)) && !allSelected
+
+  const handleSelectAll = () => {
+    if (!onSelectionChange) return
+    if (allSelected) {
+      // Deselect all
+      onSelectionChange(new Set())
+    } else {
+      // Select all
+      const newSelected = new Set(patients.map(p => p.id))
+      onSelectionChange(newSelected)
+    }
+  }
+
+  const handleSelectOne = (patientId: string) => {
+    if (!onSelectionChange) return
+    const newSelected = new Set(selectedPatientIds)
+    if (newSelected.has(patientId)) {
+      newSelected.delete(patientId)
+    } else {
+      newSelected.add(patientId)
+    }
+    onSelectionChange(newSelected)
+  }
 
   // Sort icon helper
   const getSortIcon = (column: SortColumn) => {
@@ -130,6 +168,22 @@ export function RosterTable({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
             <tr>
+              {/* Checkbox column - Admin only */}
+              {enableBulkSelect && (
+                <th className="w-12 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected
+                    }}
+                    onChange={handleSelectAll}
+                    className="h-4 w-4 text-moonlit-brown border-gray-300 rounded focus:ring-moonlit-brown cursor-pointer"
+                    title={allSelected ? 'Deselect all' : 'Select all'}
+                  />
+                </th>
+              )}
+
               {/* Patient Name - All roles */}
               <SortableHeader column="name" label="Patient" width={columnWidths.patient} />
 
@@ -161,6 +215,15 @@ export function RosterTable({
                 width={columnWidths.provider}
               />
 
+              {/* Organization - Admin only */}
+              {showOrganizationColumn && (
+                <SortableHeader
+                  column="organization"
+                  label="Organization"
+                  width={columnWidths.organization}
+                />
+              )}
+
               {/* Contact - All roles */}
               <SortableHeader column="contact" label="Contact" width={columnWidths.contact} />
 
@@ -181,7 +244,22 @@ export function RosterTable({
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {patients.map((patient) => (
-              <tr key={patient.id} className="hover:bg-gray-50">
+              <tr
+                key={patient.id}
+                className={`hover:bg-gray-50 ${selectedPatientIds.has(patient.id) ? 'bg-moonlit-brown/5' : ''}`}
+              >
+                {/* Checkbox column */}
+                {enableBulkSelect && (
+                  <td className="w-12 px-4 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedPatientIds.has(patient.id)}
+                      onChange={() => handleSelectOne(patient.id)}
+                      className="h-4 w-4 text-moonlit-brown border-gray-300 rounded focus:ring-moonlit-brown cursor-pointer"
+                    />
+                  </td>
+                )}
+
                 {/* Patient Name */}
                 <td style={{ width: columnWidths.patient }} className="px-6 py-4 whitespace-nowrap">
                   <PatientNameCell
@@ -234,6 +312,13 @@ export function RosterTable({
                 <td style={{ width: columnWidths.provider }} className="px-6 py-4 whitespace-nowrap">
                   <ProviderCell provider={patient.primary_provider} />
                 </td>
+
+                {/* Organization - Admin only */}
+                {showOrganizationColumn && (
+                  <td style={{ width: columnWidths.organization }} className="px-6 py-4 whitespace-nowrap">
+                    <OrganizationCell affiliations={patient.affiliation_details} />
+                  </td>
+                )}
 
                 {/* Contact */}
                 <td style={{ width: columnWidths.contact }} className="px-6 py-4">
