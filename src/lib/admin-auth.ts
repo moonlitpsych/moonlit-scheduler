@@ -21,6 +21,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 /**
  * Fetch admin emails from database
  * Uses caching to reduce database load
+ * Only works server-side (requires SUPABASE_SERVICE_KEY)
  */
 async function getAdminEmailsFromDB(): Promise<string[]> {
   const now = Date.now()
@@ -31,9 +32,16 @@ async function getAdminEmailsFromDB(): Promise<string[]> {
   }
 
   try {
-    // Use service role to bypass RLS
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!
+    // Use service role to bypass RLS - only available server-side
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
+
+    // If service key is not available (client-side), return empty array
+    // The hardcoded ADMIN_EMAILS list will still work as a fallback
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return []
+    }
+
     const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceKey)
 
     const { data, error } = await supabaseAdmin
