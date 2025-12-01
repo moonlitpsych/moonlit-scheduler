@@ -141,12 +141,13 @@ export async function GET(request: NextRequest) {
 
     // Parse filters
     const search = searchParams.get('search') || undefined
-    const status = searchParams.get('status') || undefined
+    const status = searchParams.get('engagement_status') || searchParams.get('status') || undefined
     const appointmentFilter = searchParams.get('appointment_filter') || 'all'
     const organizationId = searchParams.get('organization_id') || undefined
     const providerId = searchParams.get('provider_id') || undefined
     const payerId = searchParams.get('payer_id') || undefined
     const filterType = searchParams.get('filter_type') || 'all'
+    const meetingLinkFilter = searchParams.get('meeting_link_filter') || 'all'
     const showTestPatients = searchParams.get('show_test_patients') === 'true'
 
     // Pagination
@@ -164,6 +165,7 @@ export async function GET(request: NextRequest) {
         search,
         status,
         appointmentFilter,
+        meetingLinkFilter,
         filterType,
         offset,
         limit
@@ -245,6 +247,7 @@ async function fetchPartnerPatients(
     search?: string
     status?: string
     appointmentFilter?: string
+    meetingLinkFilter?: string
     filterType?: string
     offset: number
     limit: number
@@ -420,6 +423,27 @@ async function fetchPartnerPatients(
     filtered = filtered.filter(p => p.engagement_status === 'active')
   } else if (filters.filterType === 'no_future_appt') {
     filtered = filtered.filter(p => !p.has_future_appointment)
+  }
+
+  // Filter by appointment status (independent of filterType)
+  if (filters.appointmentFilter === 'has_future') {
+    filtered = filtered.filter(p => p.has_future_appointment)
+  } else if (filters.appointmentFilter === 'no_future') {
+    filtered = filtered.filter(p => !p.has_future_appointment)
+  }
+
+  // Filter by meeting link status (check next appointment for meeting URL)
+  if (filters.meetingLinkFilter === 'has_link') {
+    filtered = filtered.filter(p => {
+      const appt = p.next_appointment as any
+      return appt?.meeting_url || appt?.practiceq_generated_google_meet
+    })
+  } else if (filters.meetingLinkFilter === 'no_link') {
+    filtered = filtered.filter(p => {
+      const appt = p.next_appointment as any
+      // Patient has upcoming appointment but no meeting link
+      return p.has_future_appointment && !appt?.meeting_url && !appt?.practiceq_generated_google_meet
+    })
   }
 
   if (filters.search) {

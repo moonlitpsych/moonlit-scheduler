@@ -14,6 +14,7 @@ interface AppointmentExportData {
   patient_phone?: string
   provider_phone?: string
   organization_name?: string
+  meeting_url?: string | null
 }
 
 export type CalendarFormat = 'ics' | 'outlook' | 'google'
@@ -75,6 +76,7 @@ class CalendarExportService {
         `Patient: ${apt.patient_name}`,
         `Provider: ${apt.provider_name}`,
         apt.appointment_type && `Type: ${apt.appointment_type}`,
+        apt.meeting_url && `Google Meet: ${apt.meeting_url}`,
         apt.patient_phone && `Patient Phone: ${apt.patient_phone}`,
         apt.organization_name && `Referred by: ${apt.organization_name}`,
         apt.notes && `Notes: ${apt.notes}`,
@@ -116,23 +118,25 @@ class CalendarExportService {
     const headers = [
       'Subject',
       'Start Date',
-      'Start Time', 
+      'Start Time',
       'End Date',
       'End Time',
       'All day event',
       'Description',
       'Location',
+      'Google Meet Link',
       'Categories'
     ]
 
     const rows = appointments.map(apt => {
       const startDate = new Date(apt.start_time)
       const endDate = new Date(apt.end_time)
-      
+
       const description = [
         `Patient: ${apt.patient_name}`,
         `Provider: ${apt.provider_name}`,
         apt.appointment_type && `Type: ${apt.appointment_type}`,
+        apt.meeting_url && `Google Meet: ${apt.meeting_url}`,
         apt.patient_phone && `Patient Phone: ${apt.patient_phone}`,
         apt.organization_name && `Referred by: ${apt.organization_name}`,
         apt.notes && `Notes: ${apt.notes}`,
@@ -149,12 +153,13 @@ class CalendarExportService {
         '"False"',
         `"${description}"`,
         `"${apt.location || 'Telehealth'}"`,
+        `"${apt.meeting_url || ''}"`,
         '"Healthcare,Patient Appointment"'
       ].join(',')
     })
 
     const csvContent = [headers.join(','), ...rows].join('\n')
-    
+
     return {
       content: csvContent,
       filename: `moonlit-appointments-outlook-${this.formatFilenameDate(new Date())}.csv`,
@@ -170,22 +175,24 @@ class CalendarExportService {
       'Subject',
       'Start Date',
       'Start Time',
-      'End Date', 
+      'End Date',
       'End Time',
       'All Day Event',
       'Description',
       'Location',
+      'Google Meet Link',
       'Private'
     ]
 
     const rows = appointments.map(apt => {
       const startDate = new Date(apt.start_time)
       const endDate = new Date(apt.end_time)
-      
+
       const description = [
         `Patient: ${apt.patient_name}`,
         `Provider: ${apt.provider_name}`,
         apt.appointment_type && `Type: ${apt.appointment_type}`,
+        apt.meeting_url && `Google Meet: ${apt.meeting_url}`,
         apt.patient_phone && `Phone: ${apt.patient_phone}`,
         apt.organization_name && `Referred by: ${apt.organization_name}`,
         apt.notes && `Notes: ${apt.notes}`,
@@ -202,12 +209,13 @@ class CalendarExportService {
         '"False"',
         `"${description}"`,
         `"${apt.location || 'Telehealth'}"`,
+        `"${apt.meeting_url || ''}"`,
         '"True"'
       ].join(',')
     })
 
     const csvContent = [headers.join(','), ...rows].join('\n')
-    
+
     return {
       content: csvContent,
       filename: `moonlit-appointments-google-${this.formatFilenameDate(new Date())}.csv`,

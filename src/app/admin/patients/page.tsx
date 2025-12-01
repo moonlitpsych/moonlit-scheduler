@@ -43,6 +43,7 @@ export default function AdminPatientsPage() {
           enableTestPatientToggle={true}
           enableBulkSelect={true}
           enableDiscoverPatients={true}
+          enableAssignCaseManager={true}
 
           // Configuration
           title="All Patients"

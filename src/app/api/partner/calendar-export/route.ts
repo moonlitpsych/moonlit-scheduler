@@ -214,6 +214,8 @@ async function fetchPartnerAppointments(
                 status,
                 notes,
                 patient_info,
+                meeting_url,
+                practiceq_generated_google_meet,
                 providers!appointments_provider_id_fkey (
                     id,
                     first_name,
@@ -246,13 +248,15 @@ async function fetchPartnerAppointments(
             .map(apt => {
                 const patientInfo = apt.patient_info as any
                 const provider = apt.providers
-                
+                // Prefer practiceq_generated_google_meet, fall back to meeting_url
+                const meetingUrl = apt.practiceq_generated_google_meet || apt.meeting_url || null
+
                 return {
                     id: apt.id,
-                    patient_name: patientInfo?.firstName && patientInfo?.lastName 
+                    patient_name: patientInfo?.firstName && patientInfo?.lastName
                         ? `${patientInfo.firstName} ${patientInfo.lastName}`
                         : 'Patient Name',
-                    provider_name: provider 
+                    provider_name: provider
                         ? `${provider.title || 'Dr.'} ${provider.first_name} ${provider.last_name}`
                         : 'Provider',
                     start_time: apt.start_time,
@@ -262,7 +266,8 @@ async function fetchPartnerAppointments(
                     notes: apt.notes || '',
                     status: apt.status || 'confirmed',
                     patient_phone: patientInfo?.phone,
-                    organization_name: partnerUser.organizations?.name
+                    organization_name: partnerUser.organizations?.name,
+                    meeting_url: meetingUrl
                 }
             })
 

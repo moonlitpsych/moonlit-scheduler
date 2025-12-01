@@ -123,6 +123,7 @@ export default function PatientsPage() {
           // Provider-specific features
           showCaseManagerColumn={true}
           showOrganizationColumn={true}
+          enableAssignCaseManager={true}
 
           // Configuration
           title="My Patients"

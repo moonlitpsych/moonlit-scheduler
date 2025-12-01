@@ -75,6 +75,22 @@ interface ActivityLogEntry {
   actor_name?: string
 }
 
+interface AppointmentRecord {
+  id: string
+  start_time: string
+  end_time?: string
+  status: string
+  appointment_type?: string
+  notes?: string
+  meeting_url?: string
+  practiceq_generated_google_meet?: string
+  providers?: {
+    id: string
+    first_name: string
+    last_name: string
+  }
+}
+
 export default function PatientDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -83,6 +99,7 @@ export default function PatientDetailPage() {
   const [partnerUser, setPartnerUser] = useState<PartnerUser | null>(null)
   const [patient, setPatient] = useState<PatientWithDetails | null>(null)
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([])
+  const [pastAppointments, setPastAppointments] = useState<AppointmentRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -105,6 +122,16 @@ export default function PatientDetailPage() {
         }
 
         // Check for admin impersonation
+        // First, verify this is actually an admin before trusting impersonation data
+        const meResponse = await fetch('/api/partner/me')
+        const meData = await meResponse.json()
+
+        // If user is a regular partner (API succeeded), clear any stale impersonation data
+        // Impersonation is only valid when an admin is viewing - not for regular partners
+        if (meResponse.ok && meData.success) {
+          partnerImpersonationManager.clearImpersonation()
+        }
+
         const impersonation = partnerImpersonationManager.getImpersonatedPartner()
         let partnerData: PartnerUser
 
@@ -131,21 +158,18 @@ export default function PatientDetailPage() {
           }
           setPartnerUser(partnerData)
         } else {
-          // Regular partner user - fetch from API
-          const userResponse = await fetch('/api/partner/me')
-
-          if (!userResponse.ok) {
+          // Regular partner user - use the data we already fetched
+          if (!meResponse.ok) {
             setError('Failed to load partner user data')
             return
           }
 
-          const userData = await userResponse.json()
-          if (!userData.success) {
-            setError(userData.error || 'Failed to load user data')
+          if (!meData.success) {
+            setError(meData.error || 'Failed to load user data')
             return
           }
 
-          partnerData = userData.data
+          partnerData = meData.data
           setPartnerUser(partnerData)
         }
 
@@ -180,6 +204,15 @@ export default function PatientDetailPage() {
           const activityData = await activityResponse.json()
           if (activityData.success) {
             setActivityLog(activityData.data.activities || [])
+          }
+        }
+
+        // Fetch past appointments
+        const appointmentsResponse = await fetch(`/api/partner-dashboard/patients/${patientId}/appointments`)
+        if (appointmentsResponse.ok) {
+          const appointmentsData = await appointmentsResponse.json()
+          if (appointmentsData.success) {
+            setPastAppointments(appointmentsData.data.past || [])
           }
         }
 
@@ -465,32 +498,46 @@ export default function PatientDetailPage() {
               </div>
             </div>
 
-            {/* Activity Log */}
+            {/* Past Appointments */}
             <div className="bg-white border border-gray-200 rounded-lg p-6">
               <h2 className="text-lg font-semibold text-moonlit-navy mb-4 font-['Newsreader']">
-                Activity Log
+                Past Appointments
               </h2>
 
-              {activityLog.length === 0 ? (
+              {pastAppointments.length === 0 ? (
                 <div className="text-center py-8">
-                  <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 font-['Newsreader']">No activity recorded yet</p>
+                  <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 font-['Newsreader']">No past appointments</p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {activityLog.map((activity) => (
-                    <div key={activity.id} className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0">
-                      <div className="flex-shrink-0 w-2 h-2 bg-moonlit-brown rounded-full mt-2"></div>
+                  {pastAppointments.map((appt) => (
+                    <div key={appt.id} className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0">
+                      <Calendar className="w-5 h-5 text-moonlit-brown mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-medium text-gray-900 font-['Newsreader']">{activity.title}</p>
-                            {activity.description && (
-                              <p className="text-sm text-gray-600 mt-1">{activity.description}</p>
+                            <p className="font-medium text-gray-900 font-['Newsreader']">
+                              {formatDate(appt.start_time)}
+                            </p>
+                            {appt.providers && (
+                              <p className="text-sm text-gray-600 mt-1">
+                                with Dr. {appt.providers.last_name}
+                              </p>
                             )}
                           </div>
-                          <span className="text-xs text-gray-500 whitespace-nowrap ml-4">
-                            {formatShortDate(activity.created_at)}
+                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ml-4 ${
+                            appt.status === 'completed'
+                              ? 'bg-green-100 text-green-800'
+                              : appt.status === 'confirmed'
+                              ? 'bg-blue-100 text-blue-800'
+                              : appt.status === 'no_show'
+                              ? 'bg-red-100 text-red-800'
+                              : appt.status === 'cancelled'
+                              ? 'bg-gray-100 text-gray-800'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {appt.status.replace('_', ' ')}
                           </span>
                         </div>
                       </div>
@@ -592,6 +639,39 @@ export default function PatientDetailPage() {
                   </span>
                 </div>
               </div>
+            </div>
+
+            {/* Activity Log */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-moonlit-navy mb-4 font-['Newsreader']">
+                Activity Log
+              </h2>
+
+              {activityLog.length === 0 ? (
+                <div className="text-center py-6">
+                  <Clock className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600 text-sm font-['Newsreader']">No activity recorded yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-80 overflow-y-auto">
+                  {activityLog.map((activity) => (
+                    <div key={activity.id} className="pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+                      <div className="flex items-start space-x-2">
+                        <div className="flex-shrink-0 w-2 h-2 bg-moonlit-brown rounded-full mt-1.5"></div>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900 text-sm font-['Newsreader']">{activity.title}</p>
+                          {activity.description && (
+                            <p className="text-xs text-gray-600 mt-0.5">{activity.description}</p>
+                          )}
+                          <span className="text-xs text-gray-500 mt-1 block">
+                            {formatShortDate(activity.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

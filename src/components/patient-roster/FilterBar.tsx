@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { RosterFilters, UserRole, EngagementStatus } from '@/types/patient-roster'
+import { RosterFilters, UserRole } from '@/types/patient-roster'
 
 interface FilterBarProps {
   filters: RosterFilters
@@ -62,83 +62,114 @@ export function FilterBar({ filters, onFilterChange, userType }: FilterBarProps)
           />
         </div>
 
-        {/* Filter buttons */}
-        <div className="flex flex-wrap gap-2">
-          {/* Common filters */}
-          <button
-            onClick={() => onFilterChange('filterType', 'all')}
-            className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
-              filters.filterType === 'all'
-                ? 'bg-moonlit-brown text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            All
-          </button>
+        {/* Filter checkboxes - independent and combinable */}
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Active Only checkbox */}
+          <label className="inline-flex items-center cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filters.engagementStatus === 'active'}
+              onChange={(e) => onFilterChange('engagementStatus', e.target.checked ? 'active' : 'all')}
+              className="h-4 w-4 text-moonlit-brown rounded border-gray-300 focus:ring-moonlit-brown"
+            />
+            <span className="ml-2 text-sm text-gray-700 font-medium">Active Only</span>
+          </label>
 
-          <button
-            onClick={() => onFilterChange('filterType', 'active_only')}
-            className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
-              filters.filterType === 'active_only'
-                ? 'bg-moonlit-brown text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Active Only
-          </button>
+          {/* No Future Appt checkbox */}
+          <label className="inline-flex items-center cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filters.appointmentFilter === 'no_future'}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  onFilterChange('appointmentFilter', 'no_future')
+                } else {
+                  onFilterChange('appointmentFilter', 'all')
+                }
+              }}
+              className="h-4 w-4 text-moonlit-brown rounded border-gray-300 focus:ring-moonlit-brown"
+            />
+            <span className="ml-2 text-sm text-gray-700 font-medium">No Future Appt</span>
+          </label>
 
-          <button
-            onClick={() => onFilterChange('filterType', 'no_future_appt')}
-            className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
-              filters.filterType === 'no_future_appt'
-                ? 'bg-moonlit-brown text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            No Future Appt
-          </button>
+          {/* Has Future Appt checkbox */}
+          <label className="inline-flex items-center cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filters.appointmentFilter === 'has_future'}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  onFilterChange('appointmentFilter', 'has_future')
+                } else {
+                  onFilterChange('appointmentFilter', 'all')
+                }
+              }}
+              className="h-4 w-4 text-moonlit-brown rounded border-gray-300 focus:ring-moonlit-brown"
+            />
+            <span className="ml-2 text-sm text-gray-700 font-medium">Has Future Appt</span>
+          </label>
+
+          {/* Separator */}
+          <div className="border-l border-gray-300 h-5 mx-1" />
+
+          {/* Has Google Meet checkbox */}
+          <label className="inline-flex items-center cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filters.meetingLinkFilter === 'has_link'}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  onFilterChange('meetingLinkFilter', 'has_link')
+                } else {
+                  onFilterChange('meetingLinkFilter', 'all')
+                }
+              }}
+              className="h-4 w-4 text-moonlit-brown rounded border-gray-300 focus:ring-moonlit-brown"
+            />
+            <span className="ml-2 text-sm text-gray-700 font-medium">Has Meet Link</span>
+          </label>
+
+          {/* No Google Meet checkbox */}
+          <label className="inline-flex items-center cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filters.meetingLinkFilter === 'no_link'}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  onFilterChange('meetingLinkFilter', 'no_link')
+                } else {
+                  onFilterChange('meetingLinkFilter', 'all')
+                }
+              }}
+              className="h-4 w-4 text-moonlit-brown rounded border-gray-300 focus:ring-moonlit-brown"
+            />
+            <span className="ml-2 text-sm text-gray-700 font-medium">No Meet Link</span>
+          </label>
 
           {/* Partner-specific filters */}
           {userType === 'partner' && (
             <>
-              <button
-                onClick={() => onFilterChange('filterType', 'assigned_to_me')}
-                className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  filters.filterType === 'assigned_to_me'
-                    ? 'bg-moonlit-brown text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                My Patients
-              </button>
+              <label className="inline-flex items-center cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={filters.filterType === 'assigned_to_me'}
+                  onChange={(e) => onFilterChange('filterType', e.target.checked ? 'assigned_to_me' : 'all')}
+                  className="h-4 w-4 text-moonlit-brown rounded border-gray-300 focus:ring-moonlit-brown"
+                />
+                <span className="ml-2 text-sm text-gray-700 font-medium">My Patients</span>
+              </label>
 
-              <button
-                onClick={() => onFilterChange('filterType', 'roi_missing')}
-                className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  filters.filterType === 'roi_missing'
-                    ? 'bg-moonlit-brown text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                ROI Missing
-              </button>
+              <label className="inline-flex items-center cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={filters.filterType === 'roi_missing'}
+                  onChange={(e) => onFilterChange('filterType', e.target.checked ? 'roi_missing' : 'all')}
+                  className="h-4 w-4 text-moonlit-brown rounded border-gray-300 focus:ring-moonlit-brown"
+                />
+                <span className="ml-2 text-sm text-gray-700 font-medium">ROI Missing</span>
+              </label>
             </>
           )}
-
-          {/* Engagement status dropdown */}
-          <select
-            value={filters.engagementStatus || 'active'}
-            onChange={(e) => onFilterChange('engagementStatus', e.target.value as EngagementStatus | 'all')}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-moonlit-brown focus:border-transparent"
-          >
-            <option value="all">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="discharged">Discharged</option>
-            <option value="transferred">Transferred</option>
-            <option value="deceased">Deceased</option>
-            <option value="unresponsive">Unresponsive</option>
-          </select>
         </div>
       </div>
     </div>

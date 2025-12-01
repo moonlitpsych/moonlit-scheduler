@@ -12,6 +12,9 @@ export function useAppointmentExport() {
 
     try {
       // Transform appointment data to export format
+      // Prefer practiceq_generated_google_meet, fall back to meeting_url
+      const meetingUrl = appointment.practiceq_generated_google_meet || appointment.meeting_url || null
+
       const exportData: AppointmentExportData = {
         id: appointment.id,
         patient_name: `${appointment.patients.first_name} ${appointment.patients.last_name}`,
@@ -23,7 +26,8 @@ export function useAppointmentExport() {
         notes: appointment.notes || '',
         status: appointment.status || 'confirmed',
         patient_phone: appointment.patients.phone,
-        organization_name: 'Partner Organization'
+        organization_name: 'Partner Organization',
+        meeting_url: meetingUrl
       }
 
       // Create calendar export directly using the service

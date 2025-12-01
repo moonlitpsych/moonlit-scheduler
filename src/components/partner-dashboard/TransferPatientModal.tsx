@@ -129,7 +129,14 @@ export function TransferPatientModal({
 
   if (!isOpen) return null
 
+  // Determine if this is a new assignment or transfer
+  const isNewAssignment = !patient.current_assignment
   const currentAssignee = patient.current_assignment?.partner_users?.full_name || 'Unassigned'
+  const modalTitle = isNewAssignment ? 'Assign Case Manager' : 'Transfer Patient'
+  const selectLabel = isNewAssignment ? 'Assign to' : 'Transfer to'
+  const buttonText = isNewAssignment ? 'Assign Case Manager' : 'Transfer Patient'
+  const loadingText = isNewAssignment ? 'Assigning...' : 'Transferring...'
+  const notesPlaceholder = isNewAssignment ? 'Notes about assignment...' : 'Reason for transfer...'
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -146,7 +153,7 @@ export function TransferPatientModal({
           <div className="flex items-start justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-900 font-['Newsreader']">
-                Transfer Patient
+                {modalTitle}
               </h3>
               <p className="text-sm text-gray-600 mt-1">
                 {patient.first_name} {patient.last_name}
@@ -160,11 +167,13 @@ export function TransferPatientModal({
             </button>
           </div>
 
-          {/* Current Assignment */}
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-500 mb-1">Case management currently assigned to</p>
-            <p className="text-sm font-medium text-gray-900">{currentAssignee}</p>
-          </div>
+          {/* Current Assignment - only show for transfers */}
+          {!isNewAssignment && (
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-xs text-gray-500 mb-1">Case management currently assigned to</p>
+              <p className="text-sm font-medium text-gray-900">{currentAssignee}</p>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
@@ -177,7 +186,7 @@ export function TransferPatientModal({
           {/* Team Member Select */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Transfer to
+              {selectLabel}
             </label>
             <select
               value={selectedUserId}
@@ -202,7 +211,7 @@ export function TransferPatientModal({
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Reason for transfer..."
+              placeholder={notesPlaceholder}
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               disabled={loading}
@@ -231,11 +240,11 @@ export function TransferPatientModal({
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
             >
               {loading ? (
-                <span>Transferring...</span>
+                <span>{loadingText}</span>
               ) : (
                 <>
                   <UserCheck className="w-4 h-4" />
-                  <span>Transfer Patient</span>
+                  <span>{buttonText}</span>
                 </>
               )}
             </button>

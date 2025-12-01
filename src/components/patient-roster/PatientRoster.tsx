@@ -47,9 +47,11 @@ export function PatientRoster({
   enableTestPatientToggle = false,
   enableDiscoverPatients = false,
   enableBulkSelect = false,
+  enableAssignCaseManager = false,
   title = 'Patient Roster',
   defaultPageSize = 20,
-  apiEndpoint
+  apiEndpoint,
+  initialFilters
 }: PatientRosterProps) {
   // Use the unified data hook with retry support
   const {
@@ -72,7 +74,8 @@ export function PatientRoster({
   } = usePatientRosterData({
     userType,
     userId,
-    pageSize: defaultPageSize
+    pageSize: defaultPageSize,
+    initialFilters
   })
 
   // Modal states
@@ -108,6 +111,10 @@ export function PatientRoster({
 
   // Discover patients modal state (admin only)
   const [discoverModalOpen, setDiscoverModalOpen] = useState(false)
+
+  // Case manager assignment modal state (all roles)
+  const [assignCaseManagerModalOpen, setAssignCaseManagerModalOpen] = useState(false)
+  const [assignCaseManagerPatient, setAssignCaseManagerPatient] = useState<PatientRosterItem | null>(null)
 
   // Bulk selection handlers
   const handleSelectionChange = (newSelection: Set<string>) => {
@@ -254,6 +261,21 @@ export function PatientRoster({
   }
 
   const handleMedicationReportSuccess = async () => {
+    await refresh()
+  }
+
+  // Case manager assignment handlers (all roles)
+  const handleOpenAssignCaseManagerModal = (patient: PatientRosterItem) => {
+    setAssignCaseManagerPatient(patient)
+    setAssignCaseManagerModalOpen(true)
+  }
+
+  const handleCloseAssignCaseManagerModal = () => {
+    setAssignCaseManagerModalOpen(false)
+    setAssignCaseManagerPatient(null)
+  }
+
+  const handleAssignCaseManagerSuccess = async () => {
     await refresh()
   }
 
@@ -469,10 +491,10 @@ export function PatientRoster({
                         </>
                       )}
 
-                      {/* Transfer and other actions */}
-                      {enableTransferAction && (
+                      {/* Assign/Transfer Case Manager */}
+                      {(enableTransferAction || enableAssignCaseManager) && (
                         <>
-                          {patient.current_assignment && (
+                          {patient.current_assignment ? (
                             <>
                               <button
                                 onClick={() => handleOpenTransferModal(patient)}
@@ -480,6 +502,17 @@ export function PatientRoster({
                               >
                                 <UserCheck className="w-4 h-4" />
                                 <span>Transfer</span>
+                              </button>
+                              <span className="text-gray-300">|</span>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleOpenAssignCaseManagerModal(patient)}
+                                className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                              >
+                                <UserCheck className="w-4 h-4" />
+                                <span>Assign</span>
                               </button>
                               <span className="text-gray-300">|</span>
                             </>
@@ -513,7 +546,30 @@ export function PatientRoster({
                     </div>
                   </div>
                 )
-              : undefined // Provider and admin don't have actions column yet
+              : enableAssignCaseManager
+                ? (patient) => (
+                    <div className="flex items-center space-x-3">
+                      {/* Assign/Transfer Case Manager for provider/admin */}
+                      {patient.current_assignment ? (
+                        <button
+                          onClick={() => handleOpenTransferModal(patient)}
+                          className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                          <span>Transfer</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenAssignCaseManagerModal(patient)}
+                          className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                          <span>Assign</span>
+                        </button>
+                      )}
+                    </div>
+                  )
+                : undefined
           }
         />
         </div>
@@ -661,6 +717,26 @@ export function PatientRoster({
               />
             )}
           </>
+        )}
+
+        {/* Cross-role Case Manager Assignment Modal */}
+        {enableAssignCaseManager && assignCaseManagerPatient && (
+          <TransferPatientModal
+            patient={{
+              id: assignCaseManagerPatient.id,
+              first_name: assignCaseManagerPatient.first_name,
+              last_name: assignCaseManagerPatient.last_name,
+              current_assignment: assignCaseManagerPatient.current_assignment ? {
+                partner_user_id: assignCaseManagerPatient.current_assignment.partner_user_id,
+                partner_users: {
+                  full_name: assignCaseManagerPatient.current_assignment.partner_user_name
+                }
+              } : undefined
+            }}
+            isOpen={assignCaseManagerModalOpen}
+            onClose={handleCloseAssignCaseManagerModal}
+            onSuccess={handleAssignCaseManagerSuccess}
+          />
         )}
       </div>
     </div>

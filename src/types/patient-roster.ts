@@ -147,6 +147,9 @@ export interface RosterFilters {
   // Appointments
   appointmentFilter?: 'all' | 'has_future' | 'no_future'
 
+  // Meeting links (for upcoming appointments)
+  meetingLinkFilter?: 'all' | 'has_link' | 'no_link'
+
   // Organization (provider/admin)
   organizationId?: string | 'all'
 
@@ -246,10 +249,16 @@ export interface PatientRosterProps {
   enableDiscoverPatients?: boolean
   enableBulkSelect?: boolean  // Enable multi-select checkboxes for bulk operations
 
+  // Cross-role features
+  enableAssignCaseManager?: boolean  // Show Assign/Transfer case manager actions
+
   // Customization
   title?: string
   defaultPageSize?: number
   apiEndpoint?: string  // Override default API endpoint
+
+  // Initial filter state (e.g., from URL query params)
+  initialFilters?: Partial<RosterFilters>
 }
 
 /**

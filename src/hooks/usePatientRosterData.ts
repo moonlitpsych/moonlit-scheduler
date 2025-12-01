@@ -114,6 +114,7 @@ export function usePatientRosterData(
     searchTerm: '',
     engagementStatus: 'active',
     appointmentFilter: 'all',
+    meetingLinkFilter: 'all',
     organizationId: 'all',
     providerId: 'all',
     payerId: 'all',
@@ -150,6 +151,9 @@ export function usePatientRosterData(
     }
     if (filters.appointmentFilter && filters.appointmentFilter !== 'all') {
       params.set('appointment_filter', filters.appointmentFilter)
+    }
+    if (filters.meetingLinkFilter && filters.meetingLinkFilter !== 'all') {
+      params.set('meeting_link_filter', filters.meetingLinkFilter)
     }
     if (filters.organizationId && filters.organizationId !== 'all') {
       params.set('organization_id', filters.organizationId)
@@ -239,6 +243,7 @@ export function usePatientRosterData(
       searchTerm: '',
       engagementStatus: 'active',
       appointmentFilter: 'all',
+      meetingLinkFilter: 'all',
       organizationId: 'all',
       providerId: 'all',
       payerId: 'all',

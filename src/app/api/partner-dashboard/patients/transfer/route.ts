@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
         assignment_type: 'primary',
         status: 'active',
         assigned_date: now,
-        assigned_by: partnerUser.id
+        notes: notes || `Assigned by ${partnerUser.full_name || 'Partner User'}`
       })
       .select()
       .single()

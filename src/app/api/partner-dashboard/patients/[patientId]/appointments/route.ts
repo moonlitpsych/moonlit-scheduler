@@ -1,6 +1,6 @@
 /**
- * GET /api/partner-dashboard/patients/[patientId]/appointments
- * Fetch appointments for a patient
+ * Partner Dashboard API - Patient Appointments
+ * Get past and upcoming appointments for a specific patient
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -10,82 +10,111 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ patientId: string }> }
+  { params }: { params: { patientId: string } }
 ) {
   try {
-    // Await params (Next.js 15 requirement)
-    const { patientId } = await params
+    // Get authenticated user
+    const cookieStore = await cookies()
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-    const supabase = createRouteHandlerClient({ cookies })
-
-    // 1. Verify authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    if (sessionError || !session) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
+        { success: false, error: 'Authentication required' },
         { status: 401 }
       )
     }
 
-    // 2. Parse query parameters (including impersonation)
-    const { searchParams } = new URL(request.url)
-    const partnerUserId = searchParams.get('partner_user_id') // For admin impersonation
-    const statusFilter = searchParams.get('status')
-    const limit = parseInt(searchParams.get('limit') || '10')
-
-    // 3. Get partner user record (with impersonation support)
-    let partnerUserQuery = supabaseAdmin
+    // Get partner user
+    const { data: partnerUser, error: userError } = await supabaseAdmin
       .from('partner_users')
-      .select('id, email, organization_id, role')
+      .select('id, organization_id, role')
+      .eq('auth_user_id', session.user.id)
       .eq('is_active', true)
-
-    if (partnerUserId) {
-      // Admin is impersonating - use provided partner_user_id
-      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
-    } else {
-      // Regular partner user - lookup by auth_user_id
-      partnerUserQuery = partnerUserQuery.eq('auth_user_id', user.id)
-    }
-
-    const { data: partnerUser, error: userError } = await partnerUserQuery.single()
+      .single()
 
     if (userError || !partnerUser) {
       return NextResponse.json(
         { success: false, error: 'Partner user not found' },
-        { status: 403 }
+        { status: 404 }
       )
     }
 
-    // 4. Fetch appointments
-    let query = supabaseAdmin
+    // Verify patient belongs to partner's organization
+    const { data: affiliation, error: affiliationError } = await supabaseAdmin
+      .from('patient_organization_affiliations')
+      .select('id')
+      .eq('patient_id', params.patientId)
+      .eq('organization_id', partnerUser.organization_id)
+      .eq('status', 'active')
+      .single()
+
+    if (affiliationError || !affiliation) {
+      return NextResponse.json(
+        { success: false, error: 'Patient not found or not affiliated with your organization' },
+        { status: 404 }
+      )
+    }
+
+    const now = new Date().toISOString()
+
+    // Fetch past appointments
+    const { data: pastAppointments, error: pastError } = await supabaseAdmin
       .from('appointments')
       .select(`
         id,
         start_time,
         end_time,
         status,
-        providers:provider_id (
+        appointment_type,
+        notes,
+        meeting_url,
+        practiceq_generated_google_meet,
+        providers:providers!appointments_provider_id_fkey (
           id,
           first_name,
           last_name
         )
       `)
-      .eq('patient_id', patientId)
+      .eq('patient_id', params.patientId)
+      .lt('start_time', now)
       .order('start_time', { ascending: false })
-      .limit(limit)
+      .limit(20)
 
-    // Apply status filter - support both 'completed' and 'confirmed' for past appointments
-    if (statusFilter === 'completed') {
-      query = query.in('status', ['completed', 'confirmed'])
-    } else if (statusFilter) {
-      query = query.eq('status', statusFilter)
+    if (pastError) {
+      console.error('Error fetching past appointments:', pastError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch appointments' },
+        { status: 500 }
+      )
     }
 
-    const { data: appointments, error: appointmentsError } = await query
+    // Fetch upcoming appointments
+    const { data: upcomingAppointments, error: upcomingError } = await supabaseAdmin
+      .from('appointments')
+      .select(`
+        id,
+        start_time,
+        end_time,
+        status,
+        appointment_type,
+        notes,
+        meeting_url,
+        practiceq_generated_google_meet,
+        providers:providers!appointments_provider_id_fkey (
+          id,
+          first_name,
+          last_name
+        )
+      `)
+      .eq('patient_id', params.patientId)
+      .gte('start_time', now)
+      .in('status', ['scheduled', 'confirmed'])
+      .order('start_time', { ascending: true })
+      .limit(10)
 
-    if (appointmentsError) {
-      console.error('Error fetching appointments:', appointmentsError)
+    if (upcomingError) {
+      console.error('Error fetching upcoming appointments:', upcomingError)
       return NextResponse.json(
         { success: false, error: 'Failed to fetch appointments' },
         { status: 500 }
@@ -94,12 +123,16 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: appointments || []
+      data: {
+        past: pastAppointments || [],
+        upcoming: upcomingAppointments || []
+      }
     })
+
   } catch (error: any) {
-    console.error('Unexpected error:', error)
+    console.error('❌ Error fetching patient appointments:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Failed to fetch patient appointments', details: error.message },
       { status: 500 }
     )
   }

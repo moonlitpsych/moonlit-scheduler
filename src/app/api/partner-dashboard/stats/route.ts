@@ -123,6 +123,7 @@ export async function GET(request: NextRequest) {
           start_time,
           end_time,
           status,
+          practiceq_generated_google_meet,
           providers!appointments_provider_id_fkey (
             id,
             first_name,

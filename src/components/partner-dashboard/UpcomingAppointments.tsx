@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, Calendar } from 'lucide-react'
+import { Download, Calendar, Video, VideoOff, ExternalLink, Check, Copy, Edit2, X } from 'lucide-react'
 import { useAppointmentExport } from '@/hooks/useAppointmentExport'
 
 interface Appointment {
@@ -10,6 +10,7 @@ interface Appointment {
   start_time: string
   end_time: string
   status: string
+  practiceq_generated_google_meet?: string | null
   providers: {
     id: string
     first_name: string
@@ -31,14 +32,88 @@ interface Appointment {
 interface UpcomingAppointmentsProps {
   appointments: Appointment[]
   loading?: boolean
+  onAppointmentUpdate?: (appointmentId: string, updates: Partial<Appointment>) => void
 }
 
 export function UpcomingAppointments({
   appointments,
-  loading = false
+  loading = false,
+  onAppointmentUpdate
 }: UpcomingAppointmentsProps) {
   const [selectedAppointment, setSelectedAppointment] = useState<string | null>(null)
+  const [editingMeetLink, setEditingMeetLink] = useState<string | null>(null)
+  const [meetLinkInput, setMeetLinkInput] = useState('')
+  const [savingMeetLink, setSavingMeetLink] = useState(false)
+  const [copiedLink, setCopiedLink] = useState<string | null>(null)
+  const [savedLink, setSavedLink] = useState<string | null>(null)
   const { exportSingleAppointment, exportStatus, exportMessage } = useAppointmentExport()
+
+  // Local state to track updated meet links (for optimistic UI)
+  const [localMeetLinks, setLocalMeetLinks] = useState<Record<string, string | null>>({})
+
+  const getMeetLink = (appointment: Appointment) => {
+    return localMeetLinks[appointment.id] !== undefined
+      ? localMeetLinks[appointment.id]
+      : appointment.practiceq_generated_google_meet
+  }
+
+  const handleCopyMeetLink = async (appointmentId: string, link: string) => {
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopiedLink(appointmentId)
+      setTimeout(() => setCopiedLink(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  const handleEditMeetLink = (appointment: Appointment) => {
+    setEditingMeetLink(appointment.id)
+    setMeetLinkInput(getMeetLink(appointment) || '')
+  }
+
+  const handleSaveMeetLink = async (appointmentId: string) => {
+    setSavingMeetLink(true)
+    try {
+      const response = await fetch(`/api/appointments/${appointmentId}/update-google-meet`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleMeetLink: meetLinkInput.trim() || null })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to save')
+      }
+
+      // Update local state
+      setLocalMeetLinks(prev => ({
+        ...prev,
+        [appointmentId]: meetLinkInput.trim() || null
+      }))
+
+      // Notify parent if callback provided
+      if (onAppointmentUpdate) {
+        onAppointmentUpdate(appointmentId, {
+          practiceq_generated_google_meet: meetLinkInput.trim() || null
+        })
+      }
+
+      setEditingMeetLink(null)
+      setSavedLink(appointmentId)
+      setTimeout(() => setSavedLink(null), 3000)
+    } catch (err: any) {
+      console.error('Error saving meet link:', err)
+      alert(err.message || 'Failed to save Google Meet link')
+    } finally {
+      setSavingMeetLink(false)
+    }
+  }
+
+  const handleCancelEditMeetLink = () => {
+    setEditingMeetLink(null)
+    setMeetLinkInput('')
+  }
 
   const formatDateTime = (dateTime: string) => {
     const date = new Date(dateTime)
@@ -156,7 +231,7 @@ export function UpcomingAppointments({
                     {getPatientInitials(appointment.patients.first_name, appointment.patients.last_name)}
                   </span>
                 </div>
-                
+
                 {/* Patient and time info */}
                 <div>
                   <div className="flex items-center space-x-3">
@@ -176,6 +251,21 @@ export function UpcomingAppointments({
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Google Meet indicator */}
+              <div className="flex items-center">
+                {getMeetLink(appointment) ? (
+                  <div className="flex items-center gap-1 text-green-600" title="Google Meet link available">
+                    <Video className="w-5 h-5" />
+                    <span className="text-xs font-medium hidden sm:inline">Meet Ready</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 text-amber-500" title="No Google Meet link - click to add">
+                    <VideoOff className="w-5 h-5" />
+                    <span className="text-xs font-medium hidden sm:inline">No Meet</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -199,6 +289,106 @@ export function UpcomingAppointments({
                     <div>
                       <span className="font-medium text-gray-700 font-['Newsreader']">Insurance:</span>
                       <p className="text-gray-600 font-['Newsreader']">{appointment.payers.name}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Google Meet Link Section */}
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-700 font-['Newsreader'] flex items-center gap-2">
+                      <Video className="w-4 h-4" />
+                      Google Meet Link
+                    </span>
+                    {savedLink === appointment.id && (
+                      <span className="text-sm text-green-600 font-medium flex items-center gap-1">
+                        <Check className="w-4 h-4" />
+                        Saved!
+                      </span>
+                    )}
+                  </div>
+
+                  {editingMeetLink === appointment.id ? (
+                    // Edit mode
+                    <div className="mt-2 space-y-2">
+                      <input
+                        type="url"
+                        value={meetLinkInput}
+                        onChange={(e) => setMeetLinkInput(e.target.value)}
+                        placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-moonlit-brown focus:border-transparent"
+                        disabled={savingMeetLink}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSaveMeetLink(appointment.id)}
+                          disabled={savingMeetLink}
+                          className="px-3 py-1.5 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {savingMeetLink ? (
+                            <>
+                              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3 h-3" />
+                              Save
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={handleCancelEditMeetLink}
+                          disabled={savingMeetLink}
+                          className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <X className="w-3 h-3" />
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // Display mode
+                    <div className="mt-2">
+                      {getMeetLink(appointment) ? (
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={getMeetLink(appointment)!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 hover:underline"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            {getMeetLink(appointment)}
+                          </a>
+                          <button
+                            onClick={() => handleCopyMeetLink(appointment.id, getMeetLink(appointment)!)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            title="Copy link"
+                          >
+                            {copiedLink === appointment.id ? (
+                              <Check className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <Copy className="w-4 h-4 text-gray-500" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleEditMeetLink(appointment)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            title="Edit link"
+                          >
+                            <Edit2 className="w-4 h-4 text-gray-500" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleEditMeetLink(appointment)}
+                          className="text-sm text-moonlit-brown hover:text-moonlit-brown/80 flex items-center gap-1"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          Add Google Meet link
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

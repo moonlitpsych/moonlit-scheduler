@@ -22,31 +22,13 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
       color: 'bg-moonlit-cream border-moonlit-brown/20',
       textColor: 'text-moonlit-navy',
       link: '/partner-dashboard/patients'
-    },
-    {
-      title: 'Active Patients',
-      value: stats?.active_patients || 0,
-      icon: '✅',
-      description: 'Patients with valid ROI consent',
-      color: 'bg-moonlit-peach/20 border-moonlit-peach/40',
-      textColor: 'text-moonlit-navy',
-      link: '/partner-dashboard/patients'
-    },
-    {
-      title: 'This Week\'s Appointments',
-      value: stats?.appointments_this_week || 0,
-      icon: '📅',
-      description: 'Appointments scheduled this week',
-      color: 'bg-moonlit-brown/10 border-moonlit-brown/30',
-      textColor: 'text-moonlit-brown',
-      link: '/partner-dashboard/patients'
     }
   ]
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {[...Array(3)].map((_, index) => (
+      <div className="grid grid-cols-1 gap-6">
+        {[...Array(1)].map((_, index) => (
           <div key={index} className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="animate-pulse">
               <div className="flex items-center justify-between mb-4">
@@ -63,7 +45,7 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 gap-6">
       {statCards.map((stat, index) => (
         <Link
           key={index}
@@ -85,23 +67,6 @@ export function DashboardStats({ stats, loading = false }: DashboardStatsProps) 
               {stat.description}
             </p>
           </div>
-
-          {/* Progress indicator for some stats */}
-          {stat.title === 'Active Patients' && stats.total_patients > 0 && (
-            <div className="mt-4">
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-moonlit-peach h-2 rounded-full transition-all duration-500"
-                  style={{ 
-                    width: `${Math.min((stats.active_patients / stats.total_patients) * 100, 100)}%` 
-                  }}
-                ></div>
-              </div>
-              <p className="text-xs text-gray-500 mt-1 font-['Newsreader']">
-                {Math.round((stats.active_patients / stats.total_patients) * 100)}% of total patients
-              </p>
-            </div>
-          )}
 
         </Link>
       ))}

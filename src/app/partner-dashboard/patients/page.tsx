@@ -7,12 +7,14 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { PatientRoster } from '@/components/patient-roster'
 import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import { PartnerUser } from '@/types/partner-types'
+import { RosterFilters } from '@/types/patient-roster'
 import { Database } from '@/types/database'
 import { isAdminEmail } from '@/lib/admin-auth'
 import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
@@ -21,8 +23,25 @@ import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 export default function PatientRosterPage() {
+  const searchParams = useSearchParams()
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminCheckComplete, setAdminCheckComplete] = useState(false)
+
+  // Parse URL query parameters into initial filters
+  const initialFilters = useMemo((): Partial<RosterFilters> => {
+    const filters: Partial<RosterFilters> = {}
+
+    // appointment_filter: 'all' | 'has_future' | 'no_future'
+    const appointmentFilter = searchParams.get('appointment_filter')
+    if (appointmentFilter === 'has_future' || appointmentFilter === 'no_future') {
+      filters.appointmentFilter = appointmentFilter
+    }
+
+    // Could add more filter params here as needed
+    // e.g., engagement_status, search, etc.
+
+    return filters
+  }, [searchParams])
 
   // Check if current user is an admin (async operation)
   useEffect(() => {
@@ -137,11 +156,15 @@ export default function PatientRosterPage() {
           enableTransferAction={canTransferPatients || false}
           enableNotificationAction={canTransferPatients || false}
           enableMedicationReport={canTransferPatients || false}
+          enableAssignCaseManager={canTransferPatients || false}
           showAssignedFilter={true}
 
           // Configuration
           title="Patient Roster"
           defaultPageSize={20}
+
+          // Initial filters from URL query params (e.g., ?appointment_filter=has_future)
+          initialFilters={initialFilters}
         />
       </div>
     </div>
