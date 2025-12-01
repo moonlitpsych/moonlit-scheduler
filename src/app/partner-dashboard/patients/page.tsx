@@ -7,24 +7,49 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import useSWR from 'swr'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { PatientRoster } from '@/components/patient-roster'
 import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 import { PartnerUser } from '@/types/partner-types'
+import { Database } from '@/types/database'
+import { isAdminEmail } from '@/lib/admin-auth'
 import BulkSyncButton from '@/components/partner-dashboard/BulkSyncButton'
 
 // SWR fetcher function
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 export default function PatientRosterPage() {
-  // Check for admin impersonation
-  const impersonation = partnerImpersonationManager.getImpersonatedPartner()
-  const impersonatedPartnerId = impersonation?.partner.id
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [adminCheckComplete, setAdminCheckComplete] = useState(false)
+
+  // Check if current user is an admin (async operation)
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const supabase = createClientComponentClient<Database>()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.email) {
+        const adminStatus = await isAdminEmail(user.email)
+        setIsAdmin(adminStatus)
+      }
+      setAdminCheckComplete(true)
+    }
+    checkAdmin()
+  }, [])
+
+  // Only check for impersonation if user is confirmed admin
+  // This prevents stale impersonation data from affecting regular partner users
+  const impersonation = (adminCheckComplete && isAdmin)
+    ? partnerImpersonationManager.getImpersonatedPartner()
+    : null
 
   // Fetch partner user data (skip if admin is impersonating)
   const { data: partnerData, error: partnerError } = useSWR(
-    impersonation ? null : '/api/partner/me',
+    // Only fetch from /api/partner/me if:
+    // 1. Admin check is complete AND
+    // 2. Either not admin OR admin with no impersonation context
+    adminCheckComplete && !impersonation ? '/api/partner/me' : null,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -46,7 +71,7 @@ export default function PatientRosterPage() {
       }
     : (partnerData?.success ? partnerData.data : null)
 
-  const loading = !partnerUser && !partnerError && !impersonation
+  const loading = !adminCheckComplete || (!partnerUser && !partnerError && !impersonation)
   const error = partnerError
 
   // Check if user can transfer patients (admin or case_manager)
@@ -101,9 +126,10 @@ export default function PatientRosterPage() {
         </div>
 
         {/* Unified Patient Roster Component */}
+        {/* Only pass userId when admin is impersonating - otherwise API uses session to look up user */}
         <PatientRoster
           userType="partner"
-          userId={partnerUser?.id}
+          userId={impersonation ? partnerUser?.id : undefined}
 
           // Partner-specific features
           enablePatientLinks={true}

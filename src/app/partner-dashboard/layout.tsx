@@ -43,7 +43,7 @@ export default function PartnerDashboardLayout({
         }
 
         // Check if user is admin
-        const isAdmin = isAdminEmail(user.email || '')
+        const isAdmin = await isAdminEmail(user.email || '')
 
         // Check for impersonation context
         const impersonation = partnerImpersonationManager.getImpersonatedPartner()

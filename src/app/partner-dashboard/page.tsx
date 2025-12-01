@@ -9,6 +9,7 @@ import CalendarExport from '@/components/partner-dashboard/CalendarExport'
 import { PartnerDashboardData, PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
 import { partnerImpersonationManager } from '@/lib/partner-impersonation'
+import { isAdminEmail } from '@/lib/admin-auth'
 
 export default function PartnerDashboardPage() {
   const [partnerUser, setPartnerUser] = useState<PartnerUser | null>(null)
@@ -31,12 +32,16 @@ export default function PartnerDashboardPage() {
           return
         }
 
-        // Check for impersonation context first
-        const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+        // Check if current user is an admin
+        const isAdmin = await isAdminEmail(user.email || '')
+
+        // Check for impersonation context - ONLY use if current user is an admin
+        // This prevents stale impersonation data from affecting regular partner users
+        const impersonation = isAdmin ? partnerImpersonationManager.getImpersonatedPartner() : null
 
         let partnerData: PartnerUser
 
-        if (impersonation) {
+        if (isAdmin && impersonation) {
           // Admin is impersonating - use impersonated partner data
           const nameParts = impersonation.partner.full_name?.split(' ') || ['', '']
           partnerData = {
