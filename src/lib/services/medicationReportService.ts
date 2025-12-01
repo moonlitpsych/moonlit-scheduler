@@ -99,6 +99,8 @@ export async function generateMedicationReport(
       previousMedications: [],
       currentMedications: []
     }
+    let intakeqNoteId: string | null = null
+    let intakeqNoteFetchedAt: string | null = null
 
     if (patient.practiceq_client_id) {
       console.log(`📋 Fetching IntakeQ notes for client ${patient.practiceq_client_id}...`)
@@ -118,6 +120,10 @@ export async function generateMedicationReport(
         // Get full content of most recent note
         const recentNote = await intakeQService.getNote(lockedNotes[0].Id)
         console.log(`   Retrieved full note: ${recentNote.Id}`)
+
+        // Track which IntakeQ note we used
+        intakeqNoteId = recentNote.Id
+        intakeqNoteFetchedAt = new Date().toISOString()
 
         // Parse medication data
         medicationData = parseMedicationsFromNote(recentNote)
@@ -153,7 +159,7 @@ export async function generateMedicationReport(
 
     console.log(`✅ PDF generated: ${pdfBuffer.length} bytes`)
 
-    // 7. Create database record
+    // 7. Create database record with medication data
     const { data: report, error: reportError } = await supabaseAdmin
       .from('medication_reports')
       .insert({
@@ -163,6 +169,15 @@ export async function generateMedicationReport(
         provider_id: appointment.provider_id,
         appointment_date: appointment.start_time,
         medication_changes_detected: medicationData.hasChanges,
+        // Save parsed medication data
+        previous_medications: medicationData.previousMedications || [],
+        current_medications: medicationData.currentMedications || [],
+        medication_notes: medicationData.changes.length > 0
+          ? JSON.stringify(medicationData.changes)
+          : null,
+        // Track IntakeQ note source
+        intakeq_note_id: intakeqNoteId,
+        intakeq_note_fetched_at: intakeqNoteFetchedAt,
         status: 'draft',
         generation_method: params.generatedBy ? 'manual' : 'auto_cron',
         generated_by: params.generatedBy || null
