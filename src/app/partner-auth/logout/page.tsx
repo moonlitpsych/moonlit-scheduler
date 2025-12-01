@@ -26,7 +26,15 @@ export default function PartnerLogoutPage() {
           setError('Failed to sign out. Please try again.')
         } else {
           console.log('Partner logged out successfully')
-          
+
+          // SECURITY: Clear impersonation context and any cached data on logout
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('moonlit_impersonated_partner')
+            sessionStorage.removeItem('moonlit_partner_impersonation')
+            // Clear any other sensitive cached data
+            localStorage.removeItem('moonlit_partner_context')
+          }
+
           // Small delay for user feedback
           setTimeout(() => {
             router.replace('/partner-auth/login')
@@ -46,12 +54,18 @@ export default function PartnerLogoutPage() {
   const handleRetryLogout = async () => {
     setLoading(true)
     setError(null)
-    
+
     try {
       const { error } = await supabase.auth.signOut()
       if (error) {
         setError('Failed to sign out. Please try again.')
       } else {
+        // SECURITY: Clear impersonation context on logout
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('moonlit_impersonated_partner')
+          sessionStorage.removeItem('moonlit_partner_impersonation')
+          localStorage.removeItem('moonlit_partner_context')
+        }
         router.replace('/partner-auth/login')
       }
     } catch (err) {

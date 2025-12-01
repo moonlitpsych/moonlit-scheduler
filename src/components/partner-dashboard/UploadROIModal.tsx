@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { X, Upload, FileText, Calendar, AlertCircle, CheckCircle } from 'lucide-react'
+import { partnerImpersonationManager } from '@/lib/partner-impersonation'
 
 interface Patient {
   id: string
@@ -67,9 +68,13 @@ export function UploadROIModal({ patient, organizationId, isOpen, onClose, onSuc
       setUploading(true)
       setError(null)
 
+      // Check if admin is impersonating - include partner_user_id in API calls
+      const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+      const partnerUserIdParam = impersonation ? `?partner_user_id=${impersonation.partner.id}` : ''
+
       if (mode === 'practiceq') {
         // Mark ROI as stored on PracticeQ
-        const response = await fetch(`/api/partner-dashboard/patients/${patient.id}/roi/practiceq`, {
+        const response = await fetch(`/api/partner-dashboard/patients/${patient.id}/roi/practiceq${partnerUserIdParam}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -94,7 +99,7 @@ export function UploadROIModal({ patient, organizationId, isOpen, onClose, onSuc
         formData.append('affiliation_id', patient.affiliation.id)
         formData.append('expiration_date', expirationDate)
 
-        const response = await fetch(`/api/partner-dashboard/patients/${patient.id}/roi`, {
+        const response = await fetch(`/api/partner-dashboard/patients/${patient.id}/roi${partnerUserIdParam}`, {
           method: 'POST',
           body: formData
         })

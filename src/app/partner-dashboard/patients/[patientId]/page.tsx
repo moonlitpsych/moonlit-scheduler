@@ -273,7 +273,11 @@ export default function PatientDetailPage() {
     }
 
     try {
-      const response = await fetch(`/api/partner-dashboard/patients/${patient.id}/roi?action=view`, {
+      // Include impersonation support for viewing ROI
+      const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+      const partnerUserIdParam = impersonation ? `&partner_user_id=${impersonation.partner.id}` : ''
+
+      const response = await fetch(`/api/partner-dashboard/patients/${patient.id}/roi?action=view${partnerUserIdParam}`, {
         method: 'GET'
       })
 
@@ -293,9 +297,14 @@ export default function PatientDetailPage() {
   }
 
   const handleROISuccess = async () => {
-    // Refresh patient data
+    // Refresh patient data - include impersonation support
     try {
-      const patientsResponse = await fetch('/api/partner-dashboard/patients')
+      const impersonation = partnerImpersonationManager.getImpersonatedPartner()
+      const patientsUrl = impersonation
+        ? `/api/partner-dashboard/patients?partner_user_id=${impersonation.partner.id}`
+        : '/api/partner-dashboard/patients'
+
+      const patientsResponse = await fetch(patientsUrl)
       if (patientsResponse.ok) {
         const patientsData = await patientsResponse.json()
         if (patientsData.success) {
@@ -306,8 +315,9 @@ export default function PatientDetailPage() {
         }
       }
 
-      // Refresh activity log
-      const activityResponse = await fetch(`/api/partner-dashboard/patients/${patientId}/activity`)
+      // Refresh activity log - include impersonation support
+      const partnerUserIdParam = impersonation ? `?partner_user_id=${impersonation.partner.id}` : ''
+      const activityResponse = await fetch(`/api/partner-dashboard/patients/${patientId}/activity${partnerUserIdParam}`)
       if (activityResponse.ok) {
         const activityData = await activityResponse.json()
         if (activityData.success) {

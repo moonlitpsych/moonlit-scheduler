@@ -19,8 +19,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Verify user is admin
-    if (!isAdminEmail(session.user.email || '')) {
+    // Verify user is admin (must await - isAdminEmail is async!)
+    if (!await isAdminEmail(session.user.email || '')) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }

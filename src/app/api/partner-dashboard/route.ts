@@ -1,43 +1,69 @@
 // Partner Dashboard API - Main dashboard data for case managers
 import { NextRequest, NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
 import { PartnerDashboardFilters } from '@/types/partner-types'
-
-// Helper function to get partner user from auth
-async function getPartnerUserFromAuth(request: NextRequest) {
-  // In production, this would extract from JWT token
-  // For now, we'll expect partner_user_id in headers for testing
-  const partnerUserId = request.headers.get('x-partner-user-id')
-  
-  if (!partnerUserId) {
-    throw new Error('Partner user authentication required')
-  }
-
-  // Get partner user with organization info
-  const { data: partnerUser, error } = await supabaseAdmin
-    .from('partner_users')
-    .select(`
-      *,
-      organization:organizations!partner_users_organization_id_fkey(*)
-    `)
-    .eq('id', partnerUserId)
-    .eq('status', 'active')
-    .single()
-
-  if (error || !partnerUser) {
-    throw new Error('Partner user not found or inactive')
-  }
-
-  return partnerUser
-}
+import { isAdminEmail } from '@/lib/admin-auth'
 
 // GET - Get dashboard data for partner user
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    
-    // Get authenticated partner user
-    const partnerUser = await getPartnerUserFromAuth(request)
+
+    // Get authenticated user from Supabase session
+    const cookieStore = await cookies()
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+    if (sessionError || !session) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Check for impersonation (admin viewing as partner)
+    const partnerUserId = searchParams.get('partner_user_id')
+
+    // SECURITY: If partner_user_id is provided, verify the requester is an admin
+    if (partnerUserId) {
+      const isAdmin = await isAdminEmail(session.user.email || '')
+      if (!isAdmin) {
+        console.warn('⚠️ Non-admin attempted to use partner_user_id parameter:', session.user.email)
+        return NextResponse.json(
+          { success: false, error: 'Admin access required for impersonation' },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Get partner user record
+    let partnerUserQuery = supabaseAdmin
+      .from('partner_users')
+      .select(`
+        *,
+        organization:organizations!partner_users_organization_id_fkey(*)
+      `)
+      .eq('is_active', true)
+
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', session.user.id)
+    }
+
+    const { data: partnerUser, error: userError } = await partnerUserQuery.single()
+
+    if (userError || !partnerUser) {
+      return NextResponse.json(
+        { success: false, error: 'Partner user not found or inactive' },
+        { status: 404 }
+      )
+    }
+
     const organizationId = partnerUser.organization_id
 
     // Parse filters

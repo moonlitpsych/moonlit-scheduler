@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isAdminEmail } from '@/lib/admin-auth'
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +27,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const partnerUserId = searchParams.get('partner_user_id')
 
+    // SECURITY: If partner_user_id is provided, verify the requester is an admin
     if (partnerUserId) {
+      const isAdmin = await isAdminEmail(session.user.email || '')
+      if (!isAdmin) {
+        console.warn('⚠️ Non-admin attempted to use partner_user_id parameter:', session.user.email)
+        return NextResponse.json(
+          { success: false, error: 'Admin access required for impersonation', code: 'FORBIDDEN' },
+          { status: 403 }
+        )
+      }
       console.log('👤 Admin impersonating partner user:', partnerUserId)
     } else {
       console.log('👤 Fetching partner user info for auth user:', session.user.id)

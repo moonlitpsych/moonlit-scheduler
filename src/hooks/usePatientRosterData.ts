@@ -280,10 +280,13 @@ export function usePatientRosterData(
   }, [mutate])
 
   // Apply client-side sorting to the patients array
-  const sortedPatients = useMemo(() => {
-    if (!sortColumn || !sortDirection) return allPatients
+  // Use data?.patients directly when available, falling back to allPatients for pagination
+  const patientsToSort = page === 1 ? (data?.patients || allPatients) : allPatients
 
-    return [...allPatients].sort((a, b) => {
+  const sortedPatients = useMemo(() => {
+    if (!sortColumn || !sortDirection) return patientsToSort
+
+    return [...patientsToSort].sort((a, b) => {
       let aValue: any
       let bValue: any
 
@@ -344,7 +347,7 @@ export function usePatientRosterData(
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
       return 0
     })
-  }, [allPatients, sortColumn, sortDirection])
+  }, [patientsToSort, sortColumn, sortDirection])
 
   return {
     patients: sortedPatients,

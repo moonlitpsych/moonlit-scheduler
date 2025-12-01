@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isAdminEmail } from '@/lib/admin-auth'
 
 /**
  * POST - Mark ROI as stored on PracticeQ
@@ -16,6 +17,10 @@ export async function POST(
   { params }: { params: { patientId: string } }
 ) {
   try {
+    // Get partner_user_id from query string (for admin impersonation)
+    const { searchParams } = new URL(request.url)
+    const partnerUserId = searchParams.get('partner_user_id')
+
     // Get authenticated user
     const cookieStore = await cookies()
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
@@ -28,13 +33,33 @@ export async function POST(
       )
     }
 
-    // Get partner user
-    const { data: partnerUser, error: userError } = await supabaseAdmin
+    // SECURITY: If partner_user_id is provided, verify the requester is an admin
+    if (partnerUserId) {
+      const isAdmin = await isAdminEmail(session.user.email || '')
+      if (!isAdmin) {
+        console.warn('⚠️ Non-admin attempted to use partner_user_id parameter:', session.user.email)
+        return NextResponse.json(
+          { success: false, error: 'Admin access required for impersonation' },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Get partner user record
+    let partnerUserQuery = supabaseAdmin
       .from('partner_users')
       .select('id, organization_id, role')
-      .eq('auth_user_id', session.user.id)
       .eq('is_active', true)
-      .single()
+
+    if (partnerUserId) {
+      // Admin is impersonating - use provided partner_user_id
+      partnerUserQuery = partnerUserQuery.eq('id', partnerUserId)
+    } else {
+      // Regular partner user - lookup by auth_user_id
+      partnerUserQuery = partnerUserQuery.eq('auth_user_id', session.user.id)
+    }
+
+    const { data: partnerUser, error: userError } = await partnerUserQuery.single()
 
     if (userError || !partnerUser) {
       return NextResponse.json(

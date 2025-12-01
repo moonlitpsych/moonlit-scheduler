@@ -3,9 +3,16 @@
  *
  * Single endpoint serving partner, provider, and admin dashboards with consistent response format.
  *
+ * SECURITY:
+ * - ALL requests require Supabase session authentication
+ * - Partner users can only access their own organization's data
+ * - Provider users can only access their own patient data
+ * - Admin users can access all data after admin verification
+ * - Impersonation requires admin privileges
+ *
  * Query Parameters:
  * - user_type: 'partner' | 'provider' | 'admin' (required)
- * - user_id: partner_user_id or provider_id (required for partner/provider)
+ * - user_id: partner_user_id or provider_id (optional - for admin impersonation)
  * - search: Text search across name, email, phone
  * - status: Engagement status filter
  * - appointment_filter: 'all' | 'has_future' | 'no_future'
@@ -19,16 +26,31 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isAdminEmail } from '@/lib/admin-auth'
 import type { PatientRosterResponse, PatientRosterItem, UserRole } from '@/types/patient-roster'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
 
+    // SECURITY: Require Supabase session authentication
+    const cookieStore = await cookies()
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+    if (sessionError || !session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
     // Required parameters
     const userType = searchParams.get('user_type') as UserRole | null
-    const userId = searchParams.get('user_id') // partner_user_id or provider_id
+    const userId = searchParams.get('user_id') // partner_user_id or provider_id (for impersonation)
 
     if (!userType || !['partner', 'provider', 'admin'].includes(userType)) {
       return NextResponse.json(
@@ -37,10 +59,83 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if ((userType === 'partner' || userType === 'provider') && !userId) {
+    // SECURITY: Verify user has access to the requested role/data
+    let verifiedUserId: string | null = null
+
+    if (userType === 'partner') {
+      // If user_id provided, verify requester is admin (impersonation)
+      if (userId) {
+        const isAdmin = await isAdminEmail(session.user.email || '')
+        if (!isAdmin) {
+          console.warn('⚠️ Non-admin attempted to impersonate partner:', session.user.email)
+          return NextResponse.json(
+            { error: 'Admin access required for impersonation' },
+            { status: 403 }
+          )
+        }
+        verifiedUserId = userId
+      } else {
+        // Look up the partner user by auth_user_id
+        const { data: partnerUser } = await supabaseAdmin
+          .from('partner_users')
+          .select('id')
+          .eq('auth_user_id', session.user.id)
+          .eq('is_active', true)
+          .single()
+
+        if (!partnerUser) {
+          return NextResponse.json(
+            { error: 'Partner user not found' },
+            { status: 404 }
+          )
+        }
+        verifiedUserId = partnerUser.id
+      }
+    } else if (userType === 'provider') {
+      // If user_id provided, verify requester is admin (impersonation)
+      if (userId) {
+        const isAdmin = await isAdminEmail(session.user.email || '')
+        if (!isAdmin) {
+          console.warn('⚠️ Non-admin attempted to impersonate provider:', session.user.email)
+          return NextResponse.json(
+            { error: 'Admin access required for impersonation' },
+            { status: 403 }
+          )
+        }
+        verifiedUserId = userId
+      } else {
+        // Look up the provider by auth_user_id
+        const { data: provider } = await supabaseAdmin
+          .from('providers')
+          .select('id')
+          .eq('auth_user_id', session.user.id)
+          .eq('is_active', true)
+          .single()
+
+        if (!provider) {
+          return NextResponse.json(
+            { error: 'Provider not found' },
+            { status: 404 }
+          )
+        }
+        verifiedUserId = provider.id
+      }
+    } else if (userType === 'admin') {
+      // Verify requester is actually an admin
+      const isAdmin = await isAdminEmail(session.user.email || '')
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: 'Admin access required' },
+          { status: 403 }
+        )
+      }
+      verifiedUserId = 'admin' // Admin doesn't need a specific user_id
+    }
+
+    if (!verifiedUserId) {
       return NextResponse.json(
-        { error: `user_id required for ${userType} role` },
-        { status: 400 }
+        { error: 'Could not verify user access' },
+        { status: 403 }
       )
     }
 
@@ -65,7 +160,7 @@ export async function GET(request: NextRequest) {
     let stats = { total: 0, active: 0, no_future_appointment: 0 }
 
     if (userType === 'partner') {
-      const result = await fetchPartnerPatients(userId!, {
+      const result = await fetchPartnerPatients(verifiedUserId!, {
         search,
         status,
         appointmentFilter,
@@ -77,7 +172,7 @@ export async function GET(request: NextRequest) {
       totalCount = result.total
       stats = result.stats
     } else if (userType === 'provider') {
-      const result = await fetchProviderPatients(userId!, {
+      const result = await fetchProviderPatients(verifiedUserId!, {
         search,
         status,
         appointmentFilter,
@@ -592,6 +687,8 @@ async function fetchAppointmentsForPatients(patientIds: string[]) {
 
   const now = new Date().toISOString()
 
+  console.log(`🔍 Fetching appointments for ${patientIds.length} patients:`, patientIds.slice(0, 5))
+
   const [nextResult, previousResult] = await Promise.all([
     supabaseAdmin
       .from('appointments')
@@ -639,6 +736,10 @@ async function fetchAppointmentsForPatients(patientIds: string[]) {
   const nextByPatient = (nextResult.data || []).reduce((acc: any, appt: any) => {
     if (!acc[appt.patient_id]) {
       acc[appt.patient_id] = appt
+      // Debug: Log appointments with Google Meet links
+      if (appt.practiceq_generated_google_meet) {
+        console.log(`📹 Found Google Meet link for patient ${appt.patient_id}: ${appt.practiceq_generated_google_meet}`)
+      }
     }
     return acc
   }, {})

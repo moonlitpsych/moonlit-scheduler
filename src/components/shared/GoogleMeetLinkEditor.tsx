@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, Copy, Edit2, ExternalLink, X } from 'lucide-react'
 
 interface GoogleMeetLinkEditorProps {
@@ -20,7 +20,16 @@ export function GoogleMeetLinkEditor({
   const [link, setLink] = useState(currentLink || '')
   const [isSaving, setIsSaving] = useState(false)
   const [showCopied, setShowCopied] = useState(false)
+  const [showSaved, setShowSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Sync internal state with prop changes when not editing
+  // This ensures the edit field shows the current value when props update
+  useEffect(() => {
+    if (!isEditing) {
+      setLink(currentLink || '')
+    }
+  }, [currentLink, isEditing])
 
   const handleCopy = async () => {
     if (!currentLink) return
@@ -58,6 +67,10 @@ export function GoogleMeetLinkEditor({
       }
 
       setIsEditing(false)
+
+      // Show success indicator
+      setShowSaved(true)
+      setTimeout(() => setShowSaved(false), 3000)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -109,6 +122,12 @@ export function GoogleMeetLinkEditor({
           >
             <Edit2 className="w-4 h-4 text-gray-500" />
           </button>
+          {showSaved && (
+            <span className="inline-flex items-center gap-1 text-sm text-green-600 font-medium animate-pulse">
+              <Check className="w-4 h-4" />
+              Saved!
+            </span>
+          )}
         </div>
       </div>
     )

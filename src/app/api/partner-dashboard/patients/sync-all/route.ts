@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { practiceQSyncService } from '@/lib/services/practiceQSyncService'
+import { isAdminEmail } from '@/lib/admin-auth'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!
@@ -67,6 +68,15 @@ export async function POST(request: NextRequest) {
     // 2. Check for impersonation (admin viewing as partner)
     const { searchParams } = new URL(request.url)
     const partnerUserId = searchParams.get('partner_user_id')
+
+    // SECURITY: If partner_user_id is provided, verify the requester is an admin
+    if (partnerUserId) {
+      const isAdmin = await isAdminEmail(user.email || '')
+      if (!isAdmin) {
+        console.warn('⚠️ Non-admin attempted to use partner_user_id parameter:', user.email)
+        return NextResponse.json({ error: 'Admin access required for impersonation' }, { status: 403 })
+      }
+    }
 
     // 3. Get partner user and verify access
     // Must explicitly specify the FK relationship because there are two:

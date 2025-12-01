@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { GoogleMeetLinkEditor } from './GoogleMeetLinkEditor'
 
@@ -34,6 +35,16 @@ export function AppointmentDetailsModal({
   onClose,
   onUpdate
 }: AppointmentDetailsModalProps) {
+  // Track the Google Meet link locally so it updates immediately after save
+  const [localGoogleMeetLink, setLocalGoogleMeetLink] = useState<string | null>(
+    appointment.practiceq_generated_google_meet || null
+  )
+
+  // Sync local state when appointment prop changes (e.g., modal reopened with different appointment)
+  useEffect(() => {
+    setLocalGoogleMeetLink(appointment.practiceq_generated_google_meet || null)
+  }, [appointment.id, appointment.practiceq_generated_google_meet])
+
   if (!isOpen) return null
 
   const appointmentDate = new Date(appointment.start_time)
@@ -127,8 +138,11 @@ export function AppointmentDetailsModal({
             <h3 className="text-sm font-medium text-gray-500 mb-2">PracticeQ Google Meet Link</h3>
             <GoogleMeetLinkEditor
               appointmentId={appointment.id}
-              currentLink={appointment.practiceq_generated_google_meet || null}
+              currentLink={localGoogleMeetLink}
               onUpdate={(newLink) => {
+                // Update local state immediately for instant feedback
+                setLocalGoogleMeetLink(newLink)
+                // Also notify parent for data refresh
                 if (onUpdate) {
                   onUpdate(appointment.id, newLink)
                 }

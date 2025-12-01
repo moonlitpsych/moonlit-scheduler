@@ -95,9 +95,12 @@ export function AppointmentCell({
         <div className="mt-2 px-2">
           {(() => {
             const meetingUrl = getMeetingUrl(appointment)
-            const isTelehealth = appointment.location_info?.locationType === 'telehealth' ||
-                                 appointment.location_info?.placeOfService === '02' ||
-                                 appointment.location_info?.placeOfService === '10'
+            // Default to telehealth unless explicitly marked as office/in-person
+            // Moonlit is 99% telehealth, so we assume telehealth unless proven otherwise
+            const isOfficeVisit = appointment.location_info?.locationType === 'office' ||
+                                  appointment.location_info?.locationType === 'in-person' ||
+                                  appointment.location_info?.placeOfService === '11'  // CMS Place of Service: Office
+            const isTelehealth = !isOfficeVisit
 
             if (meetingUrl) {
               return (
