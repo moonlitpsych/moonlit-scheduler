@@ -6,6 +6,34 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { PartnerDashboardFilters } from '@/types/partner-types'
 import { isAdminEmail } from '@/lib/admin-auth'
 
+// Helper function to get partner user from auth (used by POST handler)
+async function getPartnerUserFromAuth(request: NextRequest) {
+  // In production, this would extract from JWT token
+  // For now, we'll expect partner_user_id in headers for testing
+  const partnerUserId = request.headers.get('x-partner-user-id')
+
+  if (!partnerUserId) {
+    throw new Error('Partner user authentication required')
+  }
+
+  // Get partner user with organization info
+  const { data: partnerUser, error } = await supabaseAdmin
+    .from('partner_users')
+    .select(`
+      *,
+      organization:organizations!partner_users_organization_id_fkey(*)
+    `)
+    .eq('id', partnerUserId)
+    .eq('status', 'active')
+    .single()
+
+  if (error || !partnerUser) {
+    throw new Error('Partner user not found or inactive')
+  }
+
+  return partnerUser
+}
+
 // GET - Get dashboard data for partner user
 export async function GET(request: NextRequest) {
   try {
