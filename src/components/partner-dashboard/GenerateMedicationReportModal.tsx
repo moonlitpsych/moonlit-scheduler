@@ -89,10 +89,16 @@ export function GenerateMedicationReportModal({
       const data = await response.json()
 
       if (data.success) {
-        setCompletedAppointments(data.data || [])
+        // API returns { past: [], upcoming: [] } - use past appointments
+        // Filter for completed status only (past includes cancelled, no_show, etc.)
+        const pastAppointments = data.data?.past || []
+        const completedOnly = pastAppointments.filter(
+          (appt: CompletedAppointment) => appt.status === 'completed'
+        )
+        setCompletedAppointments(completedOnly)
         // Auto-select most recent appointment
-        if (data.data && data.data.length > 0) {
-          setSelectedAppointmentId(data.data[0].id)
+        if (completedOnly.length > 0) {
+          setSelectedAppointmentId(completedOnly[0].id)
         }
       } else {
         throw new Error(data.error || 'Failed to load appointments')

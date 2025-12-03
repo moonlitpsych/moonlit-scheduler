@@ -10,9 +10,12 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { patientId: string } }
+  { params }: { params: Promise<{ patientId: string }> }
 ) {
   try {
+    // Await params (Next.js 15 requirement)
+    const { patientId } = await params
+
     // Get authenticated user
     const cookieStore = await cookies()
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
@@ -44,7 +47,7 @@ export async function GET(
     const { data: affiliation, error: affiliationError } = await supabaseAdmin
       .from('patient_organization_affiliations')
       .select('id')
-      .eq('patient_id', params.patientId)
+      .eq('patient_id', patientId)
       .eq('organization_id', partnerUser.organization_id)
       .eq('status', 'active')
       .single()
@@ -76,7 +79,7 @@ export async function GET(
           last_name
         )
       `)
-      .eq('patient_id', params.patientId)
+      .eq('patient_id', patientId)
       .lt('start_time', now)
       .order('start_time', { ascending: false })
       .limit(20)
@@ -107,7 +110,7 @@ export async function GET(
           last_name
         )
       `)
-      .eq('patient_id', params.patientId)
+      .eq('patient_id', patientId)
       .gte('start_time', now)
       .in('status', ['scheduled', 'confirmed'])
       .order('start_time', { ascending: true })

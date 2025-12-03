@@ -633,14 +633,15 @@ export function PatientRoster({
             )}
 
             {/* Upload ROI Modal */}
-            {roiPatient && userId && (
+            {/* Note: organizationId is passed but not actually used by API - API derives from session */}
+            {roiPatient && (
               <UploadROIModal
                 patient={{
                   id: roiPatient.id,
                   first_name: roiPatient.first_name,
                   last_name: roiPatient.last_name
                 }}
-                organizationId={userId} // Partner user's organization ID
+                organizationId={userId || ''} // Not used by API - kept for prop compatibility
                 isOpen={roiModalOpen}
                 onClose={handleCloseROIModal}
                 onSuccess={handleROISuccess}
@@ -681,7 +682,9 @@ export function PatientRoster({
             )}
 
             {/* Generate Medication Report Modal */}
-            {medicationReportPatient && userId && (
+            {/* Note: partnerUserId is optional - only needed for admin impersonation */}
+            {/* Regular partner users authenticate via session */}
+            {medicationReportPatient && (
               <GenerateMedicationReportModal
                 patient={{
                   id: medicationReportPatient.id,
