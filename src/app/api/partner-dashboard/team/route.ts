@@ -1,12 +1,15 @@
 /**
  * Partner Dashboard API - Team Members
  * Returns active case managers and admins in the organization
+ *
+ * Also supports admin users (Moonlit staff) - returns all case managers across all organizations
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isAdminEmail } from '@/lib/admin-auth'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,32 +25,53 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get partner user record
-    const { data: partnerUser, error: userError } = await supabaseAdmin
+    // Get query parameters
+    const { searchParams } = new URL(request.url)
+    const includeReferrers = searchParams.get('include_referrers') === 'true'
+
+    // Check if user is a Moonlit admin (staff)
+    const userIsAdmin = await isAdminEmail(session.user.email || '')
+
+    // Get partner user record (may be null for admin users)
+    const { data: partnerUser } = await supabaseAdmin
       .from('partner_users')
       .select('id, organization_id, role, is_active')
       .eq('auth_user_id', session.user.id)
       .eq('is_active', true)
       .single()
 
-    if (userError || !partnerUser) {
+    // If not admin AND not a partner user, return 404
+    if (!userIsAdmin && !partnerUser) {
       return NextResponse.json(
         { success: false, error: 'Partner user not found' },
         { status: 404 }
       )
     }
 
-    // Get query parameters
-    const { searchParams } = new URL(request.url)
-    const includeReferrers = searchParams.get('include_referrers') === 'true'
-
     // Build query for team members
+    // For admins: return ALL case managers across all organizations
+    // For partners: return only team members from their organization
     let query = supabaseAdmin
       .from('partner_users')
-      .select('id, full_name, email, role, last_login_at, created_at')
-      .eq('organization_id', partnerUser.organization_id)
+      .select(`
+        id,
+        full_name,
+        email,
+        role,
+        last_login_at,
+        created_at,
+        organization:organizations!partner_users_organization_id_fkey(
+          id,
+          name
+        )
+      `)
       .eq('is_active', true)
       .order('full_name', { ascending: true })
+
+    // Scope to organization for partner users (not admins)
+    if (!userIsAdmin && partnerUser) {
+      query = query.eq('organization_id', partnerUser.organization_id)
+    }
 
     // Filter by role: only case managers and admins (exclude referrers by default)
     if (!includeReferrers) {

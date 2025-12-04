@@ -14,6 +14,10 @@ interface TeamMember {
   email: string
   role: string
   active_patient_count: number
+  organization?: {
+    id: string
+    name: string
+  }
 }
 
 interface Patient {
@@ -197,7 +201,9 @@ export function TransferPatientModal({
               <option value="">Select a team member...</option>
               {teamMembers.map((member) => (
                 <option key={member.id} value={member.id}>
-                  {member.full_name} ({member.active_patient_count} patients)
+                  {member.full_name}
+                  {member.organization?.name ? ` - ${member.organization.name}` : ''}
+                  {' '}({member.active_patient_count} patients)
                 </option>
               ))}
             </select>

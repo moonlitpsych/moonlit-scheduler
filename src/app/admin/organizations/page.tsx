@@ -1,19 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { 
-  Search, 
-  Plus, 
-  Building2, 
-  Mail, 
-  Phone, 
-  MapPin, 
+import { useState, useEffect, useRef } from 'react'
+import {
+  Search,
+  Plus,
+  Building2,
+  Mail,
+  Phone,
+  MapPin,
   MoreHorizontal,
   Users,
   Briefcase,
   Calendar,
-  Shield
+  Shield,
+  Pencil,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
+import OrganizationEditorModal from '@/components/admin/OrganizationEditorModal'
 
 interface OrganizationWithStats {
   id: string
@@ -83,6 +87,13 @@ export default function AdminOrganizationsPage() {
     total_pages: 0
   })
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [selectedOrganization, setSelectedOrganization] = useState<OrganizationWithStats | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [organizationToDelete, setOrganizationToDelete] = useState<OrganizationWithStats | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Fetch dropdown options
   const fetchDropdownOptions = async () => {
@@ -143,6 +154,69 @@ export default function AdminOrganizationsPage() {
   useEffect(() => {
     fetchDropdownOptions()
   }, [])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleEdit = (org: OrganizationWithStats) => {
+    setSelectedOrganization(org)
+    setShowCreateModal(true)
+    setOpenDropdownId(null)
+  }
+
+  const handleDeleteClick = (org: OrganizationWithStats) => {
+    setOrganizationToDelete(org)
+    setShowDeleteConfirm(true)
+    setDeleteError(null)
+    setOpenDropdownId(null)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!organizationToDelete) return
+
+    setDeleting(true)
+    setDeleteError(null)
+
+    try {
+      const response = await fetch(`/api/admin/organizations/${organizationToDelete.id}`, {
+        method: 'DELETE'
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to deactivate organization')
+      }
+
+      // Close modal and refresh
+      setShowDeleteConfirm(false)
+      setOrganizationToDelete(null)
+      fetchOrganizations()
+    } catch (err: any) {
+      console.error('Delete error:', err)
+      setDeleteError(err.message || 'Failed to deactivate organization')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleModalSuccess = () => {
+    setSelectedOrganization(null)
+    fetchOrganizations()
+  }
+
+  const handleModalClose = () => {
+    setShowCreateModal(false)
+    setSelectedOrganization(null)
+  }
 
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A'
@@ -431,9 +505,35 @@ export default function AdminOrganizationsPage() {
                   </td>
 
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-gray-400 hover:text-gray-600">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </button>
+                    <div className="relative" ref={openDropdownId === org.id ? dropdownRef : null}>
+                      <button
+                        onClick={() => setOpenDropdownId(openDropdownId === org.id ? null : org.id)}
+                        className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+
+                      {openDropdownId === org.id && (
+                        <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                          <button
+                            onClick={() => handleEdit(org)}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            <span>Edit</span>
+                          </button>
+                          {org.status !== 'inactive' && (
+                            <button
+                              onClick={() => handleDeleteClick(org)}
+                              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span>Deactivate</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -491,6 +591,78 @@ export default function AdminOrganizationsPage() {
           >
             Add First Organization
           </button>
+        </div>
+      )}
+
+      {/* Organization Editor Modal */}
+      <OrganizationEditorModal
+        isOpen={showCreateModal}
+        onClose={handleModalClose}
+        onSuccess={handleModalSuccess}
+        organization={selectedOrganization}
+        dropdownOptions={dropdownOptions}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && organizationToDelete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+            onClick={() => !deleting && setShowDeleteConfirm(false)}
+          />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex items-start space-x-4">
+                <div className="p-3 bg-red-100 rounded-full">
+                  <AlertTriangle className="h-6 w-6 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 font-['Newsreader']">
+                    Deactivate Organization
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Are you sure you want to deactivate <strong>{organizationToDelete.name}</strong>?
+                  </p>
+                  <p className="mt-2 text-sm text-gray-500">
+                    This will set the organization status to inactive and deactivate all {organizationToDelete.user_count} team member{organizationToDelete.user_count !== 1 ? 's' : ''}.
+                  </p>
+
+                  {deleteError && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-sm text-red-800">{deleteError}</p>
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex space-x-3">
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      disabled={deleting}
+                      className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteConfirm}
+                      disabled={deleting}
+                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center"
+                    >
+                      {deleting ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Deactivating...
+                        </>
+                      ) : (
+                        'Deactivate'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
