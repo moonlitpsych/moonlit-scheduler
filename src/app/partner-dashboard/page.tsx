@@ -6,6 +6,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { DashboardStats } from '@/components/partner-dashboard/DashboardStats'
 import { UpcomingAppointments } from '@/components/partner-dashboard/UpcomingAppointments'
 import CalendarExport from '@/components/partner-dashboard/CalendarExport'
+import IntakeSlotsBanner from '@/components/partner-dashboard/IntakeSlotsBanner'
 import { PartnerDashboardData, PartnerUser } from '@/types/partner-types'
 import { Database } from '@/types/database'
 import { partnerImpersonationManager } from '@/lib/partner-impersonation'
@@ -234,6 +235,9 @@ export default function PartnerDashboardPage() {
             Here's what's happening with your patients and appointments today.
           </p>
         </div>
+
+        {/* Intake Slots Banner */}
+        <IntakeSlotsBanner />
 
         {/* Statistics Cards */}
         <div className="mb-8">

@@ -13,6 +13,7 @@ import {
   Briefcase,
   UserCog
 } from 'lucide-react'
+import IntakeCapacityBanner from '@/components/admin/IntakeCapacityBanner'
 
 interface DashboardStats {
   total_partners: number
@@ -102,6 +103,9 @@ export default function AdminDashboardPage() {
           Manage partnerships, organizations, and business development
         </p>
       </div>
+
+      {/* Intake Capacity Banner */}
+      <IntakeCapacityBanner />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
