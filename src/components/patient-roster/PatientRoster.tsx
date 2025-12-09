@@ -634,12 +634,13 @@ export function PatientRoster({
 
             {/* Upload ROI Modal */}
             {/* Note: organizationId is passed but not actually used by API - API derives from session */}
-            {roiPatient && (
+            {roiPatient && roiPatient.roi && (
               <UploadROIModal
                 patient={{
                   id: roiPatient.id,
                   first_name: roiPatient.first_name,
-                  last_name: roiPatient.last_name
+                  last_name: roiPatient.last_name,
+                  roi: roiPatient.roi
                 }}
                 organizationId={userId || ''} // Not used by API - kept for prop compatibility
                 isOpen={roiModalOpen}

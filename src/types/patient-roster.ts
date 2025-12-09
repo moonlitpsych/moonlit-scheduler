@@ -71,6 +71,7 @@ export interface AppointmentDetails {
  * ROI (Release of Information) details - Partner only
  */
 export interface ROIDetails {
+  affiliation_id: string
   consent_on_file: boolean
   consent_expires_on?: string | null
   consent_status: ConsentStatus

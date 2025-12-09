@@ -390,6 +390,7 @@ async function fetchPartnerPatients(
       has_future_appointment: !!next[patient.id],
 
       roi: {
+        affiliation_id: affiliation.id,
         consent_on_file: affiliation.consent_on_file,
         consent_expires_on: affiliation.consent_expires_on,
         consent_status: affiliation.consent_on_file
