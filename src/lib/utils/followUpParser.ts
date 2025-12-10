@@ -20,10 +20,23 @@ export interface ParsedFollowUp {
  * 3. Return exact text without parsing/modification
  */
 export function parseFollowUpFromNote(note: any): ParsedFollowUp {
+  // Handle note date - can be Unix timestamp (_noteDate from sync script) or ISO string
+  let noteDate: string | null = null
+  if (note?._noteDate) {
+    // Unix timestamp in milliseconds from notes/summary API
+    noteDate = new Date(note._noteDate).toISOString()
+  } else if (note?.Date && typeof note.Date === 'number') {
+    // Unix timestamp from IntakeQ
+    noteDate = new Date(note.Date).toISOString()
+  } else if (note?.DateCreated || note?.CreatedDate) {
+    // ISO string date
+    noteDate = note.DateCreated || note.CreatedDate
+  }
+
   const emptyResult: ParsedFollowUp = {
     text: null,
     noteId: note?.Id || null,
-    noteDate: note?.DateCreated || note?.CreatedDate || null
+    noteDate
   }
 
   // Check for Questions array
@@ -51,7 +64,7 @@ export function parseFollowUpFromNote(note: any): ParsedFollowUp {
       return {
         text: answer,
         noteId: note.Id || null,
-        noteDate: note.DateCreated || note.CreatedDate || null
+        noteDate
       }
     }
   }
@@ -70,7 +83,7 @@ export function parseFollowUpFromNote(note: any): ParsedFollowUp {
       return {
         text: followUpText,
         noteId: note.Id || null,
-        noteDate: note.DateCreated || note.CreatedDate || null
+        noteDate
       }
     }
   }

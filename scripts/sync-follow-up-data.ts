@@ -75,9 +75,10 @@ async function sleep(ms: number): Promise<void> {
 
 async function fetchLatestLockedNote(clientId: string): Promise<any | null> {
   try {
-    // First get intake forms for this client to find notes
+    // Use the notes/summary endpoint with lowercase clientId parameter
+    // This is the correct IntakeQ API for fetching clinical notes
     const response = await fetch(
-      `https://intakeq.com/api/v1/forms?ClientId=${clientId}&Type=Notes`,
+      `https://intakeq.com/api/v1/notes/summary?clientId=${clientId}`,
       {
         headers: {
           'X-Auth-Key': cleanApiKey,
@@ -102,22 +103,24 @@ async function fetchLatestLockedNote(clientId: string): Promise<any | null> {
     }
 
     // Find most recent locked note
+    // IntakeQ returns Status as lowercase 'locked' in notes/summary endpoint
     const sortedNotes = notes
-      .filter((n: any) => n.Status === 'Locked')
+      .filter((n: any) => n.Status === 'locked' || n.Status === 'Locked')
       .sort((a: any, b: any) => {
-        const dateA = new Date(a.DateCreated || a.CreatedDate || 0)
-        const dateB = new Date(b.DateCreated || b.CreatedDate || 0)
-        return dateB.getTime() - dateA.getTime()
+        // Notes endpoint uses 'Date' field (Unix timestamp in ms)
+        const dateA = a.Date || a.DateCreated || 0
+        const dateB = b.Date || b.DateCreated || 0
+        return dateB - dateA
       })
 
     if (sortedNotes.length === 0) {
       return null
     }
 
-    // Get full note details for the most recent locked note
+    // Get full note details using the notes/{id} endpoint
     const latestNote = sortedNotes[0]
     const noteResponse = await fetch(
-      `https://intakeq.com/api/v1/forms/${latestNote.Id}`,
+      `https://intakeq.com/api/v1/notes/${latestNote.Id}`,
       {
         headers: {
           'X-Auth-Key': cleanApiKey,
@@ -130,7 +133,10 @@ async function fetchLatestLockedNote(clientId: string): Promise<any | null> {
       throw new Error(`IntakeQ note fetch error: ${noteResponse.status}`)
     }
 
-    return await noteResponse.json()
+    const fullNote = await noteResponse.json()
+    // Include the note date from the summary for use in the database
+    fullNote._noteDate = latestNote.Date
+    return fullNote
   } catch (error: any) {
     console.error(`   ❌ Error fetching note for client ${clientId}: ${error.message}`)
     return null
