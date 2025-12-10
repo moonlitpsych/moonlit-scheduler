@@ -7,10 +7,11 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Download, RotateCcw, FileText, UserCheck, Bell, Building2, X, Search } from 'lucide-react'
 import { PatientRosterProps, PatientRosterItem } from '@/types/patient-roster'
 import { usePatientRosterData } from '@/hooks/usePatientRosterData'
+import { useFollowUpData } from '@/hooks/useFollowUpData'
 import { exportPatientRosterToCSV } from '@/utils/patient-roster-helpers'
 import { StatsCards } from './StatsCards'
 import { FilterBar } from './FilterBar'
@@ -77,6 +78,12 @@ export function PatientRoster({
     pageSize: defaultPageSize,
     initialFilters
   })
+
+  // Follow-up data is now cached in database and included in roster response
+  // Real-time IntakeQ fetching disabled due to severe rate limiting (90+ seconds)
+  // TODO: Implement background sync job to populate patients.last_follow_up_text
+  const followUpData = undefined
+  const followUpLoading = false
 
   // Modal states
   const [copiedAppointmentId, setCopiedAppointmentId] = useState<string | null>(null)
@@ -454,6 +461,8 @@ export function PatientRoster({
           enableStatusEdit={userType === 'partner'}
           enableBulkSelect={enableBulkSelect}
           showOrganizationColumn={showOrganizationColumn}
+          followUpData={followUpData}
+          followUpLoading={followUpLoading}
           selectedPatientIds={selectedPatientIds}
           onSelectionChange={handleSelectionChange}
           onStatusClick={handleOpenChangeStatusModal}
@@ -634,12 +643,13 @@ export function PatientRoster({
 
             {/* Upload ROI Modal */}
             {/* Note: organizationId is passed but not actually used by API - API derives from session */}
-            {roiPatient && (
+            {roiPatient && roiPatient.roi && (
               <UploadROIModal
                 patient={{
                   id: roiPatient.id,
                   first_name: roiPatient.first_name,
-                  last_name: roiPatient.last_name
+                  last_name: roiPatient.last_name,
+                  roi: roiPatient.roi
                 }}
                 organizationId={userId || ''} // Not used by API - kept for prop compatibility
                 isOpen={roiModalOpen}

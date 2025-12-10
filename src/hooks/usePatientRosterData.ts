@@ -174,6 +174,10 @@ export function usePatientRosterData(
       params.set('show_test_patients', filters.showTestPatients.toString())
     }
 
+    // Follow-up data disabled for now - IntakeQ API calls cause 14+ second load times
+    // TODO: Implement lazy loading for follow-up data in a separate request
+    // params.set('include_follow_up', 'true')
+
     return `/api/patients/roster?${params.toString()}`
   }, [userType, userId, filters, page, pageSize])
 
@@ -319,6 +323,15 @@ export function usePatientRosterData(
           bValue = b.next_appointment?.start_time
             ? new Date(b.next_appointment.start_time).getTime()
             : Number.MAX_SAFE_INTEGER
+          break
+        case 'followUp':
+          // Sort by note date (most recent first when ascending)
+          aValue = a.next_follow_up?.noteDate
+            ? new Date(a.next_follow_up.noteDate).getTime()
+            : 0
+          bValue = b.next_follow_up?.noteDate
+            ? new Date(b.next_follow_up.noteDate).getTime()
+            : 0
           break
         case 'provider':
           aValue = a.primary_provider

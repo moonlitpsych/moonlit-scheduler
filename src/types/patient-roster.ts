@@ -71,6 +71,7 @@ export interface AppointmentDetails {
  * ROI (Release of Information) details - Partner only
  */
 export interface ROIDetails {
+  affiliation_id: string
   consent_on_file: boolean
   consent_expires_on?: string | null
   consent_status: ConsentStatus
@@ -84,6 +85,14 @@ export interface ROIDetails {
 export interface AssignmentDetails {
   partner_user_id: string
   partner_user_name: string
+}
+
+/**
+ * Follow-up information extracted from clinical notes
+ */
+export interface FollowUpDetails {
+  text: string | null           // Exact phrasing from physician
+  noteDate: string | null       // Date of the note it was extracted from
 }
 
 /**
@@ -132,6 +141,9 @@ export interface PatientRosterItem {
   // Sync metadata
   last_intakeq_sync?: string | null
   last_practiceq_sync_at?: string | null
+
+  // Follow-up from most recent locked clinical note
+  next_follow_up?: FollowUpDetails | null
 }
 
 /**
@@ -182,6 +194,7 @@ export type SortColumn =
   | 'status'
   | 'previous'
   | 'next'
+  | 'followUp'
   | 'provider'
   | 'payer'
   | 'organization'

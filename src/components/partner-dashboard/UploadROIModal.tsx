@@ -9,12 +9,12 @@ interface Patient {
   id: string
   first_name: string
   last_name: string
-  affiliation: {
-    id: string
+  roi?: {
+    affiliation_id: string
     consent_on_file: boolean
-    consent_expires_on?: string
-    roi_file_url?: string
-  }
+    consent_expires_on?: string | null
+    roi_file_url?: string | null
+  } | null
 }
 
 interface UploadROIModalProps {
@@ -80,7 +80,7 @@ export function UploadROIModal({ patient, organizationId, isOpen, onClose, onSuc
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            affiliation_id: patient.affiliation.id,
+            affiliation_id: patient.roi?.affiliation_id,
             expiration_date: expirationDate || null
           })
         })
@@ -96,7 +96,7 @@ export function UploadROIModal({ patient, organizationId, isOpen, onClose, onSuc
         formData.append('file', file!)
         formData.append('patient_id', patient.id)
         formData.append('organization_id', organizationId)
-        formData.append('affiliation_id', patient.affiliation.id)
+        formData.append('affiliation_id', patient.roi?.affiliation_id || '')
         formData.append('expiration_date', expirationDate)
 
         const response = await fetch(`/api/partner-dashboard/patients/${patient.id}/roi${partnerUserIdParam}`, {
@@ -166,7 +166,7 @@ export function UploadROIModal({ patient, organizationId, isOpen, onClose, onSuc
           </div>
 
           {/* Current ROI Status */}
-          {patient.affiliation.roi_file_url && (
+          {patient.roi?.roi_file_url && (
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-start space-x-2">
                 <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
