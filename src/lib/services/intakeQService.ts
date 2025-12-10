@@ -696,6 +696,74 @@ class IntakeQService {
       throw error
     }
   }
+
+  /**
+   * Get the most recent locked note for multiple clients
+   * Optimized for batch operations with concurrency control
+   *
+   * @param clientIds - Array of IntakeQ client IDs
+   * @param concurrencyLimit - Max concurrent API calls (default: 5)
+   * @returns Map of clientId -> full note object (or null if not found/error)
+   */
+  async getLatestLockedNotesForClients(
+    clientIds: string[],
+    concurrencyLimit: number = 5
+  ): Promise<Map<string, any>> {
+    const results = new Map<string, any>()
+
+    if (!clientIds || clientIds.length === 0) {
+      return results
+    }
+
+    // Filter out invalid client IDs
+    const validClientIds = clientIds.filter(id => id && id.length > 0)
+
+    console.log(`📋 Fetching latest locked notes for ${validClientIds.length} clients...`)
+
+    // Process in batches with concurrency limit
+    const batches: string[][] = []
+    for (let i = 0; i < validClientIds.length; i += concurrencyLimit) {
+      batches.push(validClientIds.slice(i, i + concurrencyLimit))
+    }
+
+    for (const batch of batches) {
+      const batchPromises = batch.map(async (clientId) => {
+        try {
+          // Get note summaries for this client
+          const notes = await this.getClientNotes(clientId, { limit: 5 })
+
+          // Filter for locked notes only (finalized by clinician)
+          const lockedNotes = notes.filter((note: any) => note.Status === 'locked')
+
+          if (lockedNotes.length === 0) {
+            return { clientId, note: null }
+          }
+
+          // Get full content of most recent locked note
+          const fullNote = await this.getNote(lockedNotes[0].Id)
+          return { clientId, note: fullNote }
+
+        } catch (error: any) {
+          console.warn(`⚠️ Failed to get note for client ${clientId}:`, error.message)
+          return { clientId, note: null }
+        }
+      })
+
+      // Wait for batch to complete
+      const batchResults = await Promise.allSettled(batchPromises)
+
+      // Process results
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          results.set(result.value.clientId, result.value.note)
+        }
+      }
+    }
+
+    console.log(`✅ Retrieved ${Array.from(results.values()).filter(v => v !== null).length} notes out of ${validClientIds.length} clients`)
+
+    return results
+  }
 }
 
 // Create and export singleton instance

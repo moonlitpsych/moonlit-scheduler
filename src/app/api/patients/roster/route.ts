@@ -30,7 +30,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin-auth'
-import type { PatientRosterResponse, PatientRosterItem, UserRole } from '@/types/patient-roster'
+import type { PatientRosterResponse, PatientRosterItem, UserRole, FollowUpDetails } from '@/types/patient-roster'
 
 export async function GET(request: NextRequest) {
   try {
@@ -149,6 +149,8 @@ export async function GET(request: NextRequest) {
     const filterType = searchParams.get('filter_type') || 'all'
     const meetingLinkFilter = searchParams.get('meeting_link_filter') || 'all'
     const showTestPatients = searchParams.get('show_test_patients') === 'true'
+    // Note: Follow-up data is now always included from cached columns in patients table
+    // No need for include_follow_up param - no real-time IntakeQ calls needed
 
     // Pagination
     const page = parseInt(searchParams.get('page') || '1')
@@ -202,6 +204,9 @@ export async function GET(request: NextRequest) {
       totalCount = result.total
       stats = result.stats
     }
+
+    // Note: Follow-up data is now included directly from cached columns
+    // No enrichment step needed - data comes from patients table
 
     const totalPages = Math.ceil(totalCount / limit)
 
@@ -271,7 +276,7 @@ async function fetchPartnerPatients(
     .eq('organization_id', partnerUser.organization_id)
     .eq('status', 'active')
 
-  // Build main query
+  // Build main query - includes cached follow-up data from patients table
   let query = supabaseAdmin
     .from('patient_organization_affiliations')
     .select(`
@@ -295,6 +300,8 @@ async function fetchPartnerPatients(
         status,
         primary_provider_id,
         is_test_patient,
+        last_follow_up_text,
+        last_follow_up_note_date,
         primary_provider:providers!primary_provider_id (
           id,
           first_name,
@@ -388,6 +395,12 @@ async function fetchPartnerPatients(
       next_appointment: next[patient.id],
       previous_appointment: previous[patient.id],
       has_future_appointment: !!next[patient.id],
+
+      // Cached follow-up data from patients table
+      next_follow_up: patient.last_follow_up_text ? {
+        text: patient.last_follow_up_text,
+        noteDate: patient.last_follow_up_note_date
+      } : null,
 
       roi: {
         affiliation_id: affiliation.id,
@@ -547,6 +560,12 @@ async function fetchProviderPatients(
     previous_appointment: previous[p.patient_id],
     has_future_appointment: p.has_future_appointment,
 
+    // Cached follow-up data from activity view
+    next_follow_up: p.last_follow_up_text ? {
+      text: p.last_follow_up_text,
+      noteDate: p.last_follow_up_note_date
+    } : null,
+
     shared_with_org_ids: p.shared_with_org_ids,
     affiliation_details: p.affiliation_details,
 
@@ -671,6 +690,12 @@ async function fetchAdminPatients(
     next_appointment: next[p.patient_id],
     previous_appointment: previous[p.patient_id],
     has_future_appointment: p.has_future_appointment,
+
+    // Cached follow-up data from activity view
+    next_follow_up: p.last_follow_up_text ? {
+      text: p.last_follow_up_text,
+      noteDate: p.last_follow_up_note_date
+    } : null,
 
     shared_with_org_ids: p.shared_with_org_ids,
     affiliation_details: p.affiliation_details,

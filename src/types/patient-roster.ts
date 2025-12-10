@@ -88,6 +88,14 @@ export interface AssignmentDetails {
 }
 
 /**
+ * Follow-up information extracted from clinical notes
+ */
+export interface FollowUpDetails {
+  text: string | null           // Exact phrasing from physician
+  noteDate: string | null       // Date of the note it was extracted from
+}
+
+/**
  * Normalized patient roster item
  * This structure works for all three roles (partner, provider, admin)
  */
@@ -133,6 +141,9 @@ export interface PatientRosterItem {
   // Sync metadata
   last_intakeq_sync?: string | null
   last_practiceq_sync_at?: string | null
+
+  // Follow-up from most recent locked clinical note
+  next_follow_up?: FollowUpDetails | null
 }
 
 /**
@@ -183,6 +194,7 @@ export type SortColumn =
   | 'status'
   | 'previous'
   | 'next'
+  | 'followUp'
   | 'provider'
   | 'payer'
   | 'organization'

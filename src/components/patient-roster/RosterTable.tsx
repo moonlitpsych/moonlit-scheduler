@@ -7,14 +7,15 @@
 
 import { ArrowUp, ArrowDown, ArrowUpDown, Users } from 'lucide-react'
 import { useResizableColumns } from '@/hooks/useResizableColumns'
-import { PatientRosterItem, UserRole, SortColumn } from '@/types/patient-roster'
+import { PatientRosterItem, UserRole, SortColumn, FollowUpDetails } from '@/types/patient-roster'
 import {
   PatientNameCell,
   EngagementStatusCell,
   AppointmentCell,
   ProviderCell,
   ContactCell,
-  OrganizationCell
+  OrganizationCell,
+  FollowUpCell
 } from './cells'
 
 interface RosterTableProps {
@@ -30,6 +31,10 @@ interface RosterTableProps {
   enableStatusEdit?: boolean
   enableBulkSelect?: boolean
   showOrganizationColumn?: boolean
+
+  // Follow-up data (lazy loaded)
+  followUpData?: Map<string, FollowUpDetails>
+  followUpLoading?: boolean
 
   // Bulk selection
   selectedPatientIds?: Set<string>
@@ -57,6 +62,8 @@ export function RosterTable({
   enableStatusEdit = false,
   enableBulkSelect = false,
   showOrganizationColumn = false,
+  followUpData,
+  followUpLoading = false,
   selectedPatientIds = new Set(),
   onSelectionChange,
   onStatusClick,
@@ -71,6 +78,7 @@ export function RosterTable({
     status: 120,
     previous: 160,
     next: 140,
+    followUp: 180,
     provider: 150,
     payer: 150,
     caseManager: 150,
@@ -208,6 +216,13 @@ export function RosterTable({
                 width={columnWidths.next}
               />
 
+              {/* Follow-Up - All roles */}
+              <SortableHeader
+                column="followUp"
+                label="Next Follow-Up"
+                width={columnWidths.followUp}
+              />
+
               {/* Provider - All roles */}
               <SortableHeader
                 column="provider"
@@ -305,6 +320,14 @@ export function RosterTable({
                     }
                     onCopyMeetLink={onCopyMeetLink}
                     copiedAppointmentId={copiedAppointmentId}
+                  />
+                </td>
+
+                {/* Follow-Up */}
+                <td style={{ width: columnWidths.followUp }} className="px-6 py-4">
+                  <FollowUpCell
+                    followUp={followUpData?.get(patient.id) || patient.next_follow_up}
+                    isLoading={followUpLoading && !followUpData?.has(patient.id) && !patient.next_follow_up}
                   />
                 </td>
 
