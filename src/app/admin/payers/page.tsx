@@ -64,8 +64,8 @@ export default function PayersPage() {
     if (searchTerm) {
       const search = searchTerm.toLowerCase()
       filtered = filtered.filter(payer =>
-        payer.name.toLowerCase().includes(search) ||
-        payer.payer_type.toLowerCase().includes(search) ||
+        payer.name?.toLowerCase().includes(search) ||
+        payer.payer_type?.toLowerCase().includes(search) ||
         payer.state?.toLowerCase().includes(search) ||
         payer.status_code?.toLowerCase().includes(search)
       )
