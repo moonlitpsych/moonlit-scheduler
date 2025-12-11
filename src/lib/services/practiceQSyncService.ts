@@ -11,6 +11,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { intakeQService } from './intakeQService'
 import { googleMeetService } from './googleMeetService'
+import { getServiceInstanceIdFromIntakeq } from '@/lib/integrations/serviceInstanceMap'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!
@@ -367,7 +368,27 @@ class PracticeQSyncService {
       }
     }
 
-    // 4.6. Generate Google Meet link if this is a telehealth appointment without a meeting URL
+    // 4.7. Map service_instance_id from IntakeQ ServiceId
+    // This properly classifies appointments as Intake, Follow-up (Short), Follow-up (Extended), etc.
+    const DEFAULT_SERVICE_INSTANCE_ID = '12191f44-a09c-426f-8e22-0c5b8e57b3b7' // Intake fallback
+    let serviceInstanceId = DEFAULT_SERVICE_INSTANCE_ID
+
+    if (intakeqAppt.ServiceId) {
+      const mappedServiceInstanceId = await getServiceInstanceIdFromIntakeq(
+        intakeqAppt.ServiceId,
+        DEFAULT_SERVICE_INSTANCE_ID
+      )
+      if (mappedServiceInstanceId) {
+        serviceInstanceId = mappedServiceInstanceId
+        console.log(`🏷️ [Appointment ${intakeqAppt.Id}] Mapped IntakeQ ServiceId "${intakeqAppt.ServiceId}" → service_instance_id ${serviceInstanceId}`)
+      } else {
+        console.warn(`⚠️ [Appointment ${intakeqAppt.Id}] No mapping for IntakeQ ServiceId "${intakeqAppt.ServiceId}", using default Intake`)
+      }
+    } else {
+      console.warn(`⚠️ [Appointment ${intakeqAppt.Id}] No ServiceId from IntakeQ, using default Intake service`)
+    }
+
+    // 4.8. Generate Google Meet link if this is a telehealth appointment without a meeting URL
     if (!meetingUrl && this.isTelehealthAppointment(locationInfo)) {
       console.log(`🔗 [Appointment ${intakeqAppt.Id}] Generating Google Meet link for telehealth appointment`)
 
@@ -397,12 +418,13 @@ class PracticeQSyncService {
 
     // 5. Create or update appointment
     if (existing) {
-      // Check if anything changed (including meeting URL and location)
+      // Check if anything changed (including meeting URL, location, and service classification)
       const hasChanges =
         existing.status !== status ||
         new Date(existing.start_time).getTime() !== new Date(startTime).getTime() ||
         existing.provider_id !== providerId ||
         existing.meeting_url !== meetingUrl ||
+        existing.service_instance_id !== serviceInstanceId ||
         JSON.stringify(existing.location_info) !== JSON.stringify(locationInfo)
 
       if (!hasChanges) {
@@ -440,9 +462,11 @@ class PracticeQSyncService {
         updated_at: new Date().toISOString()
       }
 
-      // Add service_instance_id if it's missing in the existing appointment
-      if (!existing.service_instance_id) {
-        updateData.service_instance_id = '12191f44-a09c-426f-8e22-0c5b8e57b3b7' // Default service instance
+      // Update service_instance_id if it differs from what IntakeQ says
+      // This corrects appointments that were previously mis-classified
+      if (existing.service_instance_id !== serviceInstanceId) {
+        updateData.service_instance_id = serviceInstanceId
+        console.log(`🔄 [Appointment ${intakeqAppt.Id}] Updating service_instance_id from ${existing.service_instance_id} → ${serviceInstanceId}`)
       }
 
       const { data: updated, error } = await supabaseAdmin
@@ -477,7 +501,7 @@ class PracticeQSyncService {
           pq_appointment_id: intakeqAppt.Id,
           meeting_url: meetingUrl,
           location_info: locationInfo,
-          service_instance_id: '12191f44-a09c-426f-8e22-0c5b8e57b3b7', // Default service instance for IntakeQ syncs
+          service_instance_id: serviceInstanceId, // Mapped from IntakeQ ServiceId
           patient_info: {
             first_name: patient.first_name,
             last_name: patient.last_name,

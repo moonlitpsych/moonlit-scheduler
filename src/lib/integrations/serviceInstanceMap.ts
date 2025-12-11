@@ -154,3 +154,44 @@ export async function hasLiveMapping(serviceInstanceId: string): Promise<boolean
         throw error // Re-throw unexpected errors
     }
 }
+
+/**
+ * REVERSE LOOKUP: Gets a service_instance_id from an IntakeQ/PracticeQ external service ID.
+ * Used by sync service to correctly classify appointments from IntakeQ.
+ *
+ * Returns the first matching service_instance_id, or null if no mapping exists.
+ * Note: Multiple service instances may map to the same external_id (different payers/providers),
+ * so this returns ONE valid instance for that service type.
+ */
+export async function getServiceInstanceIdFromIntakeq(
+    intakeqServiceId: string,
+    defaultServiceInstanceId?: string
+): Promise<string | null> {
+    try {
+        console.log(`🔍 Looking up service_instance_id for IntakeQ service: ${intakeqServiceId}`)
+
+        const { data, error } = await supabaseAdmin
+            .from('service_instance_integrations')
+            .select('service_instance_id')
+            .eq('external_id', intakeqServiceId)
+            .in('system', ['intakeq', 'practiceq'])
+            .limit(1)
+
+        if (error) {
+            console.error('❌ Error looking up service instance from IntakeQ ID:', error)
+            return defaultServiceInstanceId || null
+        }
+
+        if (!data || data.length === 0) {
+            console.warn(`⚠️ No service instance found for IntakeQ service ID: ${intakeqServiceId}`)
+            return defaultServiceInstanceId || null
+        }
+
+        console.log(`✅ Found service_instance_id ${data[0].service_instance_id} for IntakeQ service ${intakeqServiceId}`)
+        return data[0].service_instance_id
+
+    } catch (error: any) {
+        console.error('❌ Unexpected error in getServiceInstanceIdFromIntakeq:', error)
+        return defaultServiceInstanceId || null
+    }
+}
