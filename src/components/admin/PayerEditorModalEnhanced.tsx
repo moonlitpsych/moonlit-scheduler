@@ -20,6 +20,7 @@ interface Payer {
   allows_supervised: boolean
   supervision_level: string | null
   requires_individual_contract: boolean
+  intakeq_location_id: string | null
 }
 
 interface Contract {
@@ -264,7 +265,8 @@ export default function PayerEditorModalEnhanced({
         allows_supervised: formData.allows_supervised,
         supervision_level: formData.supervision_level,
         requires_attending: formData.requires_attending,
-        requires_individual_contract: formData.requires_individual_contract
+        requires_individual_contract: formData.requires_individual_contract,
+        intakeq_location_id: formData.intakeq_location_id
       }
 
       const response = await fetch(endpoint, {
@@ -525,6 +527,26 @@ export default function PayerEditorModalEnhanced({
                       </select>
                     </div>
                   )}
+                </div>
+
+                {/* IntakeQ Integration */}
+                <div className="space-y-3 p-4 bg-blue-50 rounded-lg">
+                  <h4 className="font-medium text-gray-700">IntakeQ / PracticeQ Integration</h4>
+                  <div>
+                    <label className="block text-sm font-medium text-[#091747] mb-2">
+                      IntakeQ Location ID
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.intakeq_location_id || ''}
+                      onChange={(e) => handleFieldChange('intakeq_location_id', e.target.value || null)}
+                      placeholder="e.g., 22"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
+                    />
+                    <p className="text-xs text-gray-600 mt-1">
+                      Find this in PracticeQ → Settings → Locations. This determines which booking widget patients see.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

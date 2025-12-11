@@ -17,6 +17,7 @@ interface Payer {
   allows_supervised: boolean
   supervision_level: string | null
   requires_individual_contract: boolean
+  intakeq_location_id: string | null
   created_at: string
   updated_at: string
   contract_count?: number

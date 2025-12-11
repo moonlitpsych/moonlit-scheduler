@@ -42,6 +42,7 @@ interface ApplyContractRequest {
     supervision_level?: string | null
     requires_attending?: boolean
     requires_individual_contract?: boolean
+    intakeq_location_id?: string | null
   }
   providerContracts: ProviderContract[]
   supervisionSetup: SupervisionSetup[]

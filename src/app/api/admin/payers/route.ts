@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new payer
-    const { data: newPayer, error: createError } = await supabase
+    const { data: newPayer, error: createError } = await supabaseAdmin
       .from('payers')
       .insert({
         name: body.name,
@@ -101,7 +101,8 @@ export async function POST(request: NextRequest) {
         requires_attending: body.requires_attending || false,
         allows_supervised: body.allows_supervised || false,
         supervision_level: body.supervision_level || null,
-        requires_individual_contract: body.requires_individual_contract || false
+        requires_individual_contract: body.requires_individual_contract || false,
+        intakeq_location_id: body.intakeq_location_id || null
       })
       .select()
       .single()
