@@ -130,6 +130,31 @@ export default function HomePage() {
 
       </section>
 
+      {/* U of U Employee Callout */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+        <div className="bg-[#091747] rounded-2xl p-8 sm:p-10">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="text-white">
+              <h2 className="text-2xl sm:text-3xl font-['Newsreader'] font-light mb-3">
+                Work at the University of Utah?
+              </h2>
+              <p className="text-white/80 font-['Newsreader'] text-lg max-w-xl">
+                We&apos;re in-network with HMHI-BHN — your behavioral health plan. No surprise bills.
+              </p>
+            </div>
+            <Link
+              href="/university-of-utah-employees"
+              className="inline-flex items-center justify-center bg-[#BF9C73] hover:bg-[#A8865F] text-white px-8 py-4 rounded-lg font-['Newsreader'] text-lg transition-all duration-300 hover:shadow-lg whitespace-nowrap"
+            >
+              Learn more
+              <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Ways to Pay */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
         <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
@@ -137,9 +162,9 @@ export default function HomePage() {
             Multiple ways to pay
           </h2>
           <p className="text-base text-[#091747]/70 font-['Newsreader'] mb-6 max-w-2xl mx-auto">
-            We accept most major insurance plans, cash payments, and Medicaid plans to make your care accessible.
+            We accept most major insurance plans including HMHI-BHN, Regence, SelectHealth, Medicaid, and more.
           </p>
-          <Link 
+          <Link
             href="/ways-to-pay"
             className="inline-block bg-[#BF9C73] hover:bg-[#A8865F] text-white px-8 py-4 rounded-xl font-['Newsreader'] transition-all duration-300 hover:shadow-lg hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-[#BF9C73]/20"
             aria-label="Learn about payment options and insurance"
