@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import PayerPlansWrapper from '@/components/booking/PayerPlansWrapper'
 
 interface Payer {
@@ -473,6 +474,21 @@ export default function WaysToPayPage() {
                   </svg>
                 </div>
               </div>
+            </div>
+
+            {/* U of U Employee Callout */}
+            <div className="max-w-xl mx-auto mb-8 px-2">
+              <Link
+                href="/university-of-utah-employees"
+                className="block p-4 bg-[#091747] rounded-xl text-white hover:bg-[#0a1a52] transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">University of Utah employee?</p>
+                    <p className="text-sm text-white/70">Learn about your HMHI-BHN coverage →</p>
+                  </div>
+                </div>
+              </Link>
             </div>
           </div>
 

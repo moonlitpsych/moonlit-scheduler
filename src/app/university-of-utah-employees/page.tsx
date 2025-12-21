@@ -63,7 +63,6 @@ export default function UniversityOfUtahEmployeesPage() {
         </div>
       </section>
 
-      {/* TODO: Revisit "Why U of U employees choose Moonlit" section content */}
       {/* Why Moonlit Section */}
       <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
         <h2 className="text-2xl sm:text-3xl font-['Newsreader'] font-light text-[#091747] mb-10 text-center">
@@ -82,10 +81,10 @@ export default function UniversityOfUtahEmployeesPage() {
 
           <div className="bg-white rounded-xl p-6 shadow-sm">
             <h3 className="text-xl font-['Newsreader'] font-medium text-[#091747] mb-3">
-              Evening & weekend appointments
+              Access to care
             </h3>
             <p className="text-[#091747]/70 font-['Newsreader']">
-              We know your schedule is demanding. That&apos;s why we offer appointments outside standard business hours.
+              Our priority is accessibility. We offer evening and weekend appointments, and most patients are seen within days—not weeks or months. When you need help, you shouldn&apos;t have to wait.
             </p>
           </div>
 
@@ -100,12 +99,81 @@ export default function UniversityOfUtahEmployeesPage() {
 
           <div className="bg-white rounded-xl p-6 shadow-sm">
             <h3 className="text-xl font-['Newsreader'] font-medium text-[#091747] mb-3">
-              Fast access to care
+              Your privacy, protected
             </h3>
             <p className="text-[#091747]/70 font-['Newsreader']">
-              Most patients are seen within days, not weeks. When you need help, you shouldn&apos;t have to wait.
+              We value your privacy. From scheduling your treatment to documenting visits, we&apos;ve designed every part of our practice with your discretion in mind.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+        <h2 className="text-2xl sm:text-3xl font-['Newsreader'] font-light text-[#091747] mb-8 text-center">
+          Frequently asked questions
+        </h2>
+
+        <div className="space-y-4">
+          <details className="bg-white rounded-xl shadow-sm group">
+            <summary className="flex items-center justify-between p-6 cursor-pointer font-['Newsreader'] text-lg text-[#091747] font-medium list-none">
+              What is HMHI-BHN?
+              <svg className="w-5 h-5 text-[#BF9C73] transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="px-6 pb-6 text-[#091747]/70 font-['Newsreader']">
+              HMHI-BHN stands for Huntsman Mental Health Institute Behavioral Health Network. It is the insurance network that manages mental health benefits for University of Utah employees, even though your insurance card may say Regence or UUHP.
+            </div>
+          </details>
+
+          <details className="bg-white rounded-xl shadow-sm group">
+            <summary className="flex items-center justify-between p-6 cursor-pointer font-['Newsreader'] text-lg text-[#091747] font-medium list-none">
+              Does Moonlit accept HMHI-BHN insurance?
+              <svg className="w-5 h-5 text-[#BF9C73] transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="px-6 pb-6 text-[#091747]/70 font-['Newsreader']">
+              Yes. Moonlit Psychiatry is fully credentialed and in-network with HMHI-BHN. When you see us, your visit is covered at your in-network rate.
+            </div>
+          </details>
+
+          <details className="bg-white rounded-xl shadow-sm group">
+            <summary className="flex items-center justify-between p-6 cursor-pointer font-['Newsreader'] text-lg text-[#091747] font-medium list-none">
+              I have Regence through U of U. Can I see Moonlit?
+              <svg className="w-5 h-5 text-[#BF9C73] transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="px-6 pb-6 text-[#091747]/70 font-['Newsreader']">
+              Yes. If you&apos;re a U of U employee with Regence, your mental health benefits are actually managed by HMHI-BHN—and Moonlit is in-network with HMHI-BHN. You can book an appointment with us and be covered at your in-network rate.
+            </div>
+          </details>
+
+          <details className="bg-white rounded-xl shadow-sm group">
+            <summary className="flex items-center justify-between p-6 cursor-pointer font-['Newsreader'] text-lg text-[#091747] font-medium list-none">
+              Why do I get surprise bills from other psychiatrists?
+              <svg className="w-5 h-5 text-[#BF9C73] transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="px-6 pb-6 text-[#091747]/70 font-['Newsreader']">
+              Many psychiatry practices in Utah accept Regence for medical care but are not credentialed with HMHI-BHN for behavioral health. Since U of U employee mental health benefits are carved out to HMHI-BHN, seeing a provider who isn&apos;t in the HMHI-BHN network results in out-of-network charges.
+            </div>
+          </details>
+
+          <details className="bg-white rounded-xl shadow-sm group">
+            <summary className="flex items-center justify-between p-6 cursor-pointer font-['Newsreader'] text-lg text-[#091747] font-medium list-none">
+              How quickly can I get an appointment?
+              <svg className="w-5 h-5 text-[#BF9C73] transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="px-6 pb-6 text-[#091747]/70 font-['Newsreader']">
+              Most patients are seen within days, not weeks or months. We offer evening and weekend appointments to fit your schedule.
+            </div>
+          </details>
         </div>
       </section>
 
