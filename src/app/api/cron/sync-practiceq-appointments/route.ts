@@ -101,7 +101,10 @@ export async function POST(request: NextRequest) {
       errors: []
     }
 
-    // 3. For each organization, sync all patients
+    // Track which patients we've already synced (to avoid duplicates)
+    const syncedPatientIds = new Set<string>()
+
+    // 3. For each organization, sync affiliated patients
     for (const org of organizations) {
       console.log(`\n🏢 [Cron Sync] Processing organization: ${org.name}`)
 
@@ -136,6 +139,9 @@ export async function POST(request: NextRequest) {
       // Sync each patient
       for (const patient of patients) {
         if (!patient) continue
+
+        // Mark this patient as synced
+        syncedPatientIds.add(patient.id)
 
         try {
           console.log(`    🔄 Syncing: ${patient.first_name} ${patient.last_name} (${patient.email})`)
@@ -174,10 +180,63 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Calculate final stats
+    // 4. Sync patients WITHOUT organization affiliations (direct Moonlit patients)
+    console.log('\n🏥 [Cron Sync] Processing direct Moonlit patients (no org affiliation)...')
+
+    const { data: directPatients, error: directPatientsError } = await supabaseAdmin
+      .from('patients')
+      .select('id, first_name, last_name, email, status')
+      .eq('status', 'active')
+      .not('email', 'is', null)
+
+    if (directPatientsError) {
+      console.error('❌ [Cron Sync] Failed to fetch direct patients:', directPatientsError)
+    } else {
+      // Filter out patients we've already synced via org affiliations
+      const unaffiliatedPatients = directPatients?.filter(p => !syncedPatientIds.has(p.id)) || []
+
+      console.log(`  👥 Found ${unaffiliatedPatients.length} direct patients (not affiliated with any org)`)
+      stats.totalPatients += unaffiliatedPatients.length
+
+      for (const patient of unaffiliatedPatients) {
+        try {
+          console.log(`    🔄 Syncing: ${patient.first_name} ${patient.last_name} (${patient.email})`)
+
+          const result = await practiceQSyncService.syncPatientAppointments(
+            patient.id,
+            undefined, // No organization
+            {
+              startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            }
+          )
+
+          stats.patientsProcessed++
+          stats.totalAppointments.new += result.summary.new
+          stats.totalAppointments.updated += result.summary.updated
+          stats.totalAppointments.unchanged += result.summary.unchanged
+          stats.totalAppointments.errors += result.summary.errors
+
+          console.log(`    ✅ Synced: ${result.summary.new} new, ${result.summary.updated} updated, ${result.summary.unchanged} unchanged`)
+
+          await new Promise(resolve => setTimeout(resolve, 100)) // 100ms delay
+
+        } catch (error: any) {
+          stats.patientsFailed++
+          stats.errors.push({
+            patientId: patient.id,
+            patientName: `${patient.first_name} ${patient.last_name}`,
+            error: error.message || 'Unknown error'
+          })
+          console.error(`    ❌ Failed to sync ${patient.first_name} ${patient.last_name}:`, error.message)
+        }
+      }
+    }
+
+    // 5. Calculate final stats
     stats.duration = Date.now() - startTime
 
-    // 5. Update sync log
+    // 6. Update sync log
     await supabaseAdmin
       .from('sync_logs')
       .update({
@@ -198,7 +257,7 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', syncLogId)
 
-    // 6. Log completion
+    // 7. Log completion
     console.log('\n✅ [Cron Sync] Automated sync completed!')
     console.log(`   📊 Patients processed: ${stats.patientsProcessed}/${stats.totalPatients}`)
     console.log(`   ✨ Appointments: ${stats.totalAppointments.new} new, ${stats.totalAppointments.updated} updated, ${stats.totalAppointments.unchanged} unchanged`)
@@ -209,7 +268,7 @@ export async function POST(request: NextRequest) {
       console.warn(`   First few errors:`, stats.errors.slice(0, 3))
     }
 
-    // 7. Send email notification if there were significant errors
+    // 8. Send email notification if there were significant errors
     if (stats.patientsFailed > 5) {
       // TODO: Send email to admin@trymoonlit.com with error summary
       console.warn('⚠️ [Cron Sync] High error rate detected - admin notification recommended')
