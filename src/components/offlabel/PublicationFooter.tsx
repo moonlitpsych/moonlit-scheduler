@@ -12,7 +12,7 @@ export function PublicationFooter() {
             Rufus Sweeney practices at Moonlit Psychiatry in Salt Lake City.{' '}
             If you&apos;re in Utah and looking for a psychiatrist,{' '}
             <Link
-              href="https://booking.trymoonlit.com"
+              href="https://booking.trymoonlit.com/book-now"
               className="text-[#BF9C73] hover:underline"
             >
               we&apos;re accepting new patients
