@@ -788,6 +788,12 @@ src/app/api/offlabel/
 
 ## Future Enhancements (Not for v1)
 
+### Author Management (Priority)
+- **Author profile editor**: Admin UI for staff writers to add/edit their profile picture, bio, and credentials
+- **Author onboarding flow**: Self-service signup for new Moonlit staff writers
+- **Avatar upload**: Direct image upload to Supabase storage (currently uses static paths)
+
+### Content Features
 - Email newsletter integration (Buttondown or ConvertKit)
 - Audio generation (text-to-speech)
 - Related articles suggestions
@@ -796,6 +802,11 @@ src/app/api/offlabel/
 - Comments (probably not - keep it simple)
 - RSS feed
 - Search functionality
+
+### Voice Learning (Layer 3)
+- Edit tracking to capture how authors refine Claude's drafts
+- Automatic pattern extraction from edits to improve future drafts
+- Per-author style memory
 
 ---
 

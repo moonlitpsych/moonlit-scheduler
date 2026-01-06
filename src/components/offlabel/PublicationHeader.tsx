@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { ArrowLeft } from 'lucide-react'
 
 export function PublicationHeader() {
@@ -18,16 +19,27 @@ export function PublicationHeader() {
             </span>
           </Link>
 
-          {/* Navigation */}
-          <nav className="flex items-center space-x-6">
-            <Link
-              href="https://booking.trymoonlit.com"
-              className="flex items-center space-x-1 text-sm text-[#091747]/70 hover:text-[#BF9C73] transition-colors font-['Newsreader']"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Moonlit</span>
+          {/* Navigation + Logo */}
+          <div className="flex items-center space-x-4">
+            <nav className="flex items-center">
+              <Link
+                href="/"
+                className="flex items-center space-x-1 text-sm text-[#091747]/70 hover:text-[#BF9C73] transition-colors font-['Newsreader']"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Back to Moonlit</span>
+              </Link>
+            </nav>
+            <Link href="/" className="flex-shrink-0">
+              <Image
+                src="/images/offlabel/moonlit-logo.png"
+                alt="Moonlit Psychiatry"
+                width={32}
+                height={32}
+                className="h-8 w-8"
+              />
             </Link>
-          </nav>
+          </div>
         </div>
       </div>
     </header>

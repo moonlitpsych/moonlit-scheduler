@@ -100,6 +100,7 @@ export default async function ArticlePage({ params }: PageProps) {
               name={post.author.name}
               credentials={post.author.credentials}
               slug={post.author.slug}
+              avatarUrl={post.author.avatar_url}
               publishedAt={post.published_at}
               showLink={true}
             />
