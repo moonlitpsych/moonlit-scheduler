@@ -99,9 +99,28 @@ export function parseCitationString(citation: string): ParsedCitation {
  * Split citation into logical parts, handling abbreviations like "et al." and journal names
  */
 function splitCitationIntoParts(text: string): string[] {
+  // Handle "et al." specially - it marks end of authors
+  // Pattern: "Author A, Author B, et al. Title..."
+  const etAlMatch = text.match(/^(.+?(?:,\s*)?et\s+al\.)\s+(.+)$/i)
+  if (etAlMatch) {
+    const authors = etAlMatch[1].trim()
+    const rest = etAlMatch[2]
+
+    // Now split the rest (title + journal info) by periods
+    const restParts = splitByPeriods(rest)
+    return [authors, ...restParts]
+  }
+
+  // No "et al." - use standard splitting
+  return splitByPeriods(text)
+}
+
+/**
+ * Split text by sentence-ending periods, handling abbreviations
+ */
+function splitByPeriods(text: string): string[] {
   // Temporarily replace common abbreviations that contain periods
   const abbrevs: Record<string, string> = {
-    'et al.': 'ET_AL_PLACEHOLDER',
     'Jr.': 'JR_PLACEHOLDER',
     'Sr.': 'SR_PLACEHOLDER',
     'Dr.': 'DR_PLACEHOLDER',
@@ -138,12 +157,32 @@ function splitCitationIntoParts(text: string): string[] {
 /**
  * Generate a citation key from authors and year
  * e.g., "hori2025" or "kerner2016"
+ * Handles formats like "Moncrieff J" or "Kerner NA" where initials follow last name
  */
 export function generateCitationKey(authors: string, year: number | null): string {
-  // Get first author's last name
+  // Get first author's name (before the first comma)
   const firstAuthor = authors.split(',')[0].trim()
-  const lastName = firstAuthor.split(' ').pop()?.toLowerCase() || 'unknown'
-  const cleanName = lastName.replace(/[^a-z]/g, '')
 
-  return `${cleanName}${year || 'nd'}`
+  // Split by space and find the last name
+  // Format is typically "LastName Initials" like "Moncrieff J" or "Kerner NA"
+  const parts = firstAuthor.split(/\s+/)
+
+  // The last name is the first part that has more than 2 characters
+  // (initials are typically 1-2 chars like "J" or "NA")
+  let lastName = ''
+  for (const part of parts) {
+    if (part.length > 2 && !part.match(/^[A-Z]{1,3}$/)) {
+      lastName = part
+      break
+    }
+  }
+
+  // Fallback: just use first part if no clear last name found
+  if (!lastName && parts.length > 0) {
+    lastName = parts[0]
+  }
+
+  const cleanName = lastName.toLowerCase().replace(/[^a-z]/g, '')
+
+  return `${cleanName || 'unknown'}${year || 'nd'}`
 }
