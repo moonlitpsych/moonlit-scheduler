@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { routeGuardManager } from '@/lib/route-guards'
-import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity, GitBranch, FileText, DollarSign, ClipboardCheck } from 'lucide-react'
+import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity, GitBranch, FileText, DollarSign, ClipboardCheck, PenTool } from 'lucide-react'
 import Link from 'next/link'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
@@ -224,6 +224,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <BarChart3 className="h-4 w-4" />
             <span>Analytics</span>
             <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Beta</span>
+          </Link>
+
+          <Link
+            href="/admin/offlabel"
+            className={getNavLinkClasses('/admin/offlabel')}
+          >
+            <PenTool className="h-4 w-4" />
+            <span>Off-Label</span>
+            <span className="ml-auto px-1.5 py-0.5 text-xs font-medium bg-green-600 text-white rounded-full">New</span>
           </Link>
 
           {/* System Section */}

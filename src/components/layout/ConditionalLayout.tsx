@@ -7,10 +7,11 @@ import Footer from '@/components/layout/Footer'
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
-  // Hide public header/footer for partner dashboard routes
+  // Hide public header/footer for partner dashboard and Off-Label publication routes
   const isPartnerRoute = pathname?.startsWith('/partner-dashboard') || pathname?.startsWith('/partner-auth')
+  const isOffLabelRoute = pathname?.startsWith('/offlabel')
 
-  if (isPartnerRoute) {
+  if (isPartnerRoute || isOffLabelRoute) {
     return <>{children}</>
   }
 

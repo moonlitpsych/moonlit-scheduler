@@ -21,10 +21,16 @@
     "demo:enhance-providers": "tsx scripts/enhance-provider-data.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@google-apps/meet": "^0.7.1",
     "@react-pdf/renderer": "4.3.1",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.55.0",
+    "@tiptap/extension-link": "^3.15.0",
+    "@tiptap/extension-placeholder": "^3.15.0",
+    "@tiptap/pm": "^3.15.0",
+    "@tiptap/react": "^3.15.0",
+    "@tiptap/starter-kit": "^3.15.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/luxon": "^3.7.1",
     "@types/uuid": "^10.0.0",

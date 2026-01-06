@@ -1,0 +1,488 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, Save, Eye, Loader2, Check, Sparkles, PanelLeftClose, PanelLeft } from 'lucide-react'
+import Link from 'next/link'
+import { ArticleChat } from '@/components/offlabel/ArticleChat'
+import { RichTextEditor } from '@/components/offlabel/RichTextEditor'
+import { ArticleContent } from '@/components/offlabel/ArticleContent'
+import { ReferenceManager } from '@/components/offlabel/ReferenceManager'
+import { slugify } from '@/lib/offlabel/slugify'
+import type { OffLabelAuthor, PostSeries, GeneratedArticle, ConversationMessage } from '@/lib/offlabel/types'
+import { seriesConfig } from '@/lib/offlabel/types'
+
+type Reference = {
+  citation_key: string
+  authors: string
+  title: string
+  journal: string | null
+  year: number
+  doi: string | null
+  pmid: string | null
+  url: string | null
+}
+
+export default function WriteWithClaudePage() {
+  const router = useRouter()
+  const [authors, setAuthors] = useState<OffLabelAuthor[]>([])
+  const [loading, setLoading] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [showChat, setShowChat] = useState(true)
+  const [draftId, setDraftId] = useState<string | undefined>()
+
+  // Handle draft ID changes (including clearing for new conversations)
+  const handleDraftIdChange = (newDraftId: string) => {
+    if (newDraftId === '') {
+      // Starting a new conversation - clear the draft ID
+      setDraftId(undefined)
+      setConversation([])
+      setHasArticleFromClaude(false)
+      // Optionally clear the editor fields too
+      setTitle('')
+      setSlug('')
+      setExcerpt('')
+      setKeyTakeaway('')
+      setContent('')
+      setSeries('')
+      setTopics('')
+      setReferences([])
+      setSlugManuallyEdited(false)
+    } else {
+      setDraftId(newDraftId)
+    }
+  }
+  const [conversation, setConversation] = useState<ConversationMessage[]>([])
+  const [hasArticleFromClaude, setHasArticleFromClaude] = useState(false)
+
+  // Form state
+  const [title, setTitle] = useState('')
+  const [slug, setSlug] = useState('')
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
+  const [excerpt, setExcerpt] = useState('')
+  const [keyTakeaway, setKeyTakeaway] = useState('')
+  const [content, setContent] = useState('')
+  const [authorId, setAuthorId] = useState('')
+  const [series, setSeries] = useState<PostSeries | ''>('')
+  const [topics, setTopics] = useState('')
+  const [references, setReferences] = useState<Reference[]>([])
+
+  useEffect(() => {
+    fetchAuthors()
+  }, [])
+
+  // Auto-generate slug from title
+  useEffect(() => {
+    if (!slugManuallyEdited && title) {
+      setSlug(slugify(title))
+    }
+  }, [title, slugManuallyEdited])
+
+  const fetchAuthors = async () => {
+    try {
+      const response = await fetch('/api/admin/offlabel/authors')
+      if (response.ok) {
+        const data = await response.json()
+        setAuthors(data.authors || [])
+        if (data.authors?.length > 0) {
+          setAuthorId(data.authors[0].id)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch authors:', error)
+    }
+  }
+
+  const handleSlugChange = (value: string) => {
+    setSlugManuallyEdited(true)
+    setSlug(slugify(value))
+  }
+
+  const handleArticleUpdate = (article: GeneratedArticle) => {
+    console.log('[handleArticleUpdate] Full article object:', JSON.stringify(article, null, 2))
+
+    // Always update all fields, even empty ones (so we can see partial progress)
+    if (article.title) {
+      console.log('[handleArticleUpdate] Setting title to:', article.title)
+      setTitle(article.title)
+    }
+    if (article.slug) {
+      console.log('[handleArticleUpdate] Setting slug to:', article.slug)
+      setSlug(article.slug)
+    }
+    if (article.excerpt) {
+      console.log('[handleArticleUpdate] Setting excerpt to:', article.excerpt)
+      setExcerpt(article.excerpt)
+    }
+    if (article.key_takeaway) {
+      console.log('[handleArticleUpdate] Setting key_takeaway to:', article.key_takeaway)
+      setKeyTakeaway(article.key_takeaway)
+    }
+    if (article.content) {
+      console.log('[handleArticleUpdate] Setting content, length:', article.content.length)
+      setContent(article.content)
+    }
+    if (article.series) {
+      console.log('[handleArticleUpdate] Setting series to:', article.series)
+      setSeries(article.series)
+    }
+    if (article.topics?.length > 0) {
+      console.log('[handleArticleUpdate] Setting topics to:', article.topics)
+      setTopics(article.topics.join(', '))
+    }
+    if (article.references?.length > 0) {
+      console.log('[handleArticleUpdate] Setting references, count:', article.references.length)
+      setReferences(article.references.map((ref) => ({
+        citation_key: ref.citation_key,
+        authors: ref.authors,
+        title: ref.title,
+        journal: ref.journal || null,
+        year: ref.year,
+        doi: ref.doi || null,
+        pmid: ref.pmid || null,
+        url: ref.url || null,
+      })))
+    }
+
+    // Mark that we have article data
+    if (article.title || article.content) {
+      setHasArticleFromClaude(true)
+    }
+    if (article.slug) {
+      setSlugManuallyEdited(true)
+    }
+
+    console.log('[handleArticleUpdate] All setters called')
+  }
+
+  const handleSave = async (publish: boolean = false) => {
+    if (!title || !slug || !excerpt || !content) {
+      alert('Please fill in all required fields: title, slug, excerpt, and content.')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      // First, create the post
+      const postData = {
+        title,
+        slug,
+        excerpt,
+        content,
+        key_takeaway: keyTakeaway || null,
+        author_id: authorId || null,
+        series: (series as PostSeries) || null,
+        topics: topics ? topics.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        status: publish ? 'published' : 'draft',
+        published_at: publish ? new Date().toISOString() : null,
+      }
+
+      const response = await fetch('/api/admin/offlabel/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(postData),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to save post')
+      }
+
+      const { post } = await response.json()
+
+      // Then save references if we have any
+      if (references.length > 0 && post.id) {
+        for (const ref of references) {
+          await fetch('/api/admin/offlabel/references', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              post_id: post.id,
+              ...ref,
+            }),
+          })
+        }
+      }
+
+      router.push('/admin/offlabel')
+    } catch (error: any) {
+      console.error('Failed to save:', error)
+      alert(error.message || 'Failed to save post')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-[#FEF8F1] flex flex-col">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-stone-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Link
+              href="/admin/offlabel"
+              className="p-2 text-[#091747]/50 hover:text-[#091747] transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div className="flex items-center space-x-2">
+              <Sparkles className="h-5 w-5 text-[#BF9C73]" />
+              <h1 className="text-xl font-bold text-[#091747] font-['Newsreader']">
+                Write with Claude
+              </h1>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setShowChat(!showChat)}
+              className="flex items-center space-x-2 px-3 py-2 text-[#091747]/70 hover:text-[#091747] border border-stone-200 rounded-lg transition-colors"
+              title={showChat ? 'Hide chat' : 'Show chat'}
+            >
+              {showChat ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+            </button>
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="flex items-center space-x-2 px-4 py-2 text-[#091747]/70 hover:text-[#091747] border border-stone-200 rounded-lg transition-colors"
+            >
+              <Eye className="h-4 w-4" />
+              <span>{showPreview ? 'Edit' : 'Preview'}</span>
+            </button>
+            <button
+              onClick={() => handleSave(false)}
+              disabled={loading || !hasArticleFromClaude}
+              className="flex items-center space-x-2 px-4 py-2 text-[#091747] bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              <span>Save Draft</span>
+            </button>
+            <button
+              onClick={() => handleSave(true)}
+              disabled={loading || !hasArticleFromClaude}
+              className="flex items-center space-x-2 px-4 py-2 bg-[#BF9C73] hover:bg-[#A8865F] text-white rounded-lg transition-colors disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              <span>Publish</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Chat Panel */}
+        {showChat && (
+          <div className="w-[400px] flex-shrink-0 border-r border-stone-200 bg-white overflow-hidden flex flex-col">
+            <ArticleChat
+              draftId={draftId}
+              onDraftIdChange={handleDraftIdChange}
+              onArticleUpdate={handleArticleUpdate}
+              initialConversation={conversation}
+            />
+          </div>
+        )}
+
+        {/* Editor Panel */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-6 py-8">
+            {showPreview ? (
+              /* Preview Mode */
+              <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-8">
+                <h1 className="text-4xl font-bold font-['Newsreader'] text-[#091747] mb-4">
+                  {title || 'Untitled'}
+                </h1>
+                {keyTakeaway && (
+                  <div className="bg-[#FEF8F1] border-l-4 border-[#BF9C73] p-6 mb-8 rounded-r-lg">
+                    <p className="text-sm font-medium text-[#BF9C73] uppercase tracking-wide mb-2">
+                      Key Takeaway
+                    </p>
+                    <p className="text-lg text-[#091747] font-['Newsreader']">{keyTakeaway}</p>
+                  </div>
+                )}
+                <ArticleContent content={content || '<p>Start writing your article...</p>'} />
+
+                {references.length > 0 && (
+                  <div className="mt-12 pt-8 border-t border-stone-200">
+                    <h2 className="text-2xl font-semibold font-['Newsreader'] text-[#091747] mb-6">
+                      References
+                    </h2>
+                    <ol className="list-decimal pl-6 space-y-3">
+                      {references.map((ref, index) => (
+                        <li key={index} className="text-[#091747]/80 font-['Newsreader']">
+                          <span className="font-medium">{ref.authors}</span>.{' '}
+                          {ref.title}.{' '}
+                          {ref.journal && <em>{ref.journal}</em>}
+                          {ref.journal && '. '}
+                          {ref.year}.
+                          {ref.doi && (
+                            <a
+                              href={`https://doi.org/${ref.doi}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#BF9C73] hover:underline ml-1"
+                            >
+                              doi:{ref.doi}
+                            </a>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Edit Mode */
+              <div className="space-y-6">
+                {!hasArticleFromClaude && (
+                  <div className="bg-[#BF9C73]/10 border border-[#BF9C73]/30 rounded-xl p-6 text-center">
+                    <Sparkles className="h-8 w-8 text-[#BF9C73] mx-auto mb-3" />
+                    <h3 className="font-semibold text-[#091747] mb-2">Start with Claude</h3>
+                    <p className="text-[#091747]/70 text-sm">
+                      Use the chat panel on the left to describe what you want to write.
+                      Claude will help draft your article, then you can edit here.
+                    </p>
+                  </div>
+                )}
+
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-medium text-[#091747] mb-2">
+                    Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="The TB Drug That Invented Antidepressants"
+                    className="w-full px-4 py-3 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73] text-lg font-['Newsreader']"
+                  />
+                </div>
+
+                {/* Slug */}
+                <div>
+                  <label className="block text-sm font-medium text-[#091747] mb-2">
+                    URL Slug <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center">
+                    <span className="text-[#091747]/50 mr-2">/offlabel/</span>
+                    <input
+                      type="text"
+                      value={slug}
+                      onChange={(e) => handleSlugChange(e.target.value)}
+                      placeholder="the-tb-drug-that-invented-antidepressants"
+                      className="flex-1 px-4 py-2 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73]"
+                    />
+                  </div>
+                </div>
+
+                {/* Excerpt */}
+                <div>
+                  <label className="block text-sm font-medium text-[#091747] mb-2">
+                    Excerpt <span className="text-red-500">*</span>
+                    <span className="text-[#091747]/50 font-normal ml-2">
+                      ({excerpt.length}/160 characters)
+                    </span>
+                  </label>
+                  <textarea
+                    value={excerpt}
+                    onChange={(e) => setExcerpt(e.target.value)}
+                    placeholder="A brief description for search results and social sharing..."
+                    rows={3}
+                    className="w-full px-4 py-3 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73] resize-none"
+                  />
+                </div>
+
+                {/* Key Takeaway */}
+                <div>
+                  <label className="block text-sm font-medium text-[#091747] mb-2">
+                    Key Takeaway
+                    <span className="text-[#091747]/50 font-normal ml-2">(shown at top of article)</span>
+                  </label>
+                  <textarea
+                    value={keyTakeaway}
+                    onChange={(e) => setKeyTakeaway(e.target.value)}
+                    placeholder="If you've been struggling with depression and nothing seems to work..."
+                    rows={2}
+                    className="w-full px-4 py-3 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73] resize-none"
+                  />
+                </div>
+
+                {/* Metadata Row */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Author */}
+                  <div>
+                    <label className="block text-sm font-medium text-[#091747] mb-2">Author</label>
+                    <select
+                      value={authorId}
+                      onChange={(e) => setAuthorId(e.target.value)}
+                      className="w-full px-4 py-2 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73]"
+                    >
+                      <option value="">Select author...</option>
+                      {authors.map((author) => (
+                        <option key={author.id} value={author.id}>
+                          {author.name}, {author.credentials}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Series */}
+                  <div>
+                    <label className="block text-sm font-medium text-[#091747] mb-2">Series</label>
+                    <select
+                      value={series}
+                      onChange={(e) => setSeries(e.target.value as PostSeries | '')}
+                      className="w-full px-4 py-2 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73]"
+                    >
+                      <option value="">Select series...</option>
+                      {(Object.entries(seriesConfig) as [PostSeries, { label: string }][]).map(
+                        ([key, config]) => (
+                          <option key={key} value={key}>
+                            {config.label}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Topics */}
+                  <div>
+                    <label className="block text-sm font-medium text-[#091747] mb-2">
+                      Topics
+                      <span className="text-[#091747]/50 font-normal ml-2">(comma-separated)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={topics}
+                      onChange={(e) => setTopics(e.target.value)}
+                      placeholder="depression, antidepressants, history"
+                      className="w-full px-4 py-2 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73]"
+                    />
+                  </div>
+                </div>
+
+                {/* Content Editor */}
+                <div>
+                  <label className="block text-sm font-medium text-[#091747] mb-2">
+                    Content <span className="text-red-500">*</span>
+                  </label>
+                  <RichTextEditor
+                    content={content}
+                    onChange={setContent}
+                    placeholder="Start writing your article..."
+                  />
+                </div>
+
+                {/* References */}
+                <ReferenceManager
+                  references={references}
+                  onChange={setReferences}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
