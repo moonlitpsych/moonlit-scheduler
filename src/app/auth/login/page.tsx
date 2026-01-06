@@ -42,23 +42,44 @@ export default function LoginPage() {
   const handleAuthenticatedUser = async () => {
     try {
       const authContext = await authContextManager.getUserAuthContext()
-      
-      if (!authContext.user) return
-      
+
+      if (!authContext.user) {
+        console.log('No user found in auth context')
+        return
+      }
+
       console.log('Available roles:', authContext.availableRoles.map(r => r.role))
-      
+      console.log('Can switch context:', authContext.canSwitchContext)
+
+      let targetRoute = ''
+
       if (authContext.canSwitchContext) {
         console.log('Multi-role user detected, showing context chooser')
-        router.replace('/choose-context')
+        targetRoute = '/choose-context'
       } else if (authContext.availableRoles.length > 0) {
         const singleRole = authContext.availableRoles[0]
-        const route = authContextManager.getDashboardRoute(singleRole.role)
-        console.log(`Single role (${singleRole.role}) detected, redirecting to ${route}`)
-        router.replace(route)
+        targetRoute = authContextManager.getDashboardRoute(singleRole.role)
+        console.log(`Single role (${singleRole.role}) detected, redirecting to ${targetRoute}`)
       } else {
         console.log('No valid roles found, staying on login')
         setError('No access permissions found for your account')
+        return
       }
+
+      console.log('Attempting redirect to:', targetRoute)
+
+      // Use router.push with a small delay to ensure state is updated
+      // Then fallback to window.location if router doesn't navigate
+      router.push(targetRoute)
+
+      // Fallback: if still on login page after 500ms, force redirect
+      setTimeout(() => {
+        if (window.location.pathname === '/auth/login') {
+          console.log('Router redirect failed, using window.location fallback')
+          window.location.href = targetRoute
+        }
+      }, 500)
+
     } catch (err) {
       console.error('Error determining user context:', err)
       setError('Unable to determine account permissions')

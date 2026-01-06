@@ -23,8 +23,9 @@ export function ReferenceManager({
   const [showPasteModal, setShowPasteModal] = useState(false)
   const [pasteText, setPasteText] = useState('')
   const [parsing, setParsing] = useState(false)
+  const [parseProgress, setParseProgress] = useState<{ current: number; total: number } | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
-  const [parseSuccess, setParseSuccess] = useState(false)
+  const [parseResults, setParseResults] = useState<{ success: number; failed: number } | null>(null)
 
   const addReference = () => {
     const newRef: Reference = {
@@ -64,48 +65,80 @@ export function ReferenceManager({
   const handleParseCitation = async () => {
     if (!pasteText.trim()) return
 
+    // Split by blank lines to get individual citations
+    const citations = pasteText
+      .split(/\n\s*\n/)
+      .map(c => c.trim())
+      .filter(c => c.length > 10) // Filter out empty or too-short entries
+
+    if (citations.length === 0) {
+      setParseError('No valid citations found. Separate multiple citations with blank lines.')
+      return
+    }
+
     setParsing(true)
     setParseError(null)
-    setParseSuccess(false)
+    setParseResults(null)
+    setParseProgress({ current: 0, total: citations.length })
+
+    const newRefs: Reference[] = []
+    let failedCount = 0
 
     try {
-      const response = await fetch('/api/admin/offlabel/parse-citation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ citation: pasteText }),
-      })
+      for (let i = 0; i < citations.length; i++) {
+        setParseProgress({ current: i + 1, total: citations.length })
 
-      if (!response.ok) {
-        throw new Error('Failed to parse citation')
-      }
+        try {
+          const response = await fetch('/api/admin/offlabel/parse-citation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ citation: citations[i] }),
+          })
 
-      const data = await response.json()
+          if (!response.ok) {
+            failedCount++
+            continue
+          }
 
-      if (data.success && data.reference) {
-        const newRef: Reference = {
-          citation_key: data.reference.citation_key || '',
-          authors: data.reference.authors || '',
-          title: data.reference.title || '',
-          journal: data.reference.journal || null,
-          year: data.reference.year || new Date().getFullYear(),
-          doi: data.reference.doi || null,
-          pmid: data.reference.pmid || null,
-          url: null,
+          const data = await response.json()
+
+          if (data.success && data.reference) {
+            newRefs.push({
+              citation_key: data.reference.citation_key || '',
+              authors: data.reference.authors || '',
+              title: data.reference.title || '',
+              journal: data.reference.journal || null,
+              year: data.reference.year || new Date().getFullYear(),
+              doi: data.reference.doi || null,
+              pmid: data.reference.pmid || null,
+              url: null,
+            })
+          } else {
+            failedCount++
+          }
+        } catch {
+          failedCount++
         }
-
-        onChange([...references, newRef])
-        setExpandedIndex(references.length)
-        setParseSuccess(true)
-
-        // Close modal after short delay to show success
-        setTimeout(() => {
-          setShowPasteModal(false)
-          setPasteText('')
-          setParseSuccess(false)
-        }, 1000)
       }
+
+      // Add all successfully parsed references
+      if (newRefs.length > 0) {
+        onChange([...references, ...newRefs])
+        setExpandedIndex(references.length) // Expand first new reference
+      }
+
+      setParseResults({ success: newRefs.length, failed: failedCount })
+
+      // Close modal after showing results (longer delay for multiple)
+      setTimeout(() => {
+        setShowPasteModal(false)
+        setPasteText('')
+        setParseResults(null)
+        setParseProgress(null)
+      }, newRefs.length > 1 ? 2000 : 1000)
+
     } catch (error: any) {
-      setParseError(error.message || 'Failed to parse citation')
+      setParseError(error.message || 'Failed to parse citations')
     } finally {
       setParsing(false)
     }
@@ -115,7 +148,8 @@ export function ReferenceManager({
     setShowPasteModal(false)
     setPasteText('')
     setParseError(null)
-    setParseSuccess(false)
+    setParseResults(null)
+    setParseProgress(null)
   }
 
   return (
@@ -165,16 +199,17 @@ export function ReferenceManager({
 
             <div className="p-6 space-y-4">
               <p className="text-sm text-[#091747]/70">
-                Paste a citation in any standard format. We&apos;ll automatically extract the metadata and look up DOI/PMID.
+                Paste one or more citations. Separate multiple citations with a blank line. We&apos;ll automatically extract metadata and look up DOI/PMID.
               </p>
 
               <textarea
                 value={pasteText}
                 onChange={(e) => setPasteText(e.target.value)}
-                placeholder="e.g., Kerner NA, Roose SP. Obstructive sleep apnea is linked to depression and cognitive impairment. Am J Geriatr Psychiatry. 2016;24(6):496-508."
-                rows={4}
+                placeholder={"e.g., Kerner NA, Roose SP. Obstructive sleep apnea is linked to depression. Am J Geriatr Psychiatry. 2016;24(6):496-508.\n\nMoncrieff J, et al. The serotonin theory of depression. Mol Psychiatry. 2022;27(8):3243-3256."}
+                rows={6}
                 className="w-full px-4 py-3 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73] resize-none text-sm"
                 autoFocus
+                disabled={parsing}
               />
 
               {parseError && (
@@ -183,10 +218,27 @@ export function ReferenceManager({
                 </div>
               )}
 
-              {parseSuccess && (
-                <div className="flex items-center space-x-2 text-sm text-green-600 bg-green-50 px-4 py-2 rounded-lg">
+              {parseProgress && parsing && (
+                <div className="flex items-center space-x-2 text-sm text-[#BF9C73] bg-[#BF9C73]/10 px-4 py-2 rounded-lg">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Parsing citation {parseProgress.current} of {parseProgress.total}...</span>
+                </div>
+              )}
+
+              {parseResults && (
+                <div className={`flex items-center space-x-2 text-sm px-4 py-2 rounded-lg ${
+                  parseResults.failed === 0
+                    ? 'text-green-600 bg-green-50'
+                    : parseResults.success > 0
+                      ? 'text-amber-600 bg-amber-50'
+                      : 'text-red-600 bg-red-50'
+                }`}>
                   <Check className="h-4 w-4" />
-                  <span>Citation parsed successfully!</span>
+                  <span>
+                    {parseResults.success > 0 && `Added ${parseResults.success} citation${parseResults.success !== 1 ? 's' : ''}`}
+                    {parseResults.failed > 0 && parseResults.success > 0 && ', '}
+                    {parseResults.failed > 0 && `${parseResults.failed} failed to parse`}
+                  </span>
                 </div>
               )}
             </div>
@@ -200,18 +252,18 @@ export function ReferenceManager({
               </button>
               <button
                 onClick={handleParseCitation}
-                disabled={parsing || !pasteText.trim() || parseSuccess}
+                disabled={parsing || !pasteText.trim() || !!parseResults}
                 className="flex items-center space-x-2 px-4 py-2 bg-[#BF9C73] hover:bg-[#A8865F] text-white rounded-lg transition-colors disabled:opacity-50"
               >
                 {parsing ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Parsing...</span>
+                    <span>Parsing{parseProgress && parseProgress.total > 1 ? ` ${parseProgress.current}/${parseProgress.total}` : ''}...</span>
                   </>
-                ) : parseSuccess ? (
+                ) : parseResults ? (
                   <>
                     <Check className="h-4 w-4" />
-                    <span>Added!</span>
+                    <span>Done!</span>
                   </>
                 ) : (
                   <>
