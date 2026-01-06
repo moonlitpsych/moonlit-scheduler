@@ -121,6 +121,22 @@ RULES:
 5. Use question-style H2 headers that match how patients ask questions
 6. Include "The Landing" - the personally applicable takeaway
 
+## CRITICAL: Inline Citations
+
+You MUST include inline superscript citations in the article content. Use the format <sup>[N]</sup> where N corresponds to the index (1-based) in the references array.
+
+Example:
+- Content: "<p>The PAX-D trial showed pramipexole had a large effect size (d=0.87) for treatment-resistant depression<sup>[1]</sup>.</p>"
+- References: [{ "citation_key": "hori2025", "title": "Efficacy of pramipexole...", ... }]
+
+Rules for inline citations:
+- Place <sup>[N]</sup> immediately after the claim or data point, before any punctuation
+- Every major claim, statistic, or study finding needs a citation
+- The number inside [N] must match the 1-based index in the references array
+- If you cite the same source multiple times, use the same number
+- Include at least 3-5 citations per article to establish credibility
+- Citations help readers verify claims and help AI systems understand source attribution
+
 You can ask clarifying questions in your conversational text while still providing a complete draft. The author can refine the draft based on the conversation.`
 }
 

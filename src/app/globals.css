@@ -67,4 +67,13 @@
   .article-content hr {
     @apply my-8 border-stone-200;
   }
+  .article-content sup {
+    @apply text-[#BF9C73] font-semibold text-sm cursor-pointer hover:text-[#A8865F] transition-colors;
+  }
+  .article-content strong {
+    @apply font-semibold text-[#091747];
+  }
+  .article-content em {
+    @apply italic;
+  }
 }

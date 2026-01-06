@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronUp, ExternalLink, Clipboard, Loader2, Check, X } from 'lucide-react'
 import type { OffLabelReference, OffLabelDraftReference } from '@/lib/offlabel/types'
 
 type Reference = Omit<OffLabelReference | OffLabelDraftReference, 'id' | 'post_id' | 'draft_id' | 'created_at'> & {
@@ -20,6 +20,11 @@ export function ReferenceManager({
   readOnly = false,
 }: ReferenceManagerProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
+  const [showPasteModal, setShowPasteModal] = useState(false)
+  const [pasteText, setPasteText] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [parseSuccess, setParseSuccess] = useState(false)
 
   const addReference = () => {
     const newRef: Reference = {
@@ -56,6 +61,63 @@ export function ReferenceManager({
     setExpandedIndex(expandedIndex === index ? null : index)
   }
 
+  const handleParseCitation = async () => {
+    if (!pasteText.trim()) return
+
+    setParsing(true)
+    setParseError(null)
+    setParseSuccess(false)
+
+    try {
+      const response = await fetch('/api/admin/offlabel/parse-citation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ citation: pasteText }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to parse citation')
+      }
+
+      const data = await response.json()
+
+      if (data.success && data.reference) {
+        const newRef: Reference = {
+          citation_key: data.reference.citation_key || '',
+          authors: data.reference.authors || '',
+          title: data.reference.title || '',
+          journal: data.reference.journal || null,
+          year: data.reference.year || new Date().getFullYear(),
+          doi: data.reference.doi || null,
+          pmid: data.reference.pmid || null,
+          url: null,
+        }
+
+        onChange([...references, newRef])
+        setExpandedIndex(references.length)
+        setParseSuccess(true)
+
+        // Close modal after short delay to show success
+        setTimeout(() => {
+          setShowPasteModal(false)
+          setPasteText('')
+          setParseSuccess(false)
+        }, 1000)
+      }
+    } catch (error: any) {
+      setParseError(error.message || 'Failed to parse citation')
+    } finally {
+      setParsing(false)
+    }
+  }
+
+  const closePasteModal = () => {
+    setShowPasteModal(false)
+    setPasteText('')
+    setParseError(null)
+    setParseSuccess(false)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -66,16 +128,102 @@ export function ReferenceManager({
           </span>
         </label>
         {!readOnly && (
-          <button
-            type="button"
-            onClick={addReference}
-            className="flex items-center space-x-1 text-sm text-[#BF9C73] hover:text-[#A8865F] transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Reference</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={() => setShowPasteModal(true)}
+              className="flex items-center space-x-1 text-sm text-[#BF9C73] hover:text-[#A8865F] transition-colors"
+            >
+              <Clipboard className="h-4 w-4" />
+              <span>Paste Citation</span>
+            </button>
+            <button
+              type="button"
+              onClick={addReference}
+              className="flex items-center space-x-1 text-sm text-[#091747]/50 hover:text-[#091747] transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Manually</span>
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Paste Citation Modal */}
+      {showPasteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200">
+              <h3 className="text-lg font-semibold text-[#091747]">Paste Citation</h3>
+              <button
+                onClick={closePasteModal}
+                className="p-1 text-[#091747]/50 hover:text-[#091747] transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-[#091747]/70">
+                Paste a citation in any standard format. We&apos;ll automatically extract the metadata and look up DOI/PMID.
+              </p>
+
+              <textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                placeholder="e.g., Kerner NA, Roose SP. Obstructive sleep apnea is linked to depression and cognitive impairment. Am J Geriatr Psychiatry. 2016;24(6):496-508."
+                rows={4}
+                className="w-full px-4 py-3 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73] resize-none text-sm"
+                autoFocus
+              />
+
+              {parseError && (
+                <div className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg">
+                  {parseError}
+                </div>
+              )}
+
+              {parseSuccess && (
+                <div className="flex items-center space-x-2 text-sm text-green-600 bg-green-50 px-4 py-2 rounded-lg">
+                  <Check className="h-4 w-4" />
+                  <span>Citation parsed successfully!</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t border-stone-200 bg-stone-50">
+              <button
+                onClick={closePasteModal}
+                className="px-4 py-2 text-[#091747]/70 hover:text-[#091747] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleParseCitation}
+                disabled={parsing || !pasteText.trim() || parseSuccess}
+                className="flex items-center space-x-2 px-4 py-2 bg-[#BF9C73] hover:bg-[#A8865F] text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {parsing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Parsing...</span>
+                  </>
+                ) : parseSuccess ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    <span>Added!</span>
+                  </>
+                ) : (
+                  <>
+                    <Clipboard className="h-4 w-4" />
+                    <span>Parse & Add</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {references.length === 0 ? (
         <div className="text-center py-8 bg-stone-50 rounded-lg border-2 border-dashed border-stone-200">
