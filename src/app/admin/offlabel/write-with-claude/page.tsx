@@ -40,6 +40,7 @@ export default function WriteWithClaudePage() {
       setHasArticleFromClaude(false)
       // Optionally clear the editor fields too
       setTitle('')
+      setSubtitle('')
       setSlug('')
       setExcerpt('')
       setKeyTakeaway('')
@@ -57,6 +58,7 @@ export default function WriteWithClaudePage() {
 
   // Form state
   const [title, setTitle] = useState('')
+  const [subtitle, setSubtitle] = useState('')
   const [slug, setSlug] = useState('')
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [excerpt, setExcerpt] = useState('')
@@ -105,6 +107,10 @@ export default function WriteWithClaudePage() {
     if (article.title) {
       console.log('[handleArticleUpdate] Setting title to:', article.title)
       setTitle(article.title)
+    }
+    if (article.subtitle) {
+      console.log('[handleArticleUpdate] Setting subtitle to:', article.subtitle)
+      setSubtitle(article.subtitle)
     }
     if (article.slug) {
       console.log('[handleArticleUpdate] Setting slug to:', article.slug)
@@ -167,6 +173,7 @@ export default function WriteWithClaudePage() {
       // First, create the post
       const postData = {
         title,
+        subtitle: subtitle || null,
         slug,
         excerpt,
         content,
@@ -288,9 +295,14 @@ export default function WriteWithClaudePage() {
             {showPreview ? (
               /* Preview Mode */
               <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-8">
-                <h1 className="text-4xl font-bold font-['Newsreader'] text-[#091747] mb-4">
+                <h1 className="text-4xl font-bold font-['Newsreader'] text-[#091747] mb-2">
                   {title || 'Untitled'}
                 </h1>
+                {subtitle && (
+                  <p className="text-xl text-[#091747]/70 font-['Newsreader'] italic mb-6">
+                    {subtitle}
+                  </p>
+                )}
                 {keyTakeaway && (
                   <div className="bg-[#FEF8F1] border-l-4 border-[#BF9C73] p-6 mb-8 rounded-r-lg">
                     <p className="text-sm font-medium text-[#BF9C73] uppercase tracking-wide mb-2">
@@ -355,6 +367,21 @@ export default function WriteWithClaudePage() {
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="The TB Drug That Invented Antidepressants"
                     className="w-full px-4 py-3 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73] text-lg font-['Newsreader']"
+                  />
+                </div>
+
+                {/* Subtitle */}
+                <div>
+                  <label className="block text-sm font-medium text-[#091747] mb-2">
+                    Subtitle
+                    <span className="text-[#091747]/50 font-normal ml-2">(hook or punchline)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={subtitle}
+                    onChange={(e) => setSubtitle(e.target.value)}
+                    placeholder="The accidental discovery that changed everything"
+                    className="w-full px-4 py-2 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73] font-['Newsreader'] text-[#091747]/80 italic"
                   />
                 </div>
 

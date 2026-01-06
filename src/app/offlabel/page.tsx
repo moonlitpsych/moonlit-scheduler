@@ -69,6 +69,7 @@ export default async function OffLabelHomePage({ searchParams }: PageProps) {
             <ArticleCard
               key={post.id}
               title={post.title}
+              subtitle={post.subtitle}
               slug={post.slug}
               excerpt={post.excerpt}
               author={

@@ -5,6 +5,7 @@ import { seriesConfig } from '@/lib/offlabel/types'
 
 interface ArticleCardProps {
   title: string
+  subtitle?: string | null
   slug: string
   excerpt: string
   author: {
@@ -18,6 +19,7 @@ interface ArticleCardProps {
 
 export function ArticleCard({
   title,
+  subtitle,
   slug,
   excerpt,
   author,
@@ -42,9 +44,16 @@ export function ArticleCard({
         )}
 
         {/* Title */}
-        <h2 className="text-xl font-bold font-['Newsreader'] text-[#091747] mb-2 group-hover:text-[#BF9C73] transition-colors">
+        <h2 className="text-xl font-bold font-['Newsreader'] text-[#091747] mb-1 group-hover:text-[#BF9C73] transition-colors">
           {title}
         </h2>
+
+        {/* Subtitle */}
+        {subtitle && (
+          <p className="text-base text-[#091747]/60 font-['Newsreader'] italic mb-2">
+            {subtitle}
+          </p>
+        )}
 
         {/* Excerpt */}
         <p className="text-[#091747]/70 font-['Newsreader'] text-base mb-4 line-clamp-3">

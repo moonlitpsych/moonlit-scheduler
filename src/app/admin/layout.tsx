@@ -119,9 +119,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   return (
     <div className="min-h-screen bg-[#FEF8F1] flex">
       {/* Admin Sidebar */}
-      <div className="w-64 bg-white shadow-lg">
+      <div className="w-64 bg-white shadow-lg flex flex-col h-screen">
         {/* Admin Header */}
-        <div className="p-6 border-b border-stone-200">
+        <div className="p-6 border-b border-stone-200 flex-shrink-0">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-[#BF9C73] rounded-lg">
               <Settings className="h-5 w-5 text-white" />
@@ -134,7 +134,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
 
         {/* Admin Navigation */}
-        <nav className="p-4 space-y-2">
+        <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
           <Link
             href="/admin/patients"
             className={getNavLinkClasses('/admin/patients')}
@@ -252,7 +252,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </nav>
 
         {/* Admin User Info & Logout */}
-        <div className="absolute bottom-0 left-0 w-64 p-4 border-t border-stone-200 bg-white">
+        <div className="flex-shrink-0 p-4 border-t border-stone-200 bg-white">
           <div className="bg-[#BF9C73] rounded-lg">
             <ContextSwitcher />
           </div>

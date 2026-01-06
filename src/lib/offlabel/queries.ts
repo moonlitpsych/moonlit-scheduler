@@ -255,6 +255,7 @@ export async function createPost(input: CreatePostInput): Promise<OffLabelPost> 
     .from('offlabel_posts')
     .insert([{
       title: input.title,
+      subtitle: input.subtitle || null,
       slug: input.slug,
       excerpt: input.excerpt,
       content: input.content,
@@ -285,6 +286,7 @@ export async function updatePost(id: string, input: UpdatePostInput): Promise<Of
   const updateData: Record<string, unknown> = {}
 
   if (input.title !== undefined) updateData.title = input.title
+  if (input.subtitle !== undefined) updateData.subtitle = input.subtitle
   if (input.slug !== undefined) updateData.slug = input.slug
   if (input.excerpt !== undefined) updateData.excerpt = input.excerpt
   if (input.content !== undefined) updateData.content = input.content

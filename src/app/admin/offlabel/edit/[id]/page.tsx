@@ -25,6 +25,7 @@ export default function EditPostPage({ params }: PageProps) {
 
   // Form state
   const [title, setTitle] = useState('')
+  const [subtitle, setSubtitle] = useState('')
   const [slug, setSlug] = useState('')
   const [excerpt, setExcerpt] = useState('')
   const [keyTakeaway, setKeyTakeaway] = useState('')
@@ -46,6 +47,7 @@ export default function EditPostPage({ params }: PageProps) {
         const p = data.post as OffLabelPostWithAuthorAndRefs
         setPost(p)
         setTitle(p.title)
+        setSubtitle(p.subtitle || '')
         setSlug(p.slug)
         setExcerpt(p.excerpt)
         setKeyTakeaway(p.key_takeaway || '')
@@ -88,6 +90,7 @@ export default function EditPostPage({ params }: PageProps) {
     try {
       const postData: UpdatePostInput = {
         title,
+        subtitle: subtitle || null,
         slug,
         excerpt,
         content,
@@ -286,7 +289,12 @@ export default function EditPostPage({ params }: PageProps) {
         {showPreview ? (
           /* Preview Mode */
           <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-8">
-            <h1 className="text-4xl font-bold font-['Newsreader'] text-[#091747] mb-4">{title || 'Untitled'}</h1>
+            <h1 className="text-4xl font-bold font-['Newsreader'] text-[#091747] mb-2">{title || 'Untitled'}</h1>
+            {subtitle && (
+              <p className="text-xl text-[#091747]/70 font-['Newsreader'] italic mb-6">
+                {subtitle}
+              </p>
+            )}
             {keyTakeaway && (
               <div className="bg-[#FEF8F1] border-l-4 border-[#BF9C73] p-6 mb-8 rounded-r-lg">
                 <p className="text-sm font-medium text-[#BF9C73] uppercase tracking-wide mb-2">
@@ -311,6 +319,21 @@ export default function EditPostPage({ params }: PageProps) {
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="The TB Drug That Invented Antidepressants"
                 className="w-full px-4 py-3 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73] text-lg font-['Newsreader']"
+              />
+            </div>
+
+            {/* Subtitle */}
+            <div>
+              <label className="block text-sm font-medium text-[#091747] mb-2">
+                Subtitle
+                <span className="text-[#091747]/50 font-normal ml-2">(hook or punchline)</span>
+              </label>
+              <input
+                type="text"
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+                placeholder="The accidental discovery that changed everything"
+                className="w-full px-4 py-2 border-2 border-stone-200 rounded-lg focus:outline-none focus:border-[#BF9C73] font-['Newsreader'] text-[#091747]/80 italic"
               />
             </div>
 

@@ -82,6 +82,7 @@ Great topic! Here's what I'm thinking... [your conversational text here]
 \`\`\`json
 {
   "title": "Article title here",
+  "subtitle": "A punchy hook that complements the title - creates intrigue or delivers a mini-punchline",
   "slug": "article-slug-here",
   "excerpt": "150-160 character excerpt for SEO",
   "key_takeaway": "One specific, citable sentence with numbers/study names",
@@ -157,6 +158,7 @@ function parseArticleFromResponse(response: string): GeneratedArticle | null {
 
     return {
       title: parsed.title || '',
+      subtitle: parsed.subtitle || '',
       slug: parsed.slug || '',
       excerpt: parsed.excerpt || '',
       key_takeaway: parsed.key_takeaway || '',
@@ -298,6 +300,7 @@ export async function POST(request: NextRequest) {
 
     if (article) {
       updateData.title = article.title || draft.title
+      updateData.subtitle = article.subtitle || draft.subtitle
       updateData.slug = article.slug || draft.slug
       updateData.excerpt = article.excerpt || draft.excerpt
       updateData.content = article.content || draft.content

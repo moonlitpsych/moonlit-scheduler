@@ -20,6 +20,7 @@ export interface OffLabelAuthor {
 export interface OffLabelPost {
   id: string
   title: string
+  subtitle: string | null
   slug: string
   excerpt: string
   content: string
@@ -66,6 +67,7 @@ export interface OffLabelAuthorWithPosts extends OffLabelAuthor {
 // Input types for create/update operations
 export interface CreatePostInput {
   title: string
+  subtitle?: string | null
   slug: string
   excerpt: string
   content: string
@@ -79,6 +81,7 @@ export interface CreatePostInput {
 
 export interface UpdatePostInput {
   title?: string
+  subtitle?: string | null
   slug?: string
   excerpt?: string
   content?: string
@@ -130,6 +133,7 @@ export interface ConversationMessage {
 export interface OffLabelDraft {
   id: string
   title: string | null
+  subtitle: string | null
   slug: string | null
   excerpt: string | null
   content: string | null
@@ -165,6 +169,7 @@ export interface OffLabelDraftWithRefs extends OffLabelDraft {
 // Claude API generation response
 export interface GeneratedArticle {
   title: string
+  subtitle: string
   slug: string
   excerpt: string
   key_takeaway: string

@@ -89,9 +89,16 @@ export default async function ArticlePage({ params }: PageProps) {
         )}
 
         {/* Title */}
-        <h1 className="text-4xl sm:text-5xl font-bold font-['Newsreader'] text-[#091747] mb-6 leading-tight">
+        <h1 className="text-4xl sm:text-5xl font-bold font-['Newsreader'] text-[#091747] mb-3 leading-tight">
           {post.title}
         </h1>
+
+        {/* Subtitle */}
+        {post.subtitle && (
+          <p className="text-xl sm:text-2xl text-[#091747]/70 font-['Newsreader'] italic mb-6 leading-relaxed">
+            {post.subtitle}
+          </p>
+        )}
 
         {/* Author Byline */}
         {post.author && (
