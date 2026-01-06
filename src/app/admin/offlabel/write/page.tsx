@@ -6,9 +6,21 @@ import { ArrowLeft, Save, Eye, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { RichTextEditor } from '@/components/offlabel/RichTextEditor'
 import { ArticleContent } from '@/components/offlabel/ArticleContent'
+import { ReferenceManager } from '@/components/offlabel/ReferenceManager'
 import { slugify } from '@/lib/offlabel/slugify'
 import type { OffLabelAuthor, PostSeries, CreatePostInput } from '@/lib/offlabel/types'
 import { seriesConfig } from '@/lib/offlabel/types'
+
+type Reference = {
+  citation_key: string
+  authors: string
+  title: string
+  journal: string | null
+  year: number
+  doi: string | null
+  pmid: string | null
+  url: string | null
+}
 
 export default function WritePostPage() {
   const router = useRouter()
@@ -27,6 +39,7 @@ export default function WritePostPage() {
   const [authorId, setAuthorId] = useState('')
   const [series, setSeries] = useState<PostSeries | ''>('')
   const [topics, setTopics] = useState('')
+  const [references, setReferences] = useState<Reference[]>([])
 
   useEffect(() => {
     fetchAuthors()
@@ -90,6 +103,22 @@ export default function WritePostPage() {
       })
 
       if (response.ok) {
+        const { post } = await response.json()
+
+        // Save references if we have any
+        if (references.length > 0 && post.id) {
+          for (const ref of references) {
+            await fetch('/api/admin/offlabel/references', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                post_id: post.id,
+                ...ref,
+              }),
+            })
+          }
+        }
+
         router.push('/admin/offlabel')
       } else {
         const error = await response.json()
@@ -165,6 +194,35 @@ export default function WritePostPage() {
               </div>
             )}
             <ArticleContent content={content || '<p>Start writing your article...</p>'} />
+
+            {references.length > 0 && (
+              <div className="mt-12 pt-8 border-t border-stone-200">
+                <h2 className="text-2xl font-semibold font-['Newsreader'] text-[#091747] mb-6">
+                  References
+                </h2>
+                <ol className="list-decimal pl-6 space-y-3">
+                  {references.map((ref, index) => (
+                    <li key={index} className="text-[#091747]/80 font-['Newsreader']">
+                      <span className="font-medium">{ref.authors}</span>.{' '}
+                      {ref.title}.{' '}
+                      {ref.journal && <em>{ref.journal}</em>}
+                      {ref.journal && '. '}
+                      {ref.year}.
+                      {ref.doi && (
+                        <a
+                          href={`https://doi.org/${ref.doi}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#BF9C73] hover:underline ml-1"
+                        >
+                          doi:{ref.doi}
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
           </div>
         ) : (
           /* Edit Mode */
@@ -312,6 +370,12 @@ export default function WritePostPage() {
                 placeholder="Start writing your article..."
               />
             </div>
+
+            {/* References */}
+            <ReferenceManager
+              references={references}
+              onChange={setReferences}
+            />
           </div>
         )}
       </div>

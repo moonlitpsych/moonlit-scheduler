@@ -1,3 +1,13 @@
+interface Reference {
+  authors: string
+  title: string
+  journal: string | null
+  year: number
+  doi: string | null
+  pmid: string | null
+  url: string | null
+}
+
 interface ArticleStructuredDataProps {
   title: string
   description: string
@@ -10,6 +20,7 @@ interface ArticleStructuredDataProps {
     slug: string
   }
   keyTakeaway?: string | null
+  references?: Reference[]
 }
 
 export function ArticleStructuredData({
@@ -20,6 +31,7 @@ export function ArticleStructuredData({
   updatedAt,
   author,
   keyTakeaway,
+  references = [],
 }: ArticleStructuredDataProps) {
   const baseUrl = 'https://booking.trymoonlit.com'
 
@@ -59,6 +71,19 @@ export function ArticleStructuredData({
     },
     ...(keyTakeaway && {
       abstract: keyTakeaway,
+    }),
+    // Schema.org citation property for academic references
+    ...(references.length > 0 && {
+      citation: references.map((ref) => ({
+        '@type': 'ScholarlyArticle',
+        name: ref.title,
+        author: ref.authors,
+        datePublished: ref.year.toString(),
+        ...(ref.journal && { isPartOf: { '@type': 'Periodical', name: ref.journal } }),
+        ...(ref.doi && { identifier: { '@type': 'PropertyValue', propertyID: 'doi', value: ref.doi } }),
+        ...(ref.doi && { url: `https://doi.org/${ref.doi}` }),
+        ...(ref.pmid && { sameAs: `https://pubmed.ncbi.nlm.nih.gov/${ref.pmid}/` }),
+      })),
     }),
   }
 

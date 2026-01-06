@@ -72,6 +72,15 @@ export default async function ArticlePage({ params }: PageProps) {
             slug: post.author.slug,
           }}
           keyTakeaway={post.key_takeaway}
+          references={post.references?.map((ref) => ({
+            authors: ref.authors,
+            title: ref.title,
+            journal: ref.journal,
+            year: ref.year,
+            doi: ref.doi,
+            pmid: ref.pmid,
+            url: ref.url,
+          }))}
         />
       )}
 
