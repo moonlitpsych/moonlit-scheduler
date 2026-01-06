@@ -130,6 +130,25 @@ export default function HomePage() {
 
       </section>
 
+      {/* Read Our Journal - Off-Label */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+        <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+          <h2 className="text-2xl sm:text-3xl font-['Newsreader'] font-light text-[#091747] mb-4">
+            Read Our Journal
+          </h2>
+          <p className="text-base text-[#091747]/70 font-['Newsreader'] mb-6 max-w-2xl mx-auto">
+            Insights on mental health, psychiatry, and wellness from our doctors. Evidence-based perspectives on the topics that matter most.
+          </p>
+          <Link
+            href="/offlabel"
+            className="inline-block bg-[#BF9C73] hover:bg-[#A8865F] text-white px-8 py-4 rounded-xl font-['Newsreader'] transition-all duration-300 hover:shadow-lg hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-[#BF9C73]/20"
+            aria-label="Read Off-Label, our journal on mental health and psychiatry"
+          >
+            Explore Off-Label
+          </Link>
+        </div>
+      </section>
+
       {/* U of U Employee Callout */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
         <div className="bg-[#091747] rounded-2xl p-8 sm:p-10">

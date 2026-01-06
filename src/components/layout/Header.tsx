@@ -21,8 +21,7 @@ export default function Header() {
     }, [])
 
     const navigation = [
-        { name: 'Off-Label', href: '/offlabel' },
-        { name: 'Our practitioners', href: '/practitioners' },
+        { name: 'Our Doctors', href: '/practitioners' },
         { name: 'Ways to pay', href: '/ways-to-pay' }
     ]
 

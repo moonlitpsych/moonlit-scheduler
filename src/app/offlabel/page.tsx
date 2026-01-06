@@ -24,10 +24,10 @@ export default async function OffLabelHomePage({ searchParams }: PageProps) {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Hero Section */}
       <div className="text-center mb-12">
-        <h1 className="text-4xl sm:text-5xl font-bold font-['Newsreader'] text-[#091747] mb-4">
+        <h1 className="text-5xl sm:text-6xl font-light font-['Newsreader'] text-[#091747] mb-6 tracking-tight">
           Off-Label
         </h1>
-        <p className="text-xl text-[#091747]/70 font-['Newsreader'] max-w-2xl mx-auto">
+        <p className="text-lg sm:text-xl text-[#091747]/60 font-['Newsreader'] font-light max-w-2xl mx-auto leading-relaxed">
           Stories of psychiatric treatments discovered by accident, rediscovered from history,
           or used in ways their inventors never imagined.
         </p>

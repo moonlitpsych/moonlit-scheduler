@@ -27,7 +27,7 @@ export default function OffLabelLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-[#FEF8F1] flex flex-col">
       <PublicationHeader />
       <main className="flex-grow">{children}</main>
       <PublicationFooter />

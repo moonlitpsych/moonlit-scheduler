@@ -3,27 +3,34 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft } from 'lucide-react'
+import { usePathname } from 'next/navigation'
 
 export function PublicationHeader() {
+  const pathname = usePathname()
+
+  // On article pages, show "Back to Articles" → /offlabel
+  // On the main Off-Label page, show "Back to Moonlit" → /
+  const isArticlePage = pathname !== '/offlabel' && pathname.startsWith('/offlabel')
+  const backLink = isArticlePage ? '/offlabel' : '/'
+  const backText = isArticlePage ? 'Back to Articles' : 'Back to Moonlit'
+
   return (
-    <header className="sticky top-0 z-50 bg-white border-b border-stone-200">
+    <header className="sticky top-0 z-50 bg-[#FEF8F1] border-b border-stone-200">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo + Wordmark */}
-          <Link href="/offlabel" className="flex items-center space-x-3">
+          {/* Logo + Publication Name (Levels-style branding) */}
+          <Link href="/offlabel" className="flex items-center">
             <Image
-              src="/images/offlabel/moonlit-logo.png"
+              src="/images/MOONLIT-LOGO-WITH-TITLE.png"
               alt="Moonlit Psychiatry"
-              width={32}
-              height={32}
-              className="h-8 w-8"
+              width={140}
+              height={42}
+              className="h-8 w-auto"
             />
-            <div className="flex flex-col">
-              <span className="text-2xl font-bold font-['Newsreader'] text-[#091747] tracking-tight">
+            <div className="hidden sm:flex items-center ml-3">
+              <div className="w-px h-6 bg-[#091747]/20 mr-3" />
+              <span className="text-base font-['Newsreader'] font-extralight tracking-widest text-[#091747]/80 uppercase">
                 Off-Label
-              </span>
-              <span className="text-xs text-[#091747]/60 font-['Newsreader'] -mt-1">
-                A Moonlit Psychiatry Publication
               </span>
             </div>
           </Link>
@@ -31,11 +38,11 @@ export function PublicationHeader() {
           {/* Navigation */}
           <nav className="flex items-center">
             <Link
-              href="/"
+              href={backLink}
               className="flex items-center space-x-1 text-sm text-[#091747]/70 hover:text-[#BF9C73] transition-colors font-['Newsreader']"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Back to Moonlit</span>
+              <span>{backText}</span>
             </Link>
           </nav>
         </div>

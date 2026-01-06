@@ -157,7 +157,7 @@ export default function PractitionersPage() {
       <div className="min-h-screen bg-[#FEF8F1] flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-2 border-[#BF9C73] border-t-transparent mx-auto mb-4"></div>
-          <p className="text-[#091747] font-['Newsreader']">Loading our practitioners...</p>
+          <p className="text-[#091747] font-['Newsreader']">Loading our physicians...</p>
         </div>
       </div>
     )
@@ -169,7 +169,7 @@ export default function PractitionersPage() {
         {/* Hero Section */}
         <div className="text-center mb-8 lg:mb-12">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-['Newsreader'] font-light text-[#091747] mb-4 lg:mb-6">
-            Our Practitioners
+            Our Physicians
           </h1>
           <p className="text-lg sm:text-xl text-[#091747]/70 max-w-3xl mx-auto font-['Newsreader'] leading-relaxed px-4">
             We only work with physicians with the best training — both in medicine and in bedside manner.
@@ -215,7 +215,7 @@ export default function PractitionersPage() {
                   </div>
                   <input
                     type="text"
-                    placeholder="Search practitioners..."
+                    placeholder="Search doctors..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="
@@ -240,7 +240,7 @@ export default function PractitionersPage() {
                 {/* Filter Providers Dropdown */}
                 <div className="relative">
                   <label className="block text-sm text-[#091747] font-['Newsreader'] font-medium mb-2">
-                    Ways to pay
+                    Filter by insurance
                   </label>
                   
                   <div className="relative">
@@ -255,9 +255,9 @@ export default function PractitionersPage() {
                       "
                     >
                       <span className="text-left">
-                        {selectedPayers.length === 0 
-                          ? "Filter providers" 
-                          : `${selectedPayers.length} insurance type${selectedPayers.length !== 1 ? 's' : ''} selected`
+                        {selectedPayers.length === 0
+                          ? "Select insurance"
+                          : `${selectedPayers.length} insurance${selectedPayers.length !== 1 ? ' plans' : ''} selected`
                         }
                       </span>
                       <svg 
@@ -408,9 +408,9 @@ export default function PractitionersPage() {
                 {/* Results Summary */}
                 <div className="pt-4 border-t border-stone-200">
                   <p className="text-sm text-[#091747]/70 font-['Newsreader']">
-                    {filteredProviders.length} practitioner{filteredProviders.length !== 1 ? 's' : ''}
+                    {filteredProviders.length} doctor{filteredProviders.length !== 1 ? 's' : ''}
                     {searchQuery && ` matching "${searchQuery}"`}
-                    {selectedPayers.length > 0 && ` accepting ${selectedPayers.length > 1 ? selectedPayers.length + ' insurance types' : selectedPayers[0].name}`}
+                    {selectedPayers.length > 0 && ` accepting ${selectedPayers.length > 1 ? selectedPayers.length + ' insurance plans' : selectedPayers[0].name}`}
                     {selectedState !== 'all' && ` in ${selectedState}`}
                   </p>
                 </div>
@@ -486,10 +486,10 @@ export default function PractitionersPage() {
                   </svg>
                 </div>
                 <h3 className="text-xl text-[#091747] font-['Newsreader'] mb-2">
-                  No practitioners found
+                  No doctors found
                 </h3>
                 <p className="text-[#091747]/70 font-['Newsreader'] text-lg mb-6">
-                  {searchQuery ? `No practitioners match "${searchQuery}"` : 'No practitioners match your current filters'}. 
+                  {searchQuery ? `No doctors match "${searchQuery}"` : 'No doctors match your current filters'}.
                   Please try adjusting your search or filters.
                 </p>
               </div>
@@ -502,7 +502,7 @@ export default function PractitionersPage() {
                   Ready to get started?
                 </h2>
                 <p className="text-base lg:text-lg text-[#091747]/70 font-['Newsreader'] mb-6">
-                  Book your appointment with any of our practitioners today.
+                  Book your appointment with any of our doctors today.
                 </p>
                 <Link
                   href="/book-now"
