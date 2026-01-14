@@ -58,7 +58,11 @@ export default function PayerPlansInlineDisplay({
       {/* Collapsed state: Show counts + toggle button */}
       {!isExpanded && (
         <div className="flex items-center justify-between">
-          <div className="text-xs text-slate-600">
+          <button
+            onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
+            className="text-xs text-slate-600 hover:text-slate-800 transition-colors cursor-pointer"
+            aria-label="View plan details"
+          >
             <span className="font-medium">Accepted ({accepted.length})</span>
             {notAccepted.length > 0 && (
               <>
@@ -66,7 +70,7 @@ export default function PayerPlansInlineDisplay({
                 <span className="font-medium">Not accepted ({notAccepted.length})</span>
               </>
             )}
-          </div>
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
             className="text-xs text-[#BF9C73] hover:text-[#A8865F] font-medium flex items-center gap-1 transition-colors"
