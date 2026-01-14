@@ -9,23 +9,23 @@ export default function HomePage() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-16">
         <div className="text-left max-w-4xl">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl text-[#091747] font-['Newsreader'] font-light leading-tight mb-8">
-            Get psychiatric care <span className="relative inline-block px-2 py-1">
-              <img 
-                src="/images/text-stroke-of-color.png" 
+            Psychiatry that takes <span className="relative inline-block px-2 py-1">
+              <img
+                src="/images/text-stroke-of-color.png"
                 alt=""
                 className="absolute inset-0 w-full h-full object-contain z-0"
               />
-              <span className="text-[#091747] relative z-10">faster</span>
-            </span>.
+              <span className="text-[#091747] relative z-10">you</span>
+            </span> seriously.
           </h1>
 
           {/* Subtitle - Enhanced */}
           <div className="max-w-3xl mb-8">
             <p className="text-lg sm:text-xl text-[#091747] font-['Newsreader'] leading-relaxed mb-4 font-light">
-              Fast. Telehealth. And serving all of Utah.
+              Clear availability. Straightforward booking. Care that's thoughtful, evidence-based, and&nbsp;unhurried.
             </p>
             <p className="text-base sm:text-lg text-[#091747]/80 font-['Newsreader'] leading-relaxed mb-8">
-              Meet an empathetic, invested professional as soon as tomorrow.
+              Telehealth serving Utah and Idaho.
             </p>
           </div>
 
@@ -104,24 +104,66 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Testimonial 3 - Full Width on Mobile, Centered on Desktop */}
-          <div className="lg:col-span-2 lg:max-w-2xl lg:mx-auto">
+          {/* Testimonial 3 */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-lg transition-shadow duration-300">
+            <div className="flex items-start space-x-6">
+              <div className="flex-shrink-0">
+                <Image
+                  src="/images/my-notion-face-transparent-(3)-md@2x.png"
+                  alt="Patient testimonial"
+                  width={80}
+                  height={80}
+                  className="rounded-full"
+                />
+              </div>
+              <div className="flex-1">
+                <blockquote className="text-[#091747] font-['Newsreader'] leading-relaxed mb-4 text-base">
+                  "You're kind and personable. Way less robotic than others I've seen."
+                </blockquote>
+                <cite className="text-[#091747]/60 text-sm font-['Newsreader']">— Anonymous patient</cite>
+              </div>
+            </div>
+          </div>
+
+          {/* Testimonial 4 - Care Manager */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-lg transition-shadow duration-300">
+            <div className="flex items-start space-x-6">
+              <div className="flex-shrink-0">
+                <Image
+                  src="/images/testimonial-bw.png"
+                  alt="Care manager testimonial"
+                  width={80}
+                  height={80}
+                  className="rounded-full"
+                />
+              </div>
+              <div className="flex-1">
+                <blockquote className="text-[#091747] font-['Newsreader'] leading-relaxed mb-4 text-base">
+                  "Moonlit's overall dedication to patients and quality of care is starting to really show now that we have gotten two or three from the community who were already established with you and concerned that they would be required to change providers when they entered our treatment program. They were all very happy and relieved to know that we work with you guys. I think all of your providers are incredibly compassionate and are wonderful with our clients and you guys all communicate so well (it's been quite refreshing)."
+                </blockquote>
+                <cite className="text-[#091747]/60 text-sm font-['Newsreader']">— B.W., care manager at a local treatment center</cite>
+              </div>
+            </div>
+          </div>
+
+          {/* Testimonial 5 - Featured Full Width */}
+          <div className="lg:col-span-2 lg:max-w-3xl lg:mx-auto">
             <div className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-lg transition-shadow duration-300">
               <div className="flex items-start space-x-6">
                 <div className="flex-shrink-0">
                   <Image
-                    src="/images/my-notion-face-transparent-(3)-md@2x.png"
+                    src="/images/testimonial-anne-h.png"
                     alt="Patient testimonial"
-                    width={64}
-                    height={64}
+                    width={80}
+                    height={80}
                     className="rounded-full"
                   />
                 </div>
                 <div className="flex-1">
                   <blockquote className="text-[#091747] font-['Newsreader'] leading-relaxed mb-4 text-base">
-                    "You're kind and personable. Way less robotic than others I've seen."
+                    "Having been in the care of many behavioral health providers over the last several years, we have not experienced the attention and coordination of care between a psychiatrist and my daughter's therapist. They truly care about ensuring the safety and health of my daughter on her mental health journey."
                   </blockquote>
-                  <cite className="text-[#091747]/60 text-sm font-['Newsreader']">— Anonymous patient</cite>
+                  <cite className="text-[#091747]/60 text-sm font-['Newsreader']">— A.H., parent of patient</cite>
                 </div>
               </div>
             </div>

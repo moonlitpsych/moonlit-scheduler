@@ -21,7 +21,46 @@ interface GroupedPayers {
 
 export async function GET() {
   try {
-    
+
+    // Normalize state codes to display names
+    // Only Utah and Idaho are recognized - anything else gets filtered out
+    const normalizeStateCode = (state: string): string | null => {
+      switch(state?.toUpperCase()) {
+        case 'UT':
+        case 'UTAH':
+          return 'Utah'
+        case 'ID':
+        case 'IDAHO':
+          return 'Idaho'
+        default:
+          // Any other state (CA, National, Other, etc.) returns null to be filtered out
+          return null
+      }
+    }
+
+    // First, determine which states we actively operate in
+    // A state is "active" if we have at least one approved payer with an effective date there
+    const { data: activeStatePayers, error: activeError } = await supabase
+      .from('payers')
+      .select('state')
+      .eq('status_code', 'approved')
+      .not('effective_date', 'is', null)
+
+    if (activeError) {
+      console.error('❌ Error fetching active states:', activeError)
+      return NextResponse.json({ error: 'Failed to fetch active states' }, { status: 500 })
+    }
+
+    // Extract unique normalized state names where we actively accept insurance
+    // Only includes Utah and Idaho - filters out National, CA, Other, etc.
+    const allowedStates = new Set(
+      activeStatePayers
+        ?.map(p => normalizeStateCode(p.state))
+        .filter((state): state is string => state !== null) || []
+    )
+
+    console.log('📍 Active states:', Array.from(allowedStates))
+
     // Fetch only relevant payers - exclude not_started, denied, on_pause, blocked, withdrawn
     const { data: payers, error } = await supabase
       .from('payers')
@@ -41,24 +80,17 @@ export async function GET() {
     }
 
     // Group payers by state and status
+    // Only include payers from states where Moonlit has licensed providers
     const groupedPayers: GroupedPayers = {}
 
     payers.forEach((payer) => {
-      // Normalize state names
-      const normalizeState = (state: string) => {
-        switch(state?.toUpperCase()) {
-          case 'UT':
-          case 'UTAH':
-            return 'Utah'
-          case 'ID':
-          case 'IDAHO':
-            return 'Idaho'
-          default:
-            return state || 'Other'
-        }
+      const state = normalizeStateCode(payer.state)
+
+      // Skip payers from unrecognized states (CA, National, Other, etc.)
+      // or states where we don't have active payers
+      if (!state || !allowedStates.has(state)) {
+        return
       }
-      
-      const state = normalizeState(payer.state)
       
       if (!groupedPayers[state]) {
         groupedPayers[state] = {
@@ -91,7 +123,8 @@ export async function GET() {
 
     console.log('✅ Successfully fetched and grouped payers:', {
       totalPayers: payers.length,
-      states: Object.keys(groupedPayers)
+      licensedStates: Array.from(allowedStates),
+      displayedStates: Object.keys(groupedPayers)
     })
 
     return NextResponse.json(groupedPayers)
