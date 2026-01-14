@@ -68,7 +68,7 @@ export default function PayerPlansInlineDisplay({
             )}
           </div>
           <button
-            onClick={() => setIsExpanded(true)}
+            onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
             className="text-xs text-[#BF9C73] hover:text-[#A8865F] font-medium flex items-center gap-1 transition-colors"
             aria-expanded="false"
             aria-label="View plan details"
@@ -87,7 +87,7 @@ export default function PayerPlansInlineDisplay({
           <div className="flex items-center justify-between">
             <div className="text-xs font-medium text-slate-600">Plan details</div>
             <button
-              onClick={() => setIsExpanded(false)}
+              onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }}
               className="text-xs text-[#BF9C73] hover:text-[#A8865F] font-medium flex items-center gap-1 transition-colors"
               aria-expanded="true"
               aria-label="Hide plan details"
