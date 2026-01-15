@@ -9,6 +9,7 @@ import { isAdminEmail } from '@/lib/admin-auth'
 import ProviderSelector from '@/components/admin/ProviderSelector'
 import {
   Calendar,
+  FileSignature,
   Home,
   LogOut,
   Menu,
@@ -104,6 +105,7 @@ export default function DashboardLayout({
     { name: 'My Patients', href: '/dashboard/patients', icon: Users, show: isPractitioner },
     { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner, beta: true },
     { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
+    { name: 'Co-Sign Queue', href: '/dashboard/cosign-queue', icon: FileSignature, show: isPractitioner },
     { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
   ].filter(item => item.show)
 
