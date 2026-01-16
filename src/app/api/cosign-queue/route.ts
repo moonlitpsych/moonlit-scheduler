@@ -33,12 +33,19 @@ export async function GET(request: NextRequest) {
       query = query.or(`supervisor_provider_id.eq.${supervisorId},supervisor_provider_id.is.null`)
     }
 
-    const { data: items, error } = await query.limit(100)
+    const { data: rawItems, error } = await query.limit(100)
 
     if (error) {
       console.error('❌ [Co-Sign Queue] Fetch error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    // Compute correct IntakeQ note URLs
+    // Format: https://intakeq.com/#/client/{client_id}?tab=overview&type=2&itemId={note_id}
+    const items = (rawItems || []).map(item => ({
+      ...item,
+      intakeq_note_url: `https://intakeq.com/#/client/${item.client_id}?tab=overview&type=2&itemId=${item.note_id}`
+    }))
 
     // Get unique payers for filter dropdown
     const { data: payersData } = await supabase
@@ -48,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     const payers = [...new Set(payersData?.map(p => p.payer_display_name) || [])]
 
-    return NextResponse.json({ items: items || [], payers })
+    return NextResponse.json({ items, payers })
   } catch (error: any) {
     console.error('❌ [Co-Sign Queue] GET error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
