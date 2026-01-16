@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const payer = searchParams.get('payer')
+    const supervisorId = searchParams.get('supervisor_id')
 
     let query = supabase
       .from('cosign_queue')
@@ -25,6 +26,11 @@ export async function GET(request: NextRequest) {
 
     if (payer && payer !== 'all') {
       query = query.eq('payer_display_name', payer)
+    }
+
+    // Filter by supervisor - show notes assigned to this supervisor OR unassigned notes
+    if (supervisorId) {
+      query = query.or(`supervisor_provider_id.eq.${supervisorId},supervisor_provider_id.is.null`)
     }
 
     const { data: items, error } = await query.limit(100)

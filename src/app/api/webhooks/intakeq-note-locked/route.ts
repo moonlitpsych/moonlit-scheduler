@@ -30,6 +30,8 @@ interface IntakeQAppointment {
   ClientName: string
   PractitionerName: string
   Status: string
+  Note?: string              // Appointment note field (where "Supervisor: X" is stored)
+  PractitionerNotes?: string // Alternative note field
 }
 
 // Initialize Supabase with service role key for webhook processing
@@ -107,6 +109,40 @@ function detectNoteType(note: IntakeQNote): string {
     return titleQuestion.Answer
   }
   return 'Progress Note'  // Default
+}
+
+// Helper: Parse supervisor name from appointment note
+// Looks for pattern "Supervisor: [LastName]" (case-insensitive)
+function parseSupervisorFromNote(note: string | undefined): string | null {
+  if (!note) return null
+
+  // Match "Supervisor: LastName" or "Supervisor: Last Name" (case-insensitive)
+  const match = note.match(/supervisor:\s*([a-zA-Z\-]+)/i)
+  if (match && match[1]) {
+    return match[1].trim()
+  }
+  return null
+}
+
+// Helper: Match supervisor last name to a provider in our database
+async function matchSupervisorToProvider(supervisorLastName: string): Promise<{ id: string; name: string } | null> {
+  const { data: providers } = await supabase
+    .from('providers')
+    .select('id, first_name, last_name')
+    .ilike('last_name', supervisorLastName)
+    .eq('is_active', true)
+    .limit(1)
+
+  if (providers && providers.length > 0) {
+    const provider = providers[0]
+    return {
+      id: provider.id,
+      name: `${provider.first_name} ${provider.last_name}`
+    }
+  }
+
+  console.log(`⚠️ [Co-Sign Webhook] No provider found matching supervisor: ${supervisorLastName}`)
+  return null
 }
 
 export async function POST(request: NextRequest) {
@@ -210,7 +246,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, action: 'ignored_no_cosign_required' })
     }
 
-    // 7. Add to co-sign queue
+    // 7. Parse supervisor from appointment note
+    const appointmentNote = appointment.Note || appointment.PractitionerNotes
+    const supervisorLastName = parseSupervisorFromNote(appointmentNote)
+    let supervisorProvider: { id: string; name: string } | null = null
+
+    if (supervisorLastName) {
+      supervisorProvider = await matchSupervisorToProvider(supervisorLastName)
+      console.log(`📋 [Co-Sign Webhook] Supervisor parsed: "${supervisorLastName}" → ${supervisorProvider ? supervisorProvider.name : 'NOT FOUND'}`)
+    } else {
+      console.log(`⚠️ [Co-Sign Webhook] No supervisor found in appointment note: "${appointmentNote || '(empty)'}"`)
+    }
+
+    // 8. Add to co-sign queue
     const { error: insertError } = await supabase
       .from('cosign_queue')
       .insert({
@@ -225,7 +273,11 @@ export async function POST(request: NextRequest) {
         note_date: new Date(note.Date).toISOString(),
         note_type: detectNoteType(note),
         service_name: appointment.ServiceName,
-        status: 'pending'
+        status: 'pending',
+        // Supervisor fields
+        supervisor_provider_id: supervisorProvider?.id || null,
+        supervisor_name: supervisorLastName,
+        appointment_note: appointmentNote
       })
 
     if (insertError) {
@@ -238,7 +290,8 @@ export async function POST(request: NextRequest) {
       noteId: payload.NoteId,
       patient: note.ClientName,
       payer: appointment.LocationName,
-      resident: note.PractitionerName
+      resident: note.PractitionerName,
+      supervisor: supervisorProvider?.name || supervisorLastName || 'Not assigned'
     })
 
     await logWebhookEvent(payload, 'added_to_queue')

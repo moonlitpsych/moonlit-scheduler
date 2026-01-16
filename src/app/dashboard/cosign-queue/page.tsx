@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { Database } from '@/types/database'
 import {
   FileText,
   CheckCircle,
@@ -10,7 +12,8 @@ import {
   RefreshCw,
   User,
   Building2,
-  Calendar
+  Calendar,
+  Users
 } from 'lucide-react'
 
 interface CosignQueueItem {
@@ -26,6 +29,7 @@ interface CosignQueueItem {
   intakeq_note_url: string
   added_at: string
   signed_at: string | null
+  supervisor_name: string | null
 }
 
 export default function CosignQueuePage() {
@@ -33,7 +37,31 @@ export default function CosignQueuePage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'signed'>('pending')
   const [payerFilter, setPayerFilter] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<'mine' | 'all'>('mine')
   const [payers, setPayers] = useState<string[]>([])
+  const [providerId, setProviderId] = useState<string | null>(null)
+
+  const supabase = createClientComponentClient<Database>()
+
+  // Get current user's provider ID on mount
+  useEffect(() => {
+    const getProviderId = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: provider } = await supabase
+          .from('providers')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .eq('is_active', true)
+          .single()
+
+        if (provider) {
+          setProviderId(provider.id)
+        }
+      }
+    }
+    getProviderId()
+  }, [supabase])
 
   // Fetch queue items
   const fetchQueue = async () => {
@@ -42,6 +70,10 @@ export default function CosignQueuePage() {
       const params = new URLSearchParams()
       if (filter !== 'all') params.append('status', filter)
       if (payerFilter !== 'all') params.append('payer', payerFilter)
+      // Filter by supervisor if viewing "mine" and we have a provider ID
+      if (viewMode === 'mine' && providerId) {
+        params.append('supervisor_id', providerId)
+      }
 
       const response = await fetch(`/api/cosign-queue?${params}`)
       const data = await response.json()
@@ -55,11 +87,13 @@ export default function CosignQueuePage() {
   }
 
   useEffect(() => {
-    fetchQueue()
+    if (providerId !== null) {
+      fetchQueue()
+    }
     // Auto-refresh every 30 seconds
     const interval = setInterval(fetchQueue, 30000)
     return () => clearInterval(interval)
-  }, [filter, payerFilter])
+  }, [filter, payerFilter, viewMode, providerId])
 
   const pendingCount = items.filter(i => i.status === 'pending').length
 
@@ -118,6 +152,34 @@ export default function CosignQueuePage() {
         {/* Filters */}
         <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 shadow-sm">
           <div className="flex items-center gap-4 flex-wrap">
+            {/* View mode toggle - My Queue vs All */}
+            <div className="flex gap-1 bg-[#BF9C73]/10 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('mine')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors flex items-center gap-1 ${
+                  viewMode === 'mine'
+                    ? 'bg-[#BF9C73] text-white shadow-sm'
+                    : 'text-[#BF9C73] hover:text-[#091747]'
+                }`}
+              >
+                <User className="h-3.5 w-3.5" />
+                My Queue
+              </button>
+              <button
+                onClick={() => setViewMode('all')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors flex items-center gap-1 ${
+                  viewMode === 'all'
+                    ? 'bg-[#BF9C73] text-white shadow-sm'
+                    : 'text-[#BF9C73] hover:text-[#091747]'
+                }`}
+              >
+                <Users className="h-3.5 w-3.5" />
+                All
+              </button>
+            </div>
+
+            <div className="h-6 w-px bg-gray-200" />
+
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-gray-400" />
               <span className="text-sm text-gray-600">Filter:</span>
