@@ -66,15 +66,31 @@ export default function DashboardLayout({
           setIsAdminViewing(true)
           setProvider(impersonation.provider)
           setLoading(false)
-        } else if (isAdmin && !impersonation && pathname !== '/dashboard/select-provider') {
-          // Admin hasn't selected a provider yet - redirect to selector
-          router.replace('/dashboard/select-provider')
-          return
+        } else if (isAdmin && !impersonation) {
+          // Admin without impersonation - check if they're also a provider
+          const { data: ownProviderData } = await supabase
+            .from('providers')
+            .select('*')
+            .eq('auth_user_id', user.id)
+            .eq('is_active', true)
+            .single()
+
+          if (ownProviderData) {
+            // Admin is also a provider - show their own dashboard
+            setIsAdminViewing(false)
+            setProvider(ownProviderData)
+            setLoading(false)
+          } else if (pathname !== '/dashboard/select-provider') {
+            // Admin-only user - redirect to provider selector
+            router.replace('/dashboard/select-provider')
+            return
+          } else {
+            setLoading(false)
+          }
         } else {
           // Regular provider viewing their own dashboard
           setIsAdminViewing(false)
 
-          // FIXED: Add is_active filter to only get active provider records
           const { data: providerData } = await supabase
             .from('providers')
             .select('*')
