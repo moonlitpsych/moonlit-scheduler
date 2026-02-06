@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { validateProviderData, sanitizeProviderData } from '@/lib/services/providerValidation'
+import { checkProfileCompletion } from '@/lib/utils/profileCompletion'
+import { Database } from '@/types/database'
+
+type ProviderUpdate = Database['public']['Tables']['providers']['Update']
 
 // Note: Admin authentication is handled at the page/layout level
 // This API route is only accessible via the admin dashboard UI
@@ -295,6 +300,119 @@ export async function GET(
     console.error('❌ Credentialing dashboard API error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * PUT /api/admin/providers/[providerId]
+ *
+ * Updates an existing provider's information.
+ */
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<{ providerId: string }> }
+) {
+  try {
+    const { providerId } = await context.params
+
+    if (!providerId) {
+      return NextResponse.json(
+        { success: false, error: 'Provider ID is required' },
+        { status: 400 }
+      )
+    }
+
+    const body = await request.json()
+
+    console.log(`📝 Updating provider ${providerId}:`, body.email || '(no email change)')
+
+    // Verify provider exists
+    const { data: existingProvider, error: fetchError } = await supabaseAdmin
+      .from('providers')
+      .select('id, email, npi')
+      .eq('id', providerId)
+      .single()
+
+    if (fetchError || !existingProvider) {
+      console.error('❌ Provider not found:', fetchError)
+      return NextResponse.json(
+        { success: false, error: 'Provider not found' },
+        { status: 404 }
+      )
+    }
+
+    // Validate provider data
+    const validation = await validateProviderData(body, true, providerId)
+    if (!validation.valid) {
+      console.error('❌ Validation failed:', validation.errors)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation failed',
+          validationErrors: validation.errors
+        },
+        { status: 400 }
+      )
+    }
+
+    // Sanitize data
+    const sanitized = sanitizeProviderData(body) as ProviderUpdate
+
+    // Update in database
+    const { data: provider, error: updateError } = await supabaseAdmin
+      .from('providers')
+      .update(sanitized)
+      .eq('id', providerId)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error('❌ Error updating provider:', updateError)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to update provider',
+          details: updateError.message
+        },
+        { status: 500 }
+      )
+    }
+
+    // Auto-check profile completion status after update
+    try {
+      const completionCheck = checkProfileCompletion(provider)
+      if (completionCheck.isComplete !== provider.profile_completed) {
+        await supabaseAdmin
+          .from('providers')
+          .update({ profile_completed: completionCheck.isComplete })
+          .eq('id', provider.id)
+
+        provider.profile_completed = completionCheck.isComplete
+        console.log(`🔄 Auto-updated profile_completed to ${completionCheck.isComplete} for ${provider.email}`)
+      }
+    } catch (autoCompleteError) {
+      // Don't fail the update if auto-completion check fails
+      console.error('⚠️ Auto-completion check failed (continuing):', autoCompleteError)
+    }
+
+    console.log(`✅ Provider updated successfully: ${provider.id}`)
+
+    return NextResponse.json({
+      success: true,
+      data: provider,
+      message: 'Provider updated successfully'
+    })
+
+  } catch (error: any) {
+    console.error('❌ Error in admin providers PUT:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to update provider',
+        details: error.message
+      },
       { status: 500 }
     )
   }
