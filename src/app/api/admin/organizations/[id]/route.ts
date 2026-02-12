@@ -138,7 +138,10 @@ export async function PATCH(
       'primary_contact_name', 'primary_contact_email', 'primary_contact_phone',
       'address_line_1', 'address_line_2', 'city', 'state', 'zip_code',
       'tax_id', 'license_number', 'accreditation_details',
-      'allowed_domains', 'settings'
+      'allowed_domains', 'settings',
+      // Referral network fields
+      'is_referral_destination', 'referral_notes', 'referral_internal_notes',
+      'hours_of_operation', 'website', 'fax'
     ]
 
     for (const field of allowedFields) {
