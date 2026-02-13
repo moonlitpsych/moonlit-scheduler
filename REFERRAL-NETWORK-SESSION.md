@@ -1,21 +1,21 @@
 # Referral Network System - Session Status
 
-**Last Updated:** February 12, 2026
-**Status:** ACTIVE - Payer gap analysis in progress
+**Last Updated:** February 13, 2026
+**Status:** ACTIVE - Payer gap analysis nearly complete (19/34 payers have referrals)
 
 ---
 
 ## Quick Start for Next Claude
 
-### MCP Setup (REQUIRED)
-The Supabase MCP server is configured. After restarting Claude Code, you should have access to:
-- `mcp__supabase__execute_sql` - Run SQL queries directly
-- `mcp__supabase__list_tables` - List database tables
-- `mcp__supabase__apply_migration` - Apply migrations
+### MCP Setup (Note: May Not Work)
+The Supabase MCP server is configured but may not load properly. Workaround: use Node.js scripts in `scripts/temp-*.mjs` to run SQL via Supabase client.
 
 **Config file:** `/Users/miriam/CODE/moonlit-scheduler/.mcp.json`
 
-If MCP tools aren't available, the user will need to copy/paste SQL into the Supabase dashboard.
+**Alternative:** Run queries via scripts:
+```bash
+source .env.local && node scripts/temp-correct-gaps.mjs
+```
 
 ---
 
@@ -47,9 +47,24 @@ The Referral Network System generates referral resource documents based on patie
 
 ---
 
-## Current Progress (Feb 12, 2026)
+## Current Progress (Feb 12-13, 2026)
 
-### Completed Today
+### Session Feb 13 - Payer Research Completed
+
+1. **Linked LifeStance to new payers:**
+   - HealthyU (UUHP) - verified via LifeStance website
+   - University of Utah Health Plans (UUHP) - verified via LifeStance website
+   - MotivHealth - verified via LifeStance insurance page
+   - Optum Commercial Behavioral Health - verified via LifeStance insurance page
+
+2. **Added Huntsman Mental Health Institute (HMHI):**
+   - Created as referral destination org
+   - Linked to HMHI BHN payer (primary/only network provider)
+   - Care types: therapy, outpatient_psychiatry, inpatient, residential, intensive_outpatient, partial_hospitalization, crisis_services
+
+3. **First Health Network:** Unable to verify specific Utah providers. LifeStance website does not list First Health. Community mental health centers also not confirmed. **Needs manual verification.**
+
+### Session Feb 12 - Infrastructure
 
 1. **Added `service_area` column** to organizations table for multi-location orgs
    - Updated `ReferralOrganization` type in `src/types/referral-network.ts`
@@ -65,25 +80,21 @@ The Referral Network System generates referral resource documents based on patie
 
 3. **Fixed outpatient psychiatry gap** - Added care type to 8 community mental health centers
 
-4. **Payer gap analysis** - Identified 22 payers missing therapy/psychiatry referrals
+### Payer Coverage Summary
 
-### Payer Linking Completed
+**19 Payers WITH therapy/psychiatry referrals:**
+- Aetna, Cash pay, Cigna, DMBA, Health Choice Utah
+- HealthyU (UUHP), HMHI BHN, Idaho Medicaid, Molina Utah, MotivHealth
+- Optum Commercial Behavioral Health, Optum Salt Lake/Tooele Medicaid
+- Regence BlueCross BlueShield, SelectHealth, SelectHealth Integrated
+- TRICARE West, United Healthcare, University of Utah Health Plans (UUHP)
+- Utah Medicaid Fee-for-Service (TAM)
 
-| Payer | Organizations Linked |
-|-------|---------------------|
-| DMBA | LifeStance Health |
-| Health Choice Utah | Davis BH, Valley BH, Wasatch BH, Weber Human Services |
-
-### Payer Research In Progress
-
-| Payer | Status | Notes |
-|-------|--------|-------|
-| HealthyU (UUHP) | IN PROGRESS | LifeStance confirmed in-network |
-| HMHI BHN | PENDING | Huntsman Mental Health Institute network |
-| MotivHealth | PENDING | |
-| Optum Commercial | PENDING | |
-| First Health Network | PENDING | |
-| U of U Health Plans | PENDING | |
+**15 Payers WITHOUT referrals (some intentional):**
+- **Payment types (not insurance):** ACH pay, Credit card pay
+- **Out of state:** Anthem Blue Cross CA, Blue Cross CA, Blue Shield CA, Molina Idaho
+- **Community MH as payers (they ARE the provider):** Bear River BH, Davis BH, Southwest BH, Wasatch BH, Weber Human Services
+- **Needs research:** First Health Network (3 variants), Signature
 
 ---
 
@@ -144,7 +155,8 @@ When researching payers for referral options:
 
 | Organization | Payers Accepted |
 |--------------|-----------------|
-| LifeStance Health | DMBA, University of Utah Health Plans, UUHP Medicaid |
+| LifeStance Health | DMBA, University of Utah Health Plans, HealthyU (UUHP), MotivHealth, Optum Commercial, Regence, SelectHealth, Cigna, Aetna, United Healthcare |
+| Huntsman Mental Health Institute | HMHI BHN (exclusive network) |
 | Valley Behavioral Health | Medicaid (various MCOs), Health Choice Utah |
 | Davis Behavioral Health | Medicaid (various MCOs), Health Choice Utah |
 | Wasatch Behavioral Health | Medicaid (various MCOs), Health Choice Utah |
@@ -162,7 +174,8 @@ These orgs have `service_area` set instead of single city:
 | Valley Behavioral Health | Salt Lake City, Taylorsville, Kearns, West Valley |
 | Wasatch Behavioral Health | Provo, Orem, Spanish Fork, American Fork |
 | Weber Human Services | Ogden, Roy, Clearfield |
-| LifeStance Health | Salt Lake City, Sandy, Draper, Lehi, Orem, Ogden, Logan |
+| LifeStance Health | Murray, Draper, Pleasant Grove, West Bountiful, Lehi |
+| Huntsman Mental Health Institute | Salt Lake City, Farmington |
 | Odyssey House | Salt Lake City, Magna, Martindale |
 | VOA Cornerstone | Salt Lake City, Midvale, Ogden |
 | Recovery Ways | Murray, Salt Lake City |
@@ -172,10 +185,10 @@ These orgs have `service_area` set instead of single city:
 
 ## Next Steps
 
-1. **Complete payer research** for remaining 6 payers
-2. **Link LifeStance to HealthyU/UUHP** (confirmed in-network)
-3. **Research HMHI BHN network** - may need to add Huntsman Mental Health Institute
-4. **Test PDF generation** with new service_area display
+1. **First Health Network research** - Call First Health (1-800-226-5116) or use their provider locator to verify Utah behavioral health providers
+2. **Signature insurance research** - Determine what network Signature uses in Utah
+3. **Test PDF generation** with new service_area display
+4. **Clean up temp scripts** - Remove `scripts/temp-*.mjs` files after confirming all data is correct
 
 ---
 
