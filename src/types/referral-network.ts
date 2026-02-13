@@ -143,6 +143,7 @@ export interface ReferralSearchResult {
   payer_name: string
   care_type_names: string[]
   specialty_tag_names?: string[]
+  provider_directory_url?: string | null  // Link to payer's official provider directory
 }
 
 // ============================================

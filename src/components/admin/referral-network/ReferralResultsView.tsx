@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, FileText, Copy, Check, Search } from 'lucide-react'
+import { Download, FileText, Copy, Check, Search, ExternalLink } from 'lucide-react'
 import ReferralOrganizationCard from './ReferralOrganizationCard'
 import type { ReferralSearchResult, ReferralSearchCriteria } from '@/types/referral-network'
 
@@ -92,6 +92,17 @@ export default function ReferralResultsView({
             We don&apos;t have any referral destinations in our network that match these criteria yet.
             Try different care types or specialties, or contact Moonlit for assistance.
           </p>
+          {results.provider_directory_url && (
+            <a
+              href={results.provider_directory_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline mt-4"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Search {results.payer_name}&apos;s full provider directory
+            </a>
+          )}
         </div>
       </div>
     )
@@ -112,6 +123,17 @@ export default function ReferralResultsView({
                 <> • {results.specialty_tag_names.join(', ')}</>
               )}
             </p>
+            {results.provider_directory_url && (
+              <a
+                href={results.provider_directory_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline mt-1"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Search {results.payer_name}&apos;s full provider directory
+              </a>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

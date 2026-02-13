@@ -192,10 +192,10 @@ export default function ReferralGeneratorForm({ onSearch, isLoading }: ReferralG
           Narrow results to organizations with specific expertise
         </p>
 
-        {specialtyTags && (
+        {specialtyTags?.by_category && (
           <div className="space-y-4">
             {/* Clinical */}
-            {specialtyTags.by_category.clinical.length > 0 && (
+            {specialtyTags.by_category.clinical?.length > 0 && (
               <div>
                 <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
                   Clinical Specialties
@@ -220,7 +220,7 @@ export default function ReferralGeneratorForm({ onSearch, isLoading }: ReferralG
             )}
 
             {/* Population */}
-            {specialtyTags.by_category.population.length > 0 && (
+            {specialtyTags.by_category.population?.length > 0 && (
               <div>
                 <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
                   Population Focus
@@ -245,7 +245,7 @@ export default function ReferralGeneratorForm({ onSearch, isLoading }: ReferralG
             )}
 
             {/* Administrative */}
-            {specialtyTags.by_category.administrative.length > 0 && (
+            {specialtyTags.by_category.administrative?.length > 0 && (
               <div>
                 <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
                   Administrative

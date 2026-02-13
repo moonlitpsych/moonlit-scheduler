@@ -56,10 +56,10 @@ export async function POST(request: NextRequest) {
 
     console.log('🔍 Searching referral organizations:', { payer_id, care_type_ids, specialty_tag_ids })
 
-    // Get payer name for the response
+    // Get payer name and provider directory URL for the response
     const { data: payer } = await supabaseAdmin
       .from('payers')
-      .select('name')
+      .select('name, provider_directory_url')
       .eq('id', payer_id)
       .single()
 
@@ -95,7 +95,8 @@ export async function POST(request: NextRequest) {
         search_criteria: { payer_id, care_type_ids, specialty_tag_ids },
         payer_name: payer?.name || 'Unknown',
         care_type_names: careTypes?.map(c => c.display_name) || [],
-        specialty_tag_names: specialtyTagNames
+        specialty_tag_names: specialtyTagNames,
+        provider_directory_url: payer?.provider_directory_url || null
       } as ReferralSearchResult)
     }
 
@@ -116,7 +117,8 @@ export async function POST(request: NextRequest) {
         search_criteria: { payer_id, care_type_ids, specialty_tag_ids },
         payer_name: payer?.name || 'Unknown',
         care_type_names: careTypes?.map(c => c.display_name) || [],
-        specialty_tag_names: specialtyTagNames
+        specialty_tag_names: specialtyTagNames,
+        provider_directory_url: payer?.provider_directory_url || null
       } as ReferralSearchResult)
     }
 
@@ -140,7 +142,8 @@ export async function POST(request: NextRequest) {
         search_criteria: { payer_id, care_type_ids, specialty_tag_ids },
         payer_name: payer?.name || 'Unknown',
         care_type_names: careTypes?.map(c => c.display_name) || [],
-        specialty_tag_names: specialtyTagNames
+        specialty_tag_names: specialtyTagNames,
+        provider_directory_url: payer?.provider_directory_url || null
       } as ReferralSearchResult)
     }
 
@@ -248,7 +251,8 @@ export async function POST(request: NextRequest) {
       search_criteria: { payer_id, care_type_ids, specialty_tag_ids },
       payer_name: payer?.name || 'Unknown',
       care_type_names: careTypes?.map(c => c.display_name) || [],
-      specialty_tag_names: specialtyTagNames
+      specialty_tag_names: specialtyTagNames,
+      provider_directory_url: payer?.provider_directory_url || null
     }
 
     return NextResponse.json(response)
