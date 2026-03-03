@@ -124,8 +124,8 @@ export default function OrganizationSelector({
   }
 
   const filteredOrganizations = organizations.filter(org =>
-    org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    org.slug.toLowerCase().includes(searchQuery.toLowerCase())
+    org.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    org.slug?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   return (

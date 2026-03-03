@@ -7,7 +7,7 @@ export default function UniversityOfUtahEmployeesPage() {
       <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-12">
         <div className="text-center">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl text-[#091747] font-['Newsreader'] font-light leading-tight mb-6">
-            Psychiatry for University of Utah Employees
+            In-Network Psychiatry for University of Utah Employees
           </h1>
           <p className="text-xl text-[#091747]/80 font-['Newsreader'] mb-8 max-w-2xl mx-auto">
             We&apos;re in-network with <strong>HMHI-BHN</strong> — your actual behavioral health plan.
