@@ -202,6 +202,12 @@ export default function HomePage() {
               <p className="text-white/80 font-['Newsreader'] text-lg max-w-xl">
                 We&apos;re in-network with HMHI-BHN — your behavioral health plan. No surprise bills.
               </p>
+              <Link
+                href="/university-of-utah-behavioral-health-coverage"
+                className="mt-3 inline-block text-white/90 underline decoration-white/40 underline-offset-4 hover:text-white"
+              >
+                Read the educational HMHI BHN coverage guide
+              </Link>
             </div>
             <Link
               href="/university-of-utah-employees"
@@ -279,4 +285,3 @@ export default function HomePage() {
     </div>
   )
 }
-

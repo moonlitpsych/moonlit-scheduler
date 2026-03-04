@@ -7,23 +7,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { BookingScenario, BookingIntent } from './WelcomeView'
 import PayerPlansWrapper from '../PayerPlansWrapper'
 
-interface PayerWithCarveout extends Payer {
-    displaySubtext?: string
-    cardHint?: string
-    isBehavioralOption?: boolean
-    isMedicalOnly?: boolean
-}
-
 interface PayerSearchState {
     query: string
-    results: PayerWithCarveout[]
+    results: Payer[]
     loading: boolean
     showResults: boolean
     error: string | null
     isMedicaidSearch?: boolean
-    showCarveoutNudge?: boolean
-    selectedMedicalPayer?: PayerWithCarveout
-    behavioralAlternative?: PayerWithCarveout
 }
 
 interface PayerSearchViewProps {
@@ -42,7 +32,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
         error: null
     })
 
-    // Direct Supabase search function with medicaid-aware and carve-out-aware search
+    // Direct Supabase search function with medicaid-aware search
     const searchPayers = useCallback(async (query: string) => {
         if (query.length < 2) {
             setState(prev => ({ ...prev, showResults: false, results: [] }))
@@ -54,79 +44,39 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
         try {
             console.log('🔍 Searching payers for:', query)
 
-            // Check if user is searching for medicaid or regence (carve-out)
+            // Check if user is searching for medicaid or regence
             const isMedicaidSearch = query.toLowerCase().includes('medicaid')
             const isRegenceSearch = query.toLowerCase().includes('regen')
 
             let payers: any[] = []
 
             if (isRegenceSearch) {
-                // For Regence searches, fetch both Regence AND HMHI-BHN (behavioral carve-out)
-                console.log('🏥 Detected Regence search - including HMHI-BHN behavioral carve-out')
-
-                const [regenceResults, hmhiResults, nameResults] = await Promise.all([
-                    // Get Regence payers
-                    supabase
-                        .from('payers')
-                        .select('*')
-                        .ilike('name', '%Regence%')
-                        .order('name')
-                        .limit(3),
-                    // Get HMHI-BHN (behavioral health carve-out)
-                    supabase
-                        .from('payers')
-                        .select('*')
-                        .or('name.ilike.%HMHI%,name.ilike.%Huntsman Mental Health%')
-                        .order('name')
-                        .limit(2),
-                    // Also include any other matches for the query
+                // For Regence searches, also include HMHI-BHN since many Regence members use it
+                const [nameResults, hmhiResults] = await Promise.all([
                     supabase
                         .from('payers')
                         .select('*')
                         .ilike('name', `%${query}%`)
                         .order('name')
-                        .limit(10)
+                        .limit(10),
+                    supabase
+                        .from('payers')
+                        .select('*')
+                        .or('name.ilike.%HMHI%,name.ilike.%Huntsman Mental Health%')
+                        .order('name')
+                        .limit(2)
                 ])
 
-                if (regenceResults.error || hmhiResults.error || nameResults.error) {
-                    throw regenceResults.error || hmhiResults.error || nameResults.error
+                if (nameResults.error || hmhiResults.error) {
+                    throw nameResults.error || hmhiResults.error
                 }
 
-                // Combine and deduplicate, adding carve-out metadata
                 const combinedMap = new Map()
-
-                // Add Regence results with medical-only flag
-                regenceResults.data?.forEach(payer => {
-                    combinedMap.set(payer.id, {
-                        ...payer,
-                        isMedicalOnly: true,
-                        displaySubtext: 'Medical plan. Mental health may be managed by HMHI-BHN.'
-                    })
-                })
-
-                // Add HMHI results with behavioral option flag
+                nameResults.data?.forEach(payer => combinedMap.set(payer.id, payer))
                 hmhiResults.data?.forEach(payer => {
-                    combinedMap.set(payer.id, {
-                        ...payer,
-                        isBehavioralOption: true,
-                        displaySubtext: 'Common for University of Utah employees; check the back of your card.',
-                        cardHint: 'Mental health benefits for many Regence members'
-                    })
+                    if (!combinedMap.has(payer.id)) combinedMap.set(payer.id, payer)
                 })
-
-                // Add other name matches (lower priority)
-                nameResults.data?.forEach(payer => {
-                    if (!combinedMap.has(payer.id)) {
-                        combinedMap.set(payer.id, payer)
-                    }
-                })
-
                 payers = Array.from(combinedMap.values())
-                console.log('✅ Carve-out search results:', {
-                    regence: regenceResults.data?.length || 0,
-                    hmhi: hmhiResults.data?.length || 0,
-                    total: payers.length
-                })
 
             } else if (isMedicaidSearch) {
                 // For medicaid searches, get both name matches AND all medicaid-type payers
@@ -177,7 +127,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                 payers = data || []
             }
 
-            console.log('✅ Found payers:', payers?.length || 0, isMedicaidSearch ? '(medicaid-aware search)' : isRegenceSearch ? '(carve-out-aware search)' : '(normal search)')
+            console.log('✅ Found payers:', payers?.length || 0, isMedicaidSearch ? '(medicaid-aware search)' : isRegenceSearch ? '(regence+hmhi search)' : '(normal search)')
             
             // Sort results by: 1) acceptance priority, 2) state (UT before ID), 3) name
             const sortedPayers = (payers || []).sort((a, b) => {
@@ -259,27 +209,8 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
         setState(prev => ({ ...prev, query: value }))
     }
 
-    const handlePayerSelect = (payer: PayerWithCarveout) => {
+    const handlePayerSelect = (payer: Payer) => {
         console.log('🎯 Payer selected:', payer.name)
-
-        // Check if user selected Regence (medical) and HMHI-BHN is available
-        if (payer.isMedicalOnly && payer.name?.toLowerCase().includes('regence')) {
-            // Find HMHI-BHN in current results
-            const hmhiBhnOption = state.results.find(p => p.isBehavioralOption)
-
-            if (hmhiBhnOption) {
-                console.log('🏥 Regence selected - showing carve-out nudge for HMHI-BHN')
-                setState(prev => ({
-                    ...prev,
-                    showCarveoutNudge: true,
-                    selectedMedicalPayer: payer,
-                    behavioralAlternative: hmhiBhnOption
-                }))
-                return
-            }
-        }
-
-        // Proceed with normal selection
         proceedWithPayerSelection(payer)
     }
 
@@ -320,22 +251,6 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
 
         console.log('📊 Status code:', statusCode, '→ Acceptance status:', acceptanceStatus)
         onPayerSelected(payer, acceptanceStatus)
-    }
-
-    const handleUseBehavioralOption = () => {
-        if (state.behavioralAlternative) {
-            console.log('✅ User chose behavioral option (HMHI-BHN)')
-            setState(prev => ({ ...prev, showCarveoutNudge: false }))
-            proceedWithPayerSelection(state.behavioralAlternative)
-        }
-    }
-
-    const handleKeepMedicalOption = () => {
-        if (state.selectedMedicalPayer) {
-            console.log('⚠️ User chose to keep medical option (Regence)')
-            setState(prev => ({ ...prev, showCarveoutNudge: false }))
-            proceedWithPayerSelection(state.selectedMedicalPayer)
-        }
     }
 
     const handleCashPayment = () => {
@@ -566,44 +481,18 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                                 <h3 className="font-semibold text-slate-900 group-hover:text-orange-700 transition-colors">
                                                                     {payer.name}
                                                                 </h3>
-                                                                {payer.isBehavioralOption && state.query?.toLowerCase().includes('regence') && (
-                                                                    <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700">
-                                                                        Mental Health
-                                                                    </span>
-                                                                )}
                                                             </div>
 
-                                                            {/* Carve-out specific messaging */}
-                                                            {payer.isMedicalOnly && (
-                                                                <p className="text-sm text-orange-600 font-medium mt-1">
-                                                                    {payer.displaySubtext}
-                                                                </p>
-                                                            )}
-
-                                                            {payer.isBehavioralOption && state.query?.toLowerCase().includes('regence') && (
-                                                                <div className="mt-1">
-                                                                    <p className="text-sm text-green-600 font-medium">
-                                                                        ✓ {payer.cardHint}
-                                                                    </p>
-                                                                    <p className="text-xs text-slate-500 mt-0.5">
-                                                                        {payer.displaySubtext}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Normal status text for non-carveout cases */}
-                                                            {!payer.isMedicalOnly && !payer.isBehavioralOption && (
-                                                                <p className="text-sm text-slate-500">
-                                                                    {isActive && 'We accept this insurance'}
-                                                                    {isFuture && effectiveDate && `Available starting ${effectiveDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })}`}
-                                                                    {isWaitlist && statusCode === 'approved' && !effectiveDate && 'We will be in network soon - timing uncertain'}
-                                                                    {isWaitlist && statusCode === 'approved' && effectiveDate && effectiveDate > now &&
-                                                                        `Available starting ${effectiveDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })}`}
-                                                                    {isWaitlist && ['waiting_on_them', 'in_progress', 'not_started'].includes(statusCode || '') &&
-                                                                        'Credentialing in progress - join waitlist'}
-                                                                    {isNotAccepted && 'We cannot accept this insurance'}
-                                                                </p>
-                                                            )}
+                                                            <p className="text-sm text-slate-500">
+                                                                {isActive && 'We accept this insurance'}
+                                                                {isFuture && effectiveDate && `Available starting ${effectiveDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })}`}
+                                                                {isWaitlist && statusCode === 'approved' && !effectiveDate && 'We will be in network soon - timing uncertain'}
+                                                                {isWaitlist && statusCode === 'approved' && effectiveDate && effectiveDate > now &&
+                                                                    `Available starting ${effectiveDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' })}`}
+                                                                {isWaitlist && ['waiting_on_them', 'in_progress', 'not_started'].includes(statusCode || '') &&
+                                                                    'Credentialing in progress - join waitlist'}
+                                                                {isNotAccepted && 'We cannot accept this insurance'}
+                                                            </p>
 
                                                             {payer.payer_type && (
                                                                 <div className="flex items-center gap-2 mt-1">
@@ -708,62 +597,6 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                 </div>
             </div>
 
-            {/* Carve-out Nudge Modal */}
-            {state.showCarveoutNudge && state.selectedMedicalPayer && state.behavioralAlternative && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-                    <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-slate-800 mb-3 font-['Newsreader']">
-                                Use HMHI-BHN for your mental health benefits?
-                            </h2>
-                            <p className="text-slate-600 text-base leading-relaxed">
-                                Many <span className="font-semibold">{state.selectedMedicalPayer.name}</span> plans
-                                use <span className="font-semibold">{state.behavioralAlternative.name}</span> for
-                                mental health services.
-                            </p>
-                            <p className="text-slate-600 text-base leading-relaxed mt-3">
-                                This is especially common for University of Utah employees.
-                            </p>
-                        </div>
-
-                        <div className="space-y-3">
-                            <button
-                                onClick={handleUseBehavioralOption}
-                                className="
-                                    w-full py-4 px-6
-                                    bg-green-600 hover:bg-green-700
-                                    text-white font-semibold rounded-xl
-                                    transition-colors duration-200
-                                    flex items-center justify-center gap-2
-                                "
-                            >
-                                <Check className="w-5 h-5" />
-                                Use {state.behavioralAlternative.name}
-                            </button>
-
-                            <button
-                                onClick={handleKeepMedicalOption}
-                                className="
-                                    w-full py-4 px-6
-                                    border-2 border-slate-300 hover:border-slate-400
-                                    text-slate-700 font-medium rounded-xl
-                                    transition-colors duration-200
-                                "
-                            >
-                                Keep {state.selectedMedicalPayer.name}
-                            </button>
-                        </div>
-
-                        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <p className="text-sm text-blue-800">
-                                <span className="font-semibold">💡 Tip:</span> Check the back of your
-                                insurance card under "Mental Health" or "Behavioral Health" to confirm
-                                your coverage.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Regence U of U card back placeholder</title>
+  <desc id="desc">Placeholder de-identified back of card for HMHI BHN educational callouts.</desc>
+  <rect width="1600" height="1000" fill="#f8fafc"/>
+  <rect x="80" y="80" width="1440" height="840" rx="28" fill="#ffffff" stroke="#cbd5e1" stroke-width="8"/>
+
+  <rect x="120" y="120" width="1360" height="120" rx="14" fill="#334155"/>
+  <text x="160" y="198" font-size="54" font-family="Arial, sans-serif" fill="#ffffff">Back of Card - Member Support Information</text>
+
+  <rect x="120" y="290" width="640" height="220" rx="16" fill="#e0f2fe" stroke="#0284c7" stroke-width="4"/>
+  <text x="155" y="355" font-size="40" font-family="Arial, sans-serif" fill="#0c4a6e">Behavioral Health Line</text>
+  <text x="155" y="420" font-size="36" font-family="Arial, sans-serif" fill="#0c4a6e">Call: 000-000-0000</text>
+  <text x="155" y="475" font-size="32" font-family="Arial, sans-serif" fill="#0c4a6e">Use this number to verify your network.</text>
+
+  <rect x="820" y="290" width="620" height="300" rx="16" fill="#fef3c7" stroke="#f59e0b" stroke-width="4"/>
+  <text x="855" y="355" font-size="44" font-family="Arial, sans-serif" fill="#92400e">Behavioral Health Network</text>
+  <text x="855" y="420" font-size="44" font-family="Arial, sans-serif" fill="#92400e">HMHI BHN</text>
+  <text x="855" y="480" font-size="32" font-family="Arial, sans-serif" fill="#92400e">Outpatient mental health may be</text>
+  <text x="855" y="528" font-size="32" font-family="Arial, sans-serif" fill="#92400e">administered separately.</text>
+
+  <rect x="120" y="640" width="1320" height="230" rx="16" fill="#f8fafc" stroke="#94a3b8" stroke-width="3"/>
+  <text x="160" y="705" font-size="34" font-family="Arial, sans-serif" fill="#0f172a">Claims and eligibility instructions</text>
+  <text x="160" y="760" font-size="30" font-family="Arial, sans-serif" fill="#334155">1) Verify network for outpatient behavioral health</text>
+  <text x="160" y="805" font-size="30" font-family="Arial, sans-serif" fill="#334155">2) Confirm provider billing entity before first visit</text>
+  <text x="160" y="850" font-size="30" font-family="Arial, sans-serif" fill="#334155">3) Keep written confirmation when possible</text>
+</svg>

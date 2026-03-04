@@ -1,4 +1,19 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
+
+export const metadata: Metadata = {
+  title: 'In-Network Psychiatrist for University of Utah Employees | Moonlit',
+  description:
+    'Moonlit is in-network with HMHI BHN — the behavioral health network for many University of Utah employee plans. Book a psychiatry appointment in Salt Lake City.',
+  keywords: [
+    'University of Utah employee psychiatrist',
+    'HMHI BHN psychiatrist',
+    'in-network psychiatry U of U',
+    'Salt Lake City psychiatrist University of Utah',
+    'medication management U of U employees',
+  ],
+  alternates: { canonical: 'https://trymoonlit.com/university-of-utah-employees' },
+}
 
 export default function UniversityOfUtahEmployeesPage() {
   return (
@@ -20,10 +35,10 @@ export default function UniversityOfUtahEmployeesPage() {
               Book now
             </Link>
             <Link
-              href="/ways-to-pay"
+              href="/university-of-utah-behavioral-health-coverage"
               className="bg-[#FEF8F1] hover:bg-white text-[#BF9C73] px-8 py-4 rounded-lg font-['Newsreader'] text-lg border border-[#BF9C73] transition-all duration-300 hover:shadow-md"
             >
-              Check your coverage
+              Read coverage guide
             </Link>
           </div>
         </div>
@@ -113,6 +128,13 @@ export default function UniversityOfUtahEmployeesPage() {
         <h2 className="text-2xl sm:text-3xl font-['Newsreader'] font-light text-[#091747] mb-8 text-center">
           Frequently asked questions
         </h2>
+        <p className="text-center text-[#091747]/70 font-['Newsreader'] mb-6">
+          Need the full card walkthrough and verification checklist?{' '}
+          <Link href="/university-of-utah-behavioral-health-coverage" className="text-[#BF9C73] hover:underline">
+            Read the educational HMHI BHN coverage guide
+          </Link>
+          .
+        </p>
 
         <div className="space-y-4">
           <details className="bg-white rounded-xl shadow-sm group">

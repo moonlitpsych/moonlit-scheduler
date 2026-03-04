@@ -479,13 +479,13 @@ export default function WaysToPayPage() {
             {/* U of U Employee Callout */}
             <div className="max-w-xl mx-auto mb-8 px-2">
               <Link
-                href="/university-of-utah-employees"
+                href="/university-of-utah-behavioral-health-coverage"
                 className="block p-4 bg-[#091747] rounded-xl text-white hover:bg-[#0a1a52] transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium">University of Utah employee?</p>
-                    <p className="text-sm text-white/70">Learn about your HMHI-BHN coverage →</p>
+                    <p className="text-sm text-white/70">Read the HMHI BHN coverage guide and card walkthrough →</p>
                   </div>
                 </div>
               </Link>

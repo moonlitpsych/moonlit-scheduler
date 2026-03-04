@@ -77,3 +77,24 @@
     @apply italic;
   }
 }
+
+@media print {
+  .coverage-print-hidden {
+    display: none !important;
+  }
+
+  .coverage-shell {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .coverage-section {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+
+  .coverage-section a {
+    color: #091747 !important;
+    text-decoration: none !important;
+  }
+}
