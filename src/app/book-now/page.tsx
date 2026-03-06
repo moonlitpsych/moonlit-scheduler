@@ -135,7 +135,17 @@ export default function BookNowPage() {
                 Phone: <a href="tel:+13852462522" className="text-[#BF9C73] hover:underline">(385) 246-2522</a>
               </p>
             </div>
-            <div className="mt-4">
+            <div className="mt-4 space-y-2">
+              <p className="text-sm text-gray-700">
+                Returning patients,{' '}
+                <a
+                  href="https://trymoonlit.intakeq.com/portal"
+                  className="text-[#BF9C73] hover:underline"
+                >
+                  please book through your portal
+                </a>
+                .
+              </p>
               <Link
                 href="/ways-to-pay"
                 className="text-sm text-[#BF9C73] hover:underline"

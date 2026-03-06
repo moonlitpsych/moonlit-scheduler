@@ -42,6 +42,9 @@ export default function Footer() {
                             <Link href="/ways-to-pay" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
                                 how to pay
                             </Link>
+                            <a href="https://trymoonlit.intakeq.com/portal" className="text-[#091747] hover:text-[#BF9C73] font-['Newsreader'] transition-colors leading-tight">
+                                returning patient portal
+                            </a>
                         </nav>
                     </div>
 
