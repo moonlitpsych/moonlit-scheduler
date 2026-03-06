@@ -327,8 +327,8 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
     }
 
     return (
-        <div className="min-h-screen bg-[#FEF8F1]">
-            <div className="max-w-4xl mx-auto px-6 py-12">
+        <div className="bg-[#FEF8F1]">
+            <div className="max-w-4xl mx-auto px-6 pt-12 pb-4">
                 {/* Header */}
                 <div className="text-center mb-12">
                     {onBack && (
@@ -586,15 +586,6 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                     </div>
                 </div>
 
-                {/* Help Text */}
-                <div className="text-center text-slate-500">
-                    <p className="text-sm">
-                        Can't find your insurance? We're always adding new insurances.
-                    </p>
-                    <p className="text-sm mt-1">
-                        Contact us at <span className="font-medium">hello@trymoonlit.com</span> for assistance.
-                    </p>
-                </div>
             </div>
 
         </div>

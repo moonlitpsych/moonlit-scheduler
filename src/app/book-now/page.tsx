@@ -118,41 +118,36 @@ export default function BookNowPage() {
       </div>
 
       {/* Help Footer */}
-      <div className="container mx-auto px-6 pb-6">
+      <div className="container mx-auto px-6 pt-2 pb-6">
         <div className="max-w-2xl mx-auto text-center">
-          <div className="p-4">
+          <div className="pt-0 pb-4 px-4">
             <h3 className="text-lg font-['Newsreader'] text-[#091747] mb-2">
               Need Help?
             </h3>
-            <p className="text-gray-600 text-sm mb-4">
-              Can't find your insurance or have questions about coverage?
+            <p className="text-sm text-gray-700 mb-3">
+              Returning patients,{' '}
+              <a
+                href="https://trymoonlit.intakeq.com/portal"
+                className="text-[#BF9C73] hover:underline"
+              >
+                please book through your portal
+              </a>
+              .
             </p>
-            <div className="space-y-2 text-sm text-gray-700">
-              <p>
-                Email: <a href="mailto:hello@trymoonlit.com" className="text-[#BF9C73] hover:underline">hello@trymoonlit.com</a>
-              </p>
+            <div className="space-y-2 text-sm text-gray-700 mb-4">
               <p>
                 Phone: <a href="tel:+13852462522" className="text-[#BF9C73] hover:underline">(385) 246-2522</a>
               </p>
-            </div>
-            <div className="mt-4 space-y-2">
-              <p className="text-sm text-gray-700">
-                Returning patients,{' '}
-                <a
-                  href="https://trymoonlit.intakeq.com/portal"
-                  className="text-[#BF9C73] hover:underline"
-                >
-                  please book through your portal
-                </a>
-                .
+              <p>
+                Email: <a href="mailto:hello@trymoonlit.com" className="text-[#BF9C73] hover:underline">hello@trymoonlit.com</a>
               </p>
-              <Link
-                href="/ways-to-pay"
-                className="text-sm text-[#BF9C73] hover:underline"
-              >
-                View all insurances we accept →
-              </Link>
             </div>
+            <Link
+              href="/ways-to-pay"
+              className="text-sm text-[#BF9C73] hover:underline"
+            >
+              View all insurances we accept →
+            </Link>
           </div>
         </div>
       </div>
