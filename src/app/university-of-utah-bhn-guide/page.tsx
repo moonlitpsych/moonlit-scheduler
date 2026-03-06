@@ -311,13 +311,16 @@ export default function UofUBHNGuidePage() {
                 </p>
                 <ul className="space-y-4">
                   <CheckItem>
-                    The name on your card (Regence or UUHP) may not be the network that covers
+                    The name on the front of your card (Regence or UUHP) may not be the network that covers
                     your mental health visits — behavioral health is often administered separately,
                     sometimes through a carve-out network like <strong>HMHI BHN</strong> — meaning behavioral health benefits are administered separately from medical.
                   </CheckItem>
                   <CheckItem>
-                    Being in-network for medical care does <strong>not</strong> automatically mean
-                    being in-network for outpatient psychiatry or therapy.
+                    If a therapist or psychiatrist tells you they accept your insurance, confirm by
+                    searching for their name in your mental health insurance&apos;s provider
+                    directory — <strong>HMHI BHN is a separate network</strong>, and providers
+                    who are in-network with your medical carrier (Regence or UUHP) are not
+                    automatically in-network with your behavioral health network.
                   </CheckItem>
                   <CheckItem>
                     Before your first visit: confirm which network administers your behavioral
