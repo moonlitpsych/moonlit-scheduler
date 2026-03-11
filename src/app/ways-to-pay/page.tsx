@@ -490,6 +490,21 @@ export default function WaysToPayPage() {
                 </div>
               </Link>
             </div>
+
+            {/* United Healthcare / Optum Callout */}
+            <div className="max-w-xl mx-auto mb-8 px-2">
+              <Link
+                href="/united-healthcare-mental-health-coverage"
+                className="block p-4 bg-[#091747] rounded-xl text-white hover:bg-[#0a1a52] transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">Have United Healthcare?</p>
+                    <p className="text-sm text-white/70">In Utah, your mental health is likely covered through Optum Commercial, not United — here&apos;s how to check →</p>
+                  </div>
+                </div>
+              </Link>
+            </div>
           </div>
 
           {/* Search Results */}

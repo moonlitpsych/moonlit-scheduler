@@ -14,6 +14,7 @@ interface PayerSearchState {
     showResults: boolean
     error: string | null
     isMedicaidSearch?: boolean
+    isUnitedSearch?: boolean
 }
 
 interface PayerSearchViewProps {
@@ -44,9 +45,12 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
         try {
             console.log('🔍 Searching payers for:', query)
 
-            // Check if user is searching for medicaid or regence
+            // Check if user is searching for medicaid, regence, or united healthcare
             const isMedicaidSearch = query.toLowerCase().includes('medicaid')
             const isRegenceSearch = query.toLowerCase().includes('regen')
+            const isUnitedSearch = query.toLowerCase().includes('united') ||
+                query.toLowerCase().includes('uhc') ||
+                query.toLowerCase().includes('united health')
 
             let payers: any[] = []
 
@@ -76,6 +80,32 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                 hmhiResults.data?.forEach(payer => {
                     if (!combinedMap.has(payer.id)) combinedMap.set(payer.id, payer)
                 })
+                payers = Array.from(combinedMap.values())
+
+            } else if (isUnitedSearch) {
+                // For United Healthcare searches, also include Optum Commercial since many UHC members use it for BH
+                const [nameResults, optumResults] = await Promise.all([
+                    supabase
+                        .from('payers')
+                        .select('*')
+                        .ilike('name', `%${query}%`)
+                        .order('name')
+                        .limit(10),
+                    supabase
+                        .from('payers')
+                        .select('*')
+                        .ilike('name', '%optum%')
+                        .order('name')
+                        .limit(3)
+                ])
+
+                if (nameResults.error || optumResults.error) {
+                    throw nameResults.error || optumResults.error
+                }
+
+                const combinedMap = new Map()
+                nameResults.data?.forEach(p => combinedMap.set(p.id, p))
+                optumResults.data?.forEach(p => { if (!combinedMap.has(p.id)) combinedMap.set(p.id, p) })
                 payers = Array.from(combinedMap.values())
 
             } else if (isMedicaidSearch) {
@@ -127,7 +157,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                 payers = data || []
             }
 
-            console.log('✅ Found payers:', payers?.length || 0, isMedicaidSearch ? '(medicaid-aware search)' : isRegenceSearch ? '(regence+hmhi search)' : '(normal search)')
+            console.log('✅ Found payers:', payers?.length || 0, isMedicaidSearch ? '(medicaid-aware search)' : isRegenceSearch ? '(regence+hmhi search)' : isUnitedSearch ? '(united+optum search)' : '(normal search)')
             
             // Sort results by: 1) acceptance priority, 2) state (UT before ID), 3) name
             const sortedPayers = (payers || []).sort((a, b) => {
@@ -181,7 +211,8 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                 results: sortedPayers,
                 loading: false,
                 showResults: true,
-                isMedicaidSearch: isMedicaidSearch
+                isMedicaidSearch: isMedicaidSearch,
+                isUnitedSearch: isUnitedSearch
             }))
         } catch (error: any) {
             console.error('💥 Search error:', error)
@@ -414,10 +445,26 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                     </span>
                                                 </div>
                                             )}
+                                            {state.isUnitedSearch && (
+                                                <div className="flex items-center gap-2 px-3 py-1 rounded-full" style={{backgroundColor: '#bc956b20'}}>
+                                                    <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#bc956b'}}></div>
+                                                    <span className="text-xs font-medium" style={{color: '#bc956b'}}>
+                                                        Including Optum Commercial results
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
                                         {state.isMedicaidSearch && (
                                             <p className="text-xs mb-2" style={{color: '#bc956b'}}>
                                                 💡 Tip: All results with "Medicaid" type are included (Molina Utah, Health Choice Utah, etc.)
+                                            </p>
+                                        )}
+                                        {state.isUnitedSearch && (
+                                            <p className="text-xs mb-2" style={{color: '#bc956b'}}>
+                                                💡 Many United Healthcare members have <strong>Optum Commercial Behavioral Health</strong> for psychiatry — a separate network for mental health.{' '}
+                                                <a href="/united-healthcare-mental-health-coverage" className="underline hover:opacity-80" target="_blank" rel="noopener noreferrer">
+                                                    Learn why →
+                                                </a>
                                             </p>
                                         )}
                                     </div>
