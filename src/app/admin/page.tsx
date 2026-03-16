@@ -103,7 +103,7 @@ export default function AdminDashboardPage() {
           Manage partnerships, organizations, and business development
         </p>
         <a
-          href="https://moonlit-av649vynq-mirius-projects.vercel.app"
+          href="https://moonlit-rcm.vercel.app"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-[#091747] text-white text-sm font-medium rounded-lg hover:bg-[#0a1a52] transition-colors"
