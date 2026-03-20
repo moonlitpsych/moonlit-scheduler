@@ -144,9 +144,16 @@ const SearchResultCard = ({ payer }: { payer: Payer }) => {
 
             {/* Payer Info */}
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-gray-900 text-sm sm:text-base" style={{ fontFamily: 'Newsreader, serif' }}>
-                {payer.name}
-              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-semibold text-gray-900 text-sm sm:text-base" style={{ fontFamily: 'Newsreader, serif' }}>
+                  {payer.name}
+                </h3>
+                {payer.payer_type === 'Medicaid' && (
+                  <span className="px-2 py-0.5 text-xs font-medium rounded" style={{ backgroundColor: '#bc956b20', color: '#bc956b' }}>
+                    Medicaid
+                  </span>
+                )}
+              </div>
               <p className="text-xs sm:text-sm text-gray-500" style={{ fontFamily: 'Newsreader, serif' }}>
                 {status.text}
               </p>
@@ -229,6 +236,11 @@ const PayerCard = ({ payer, showStatus = true, isEven = false }: { payer: Payer;
             }`} style={{ fontFamily: 'Newsreader, serif' }}>
               {payer.name}
             </div>
+            {payer.payer_type === 'Medicaid' && (
+              <span className="px-2 py-0.5 text-xs font-medium rounded" style={{ backgroundColor: '#bc956b20', color: '#bc956b' }}>
+                Medicaid
+              </span>
+            )}
           </div>
           {showStatus && (
             <div className="text-left sm:text-right text-xs sm:text-sm flex-shrink-0 ml-7 sm:ml-0">
