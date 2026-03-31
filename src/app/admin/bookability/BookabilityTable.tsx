@@ -190,7 +190,7 @@ export default function BookabilityTable({ data, loading }: BookabilityTableProp
           <tbody className="divide-y divide-stone-200">
             {sortedData.map((row, index) => (
               <tr
-                key={`${row.provider_id}-${row.payer_id}`}
+                key={`${row.provider_id}-${row.payer_id}-${index}`}
                 className="hover:bg-stone-50 cursor-pointer transition-colors"
                 onClick={() => setSelectedRow(row)}
               >

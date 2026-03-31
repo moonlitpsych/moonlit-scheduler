@@ -201,7 +201,7 @@ class AuthContextManager {
       case 'admin':
         return '/admin'
       case 'provider':
-        return '/dashboard'
+        return '/dashboard/compensation'
       case 'partner':
         return '/partner-dashboard'
       default:

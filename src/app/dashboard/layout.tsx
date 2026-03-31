@@ -9,6 +9,7 @@ import { isAdminEmail } from '@/lib/admin-auth'
 import ProviderSelector from '@/components/admin/ProviderSelector'
 import {
   Calendar,
+  DollarSign,
   FileSignature,
   Home,
   LogOut,
@@ -117,12 +118,9 @@ export default function DashboardLayout({
   const isPractitioner = provider && ['practitioner', 'psychiatrist', 'psychiatry_resident', 'provider'].includes(provider.role)
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: Home, show: isPractitioner },
-    { name: 'My Patients', href: '/dashboard/patients', icon: Users, show: isPractitioner },
-    { name: 'Availability', href: '/dashboard/availability', icon: Calendar, show: isPractitioner, beta: true },
-    { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
-    { name: 'Co-Sign Queue', href: '/dashboard/cosign-queue', icon: FileSignature, show: isPractitioner },
+    { name: 'My Compensation', href: '/dashboard/compensation', icon: DollarSign, show: isPractitioner },
     { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
+    { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
   ].filter(item => item.show)
 
   // Show loading state

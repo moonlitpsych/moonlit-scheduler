@@ -26,13 +26,13 @@ export default function BookabilityDashboard({
       path: basePath,
       description: 'All provider-payer relationships'
     },
-    {
+    ...(!isReadOnly ? [{
       id: 'health',
       label: 'Health',
       icon: HeartHandshake,
       path: `${basePath}/health`,
-      description: isReadOnly ? 'Coverage insights and alerts' : 'Critical issues and alerts'
-    },
+      description: 'Critical issues and alerts'
+    }] : []),
     {
       id: 'coverage',
       label: 'Coverage',
