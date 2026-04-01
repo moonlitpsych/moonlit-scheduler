@@ -214,8 +214,8 @@ export default function CompensationPage() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map(item => (
-                <tr key={item.appointmentId} className="border-t border-stone-50 hover:bg-stone-50/50">
+              {sorted.map((item, index) => (
+                <tr key={`${item.appointmentId}-${index}`} className="border-t border-stone-50 hover:bg-stone-50/50">
                   <td className="px-4 py-2.5 whitespace-nowrap text-stone-700">
                     {new Date(item.date + 'T12:00:00').toLocaleDateString()}
                   </td>
