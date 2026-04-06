@@ -71,7 +71,7 @@ export default function BookNowPage() {
   return (
     <div className="min-h-screen bg-[#FEF8F1]">
       {/* Payer Selection */}
-      <div className="container mx-auto px-6 py-6">
+      <div className="container mx-auto px-4 md:px-6 py-4 md:py-6">
         <div className="max-w-3xl mx-auto">
           {/* Back navigation */}
           <div className="mb-6">

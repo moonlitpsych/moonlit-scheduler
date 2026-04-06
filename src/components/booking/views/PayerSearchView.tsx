@@ -359,7 +359,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
 
     return (
         <div className="bg-[#FEF8F1]">
-            <div className="max-w-4xl mx-auto px-6 pt-12 pb-4">
+            <div className="max-w-4xl mx-auto px-4 md:px-6 pt-8 md:pt-12 pb-4">
                 {/* Header */}
                 <div className="text-center mb-12">
                     {onBack && (
@@ -371,15 +371,15 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                         </button>
                     )}
                     
-                    <h1 className="text-4xl font-bold text-slate-800 mb-4 font-['Newsreader']">
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-800 mb-4 font-['Newsreader']">
                         {getScenarioTitle()}
                     </h1>
-                    <p className="text-xl text-slate-600">
+                    <p className="text-base sm:text-lg md:text-xl text-slate-600">
                         {getScenarioSubtitle()}
                     </p>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+                <div className="bg-white md:rounded-2xl md:shadow-xl p-4 md:p-8 mb-8">
                     {/* Search Input */}
                     <div className="relative mb-6">
                         <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
@@ -497,8 +497,8 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                                                 key={payer.id}
                                                 onClick={() => handlePayerSelect(payer)}
                                                 className="
-                                                    w-full p-4 border-2 border-stone-200 rounded-xl 
-                                                    hover:border-orange-300 hover:bg-orange-50/50 
+                                                    w-full p-3 md:p-4 border-2 border-stone-200 rounded-lg md:rounded-xl
+                                                    hover:border-orange-300 hover:bg-orange-50/50
                                                     transition-all duration-200 text-left
                                                     group focus:outline-none focus:border-orange-400
                                                 "
@@ -605,8 +605,8 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                         <button
                             onClick={handleCashPayment}
                             className="
-                                w-full p-4 border-2 border-stone-200 rounded-xl 
-                                hover:border-orange-300 hover:bg-orange-50/50 
+                                w-full p-3 md:p-4 border-2 border-stone-200 rounded-lg md:rounded-xl
+                                hover:border-orange-300 hover:bg-orange-50/50
                                 transition-all duration-200 text-left group
                                 focus:outline-none focus:border-orange-400
                             "

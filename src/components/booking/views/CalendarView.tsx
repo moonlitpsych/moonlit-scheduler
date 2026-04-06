@@ -1086,7 +1086,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                 {/* Provider Selection (Book by Practitioner mode) */}
                 {viewMode === 'by_provider' && (
                     <div className="max-w-4xl mx-auto mb-8">
-                        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
+                        <div className="bg-white md:rounded-2xl md:shadow-sm md:border border-stone-200 p-4 md:p-6">
                             <h3 className="text-xl font-bold text-[#091747] mb-4 font-['Newsreader']">
                                 Choose Your Provider
                             </h3>
@@ -1129,9 +1129,9 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                             : ''
                     }`}
                 >
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
                         {/* Calendar */}
-                        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-8">
+                        <div className="bg-white md:rounded-2xl md:shadow-sm md:border border-stone-200 p-3 sm:p-5 md:p-8">
                             <div className="flex items-center justify-between mb-6">
                                 <button
                                     onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
@@ -1182,7 +1182,7 @@ export default function CalendarView({ selectedPayer, onTimeSlotSelected, onBack
                         </div>
 
                         {/* Time Slots */}
-                        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-8">
+                        <div className="bg-white md:rounded-2xl md:shadow-sm md:border border-stone-200 p-3 sm:p-5 md:p-8">
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-xl font-medium text-slate-800 font-['Newsreader']">
                                     Available times
