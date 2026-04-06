@@ -4,6 +4,7 @@ import { ProviderModalProvider } from '@/contexts/ProviderModalContext'
 import { ConditionalLayout } from '@/components/layout/ConditionalLayout'
 import ProviderModal from '@/components/shared/ProviderModal'
 import { LocalBusinessStructuredData } from '@/components/seo/StructuredData'
+import { GoogleAnalytics } from '@/components/analytics/GoogleAnalytics'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
@@ -66,6 +67,7 @@ export default function RootLayout({
                 <LocalBusinessStructuredData />
             </head>
             <body className={inter.className}>
+                <GoogleAnalytics />
                 <AuthProvider>
                     <ProviderModalProvider>
                         <div className="min-h-screen flex flex-col">
