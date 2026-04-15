@@ -98,16 +98,20 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  // Supervision-succession candidates: active attendings with no active supervisee
+  // Supervision-succession candidates: active attendings with no active
+  // supervisee. "Attending" = anyone who is NOT a current resident (no
+  // residency_grad_year, or grad date already in the past).
   const { data: attendings } = await supabaseAdmin
     .from('providers')
-    .select('id, first_name, last_name, role, title')
+    .select('id, first_name, last_name, role, title, residency_grad_year, residency_grad_month')
     .eq('is_active', true)
 
+  const todayMs = Date.now()
   const attendingPool = (attendings || []).filter((p: any) => {
-    const role = (p.role || '').toLowerCase()
-    const title = (p.title || '').toLowerCase()
-    return !role.includes('resident') && !title.includes('resident')
+    if (!p.residency_grad_year) return true // never a resident on file
+    const month = p.residency_grad_month ?? 6
+    const gradMs = new Date(p.residency_grad_year, month - 1, 30).getTime()
+    return gradMs < todayMs // graduated already → attending
   })
 
   let succession: any[] = []

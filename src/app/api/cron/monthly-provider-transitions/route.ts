@@ -84,11 +84,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to load providers' }, { status: 500 })
   }
 
-  // Filter to "looks like a resident" — role contains 'resident' OR title contains 'resident'
+  // "Resident" = anyone with a residency_grad_year set whose graduation
+  // date is still in the future. This avoids depending on role/title text,
+  // which is inconsistent in the providers table.
   const candidateResidents: ResidentRow[] = (residents || []).filter((p: any) => {
-    const role = (p.role || '').toLowerCase()
-    const title = (p.title || '').toLowerCase()
-    return role.includes('resident') || title.includes('resident')
+    const grad = gradDateFor(p)
+    return grad !== null && grad >= now
   })
 
   for (const r of candidateResidents) {
@@ -146,13 +147,13 @@ export async function POST(request: NextRequest) {
   //    excludes 'resident') who are NOT currently the supervisor of anyone.
   const { data: attendings } = await supabaseAdmin
     .from('providers')
-    .select('id, first_name, last_name, role, title')
+    .select('id, first_name, last_name, role, title, residency_grad_year, residency_grad_month')
     .eq('is_active', true)
 
+  // "Attending" = anyone who is NOT a current resident (no future grad date).
   const attendingPool = (attendings || []).filter((p: any) => {
-    const role = (p.role || '').toLowerCase()
-    const title = (p.title || '').toLowerCase()
-    return !role.includes('resident') && !title.includes('resident')
+    const grad = gradDateFor(p as ResidentRow)
+    return !(grad !== null && grad >= now)
   })
 
   let succession: typeof attendingPool = []
