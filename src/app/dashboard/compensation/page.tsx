@@ -101,9 +101,9 @@ export default function CompensationPage() {
   }, [items, sortField, sortDir])
 
   const handleExport = () => {
-    const header = 'Date,Patient,Service,Claim Status,Earned,Paid,Paid Date,Status'
+    const header = 'Date,Patient,Service,Claim Status,Paid,Paid Date,Status'
     const rows = sorted.map(i =>
-      `${i.date},"${i.patientLastName}","${i.service}",${i.claimStatus || ''},${(i.earnedCents / 100).toFixed(2)},${(i.paidCents / 100).toFixed(2)},${i.paidDate || ''},${i.status}`
+      `${i.date},"${i.patientLastName}","${i.service}",${i.claimStatus || ''},${(i.paidCents / 100).toFixed(2)},${i.paidDate || ''},${i.status}`
     )
     const csv = [header, ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -151,21 +151,21 @@ export default function CompensationPage() {
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm p-5 border border-stone-100">
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Total Earned</p>
-            <p className="text-2xl font-bold text-[#091747] mt-1">{formatCurrency(summary.totalEarnedCents)}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Appointments</p>
+            <p className="text-2xl font-bold text-[#091747] mt-1">{summary.totalAppointments}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-5 border border-stone-100">
             <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Total Paid</p>
             <p className="text-2xl font-bold text-green-600 mt-1">{formatCurrency(summary.totalPaidCents)}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-5 border border-stone-100">
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Owed</p>
-            <p className="text-2xl font-bold text-[#BF9C73] mt-1">{formatCurrency(summary.totalOwedCents)}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Paid</p>
+            <p className="text-2xl font-bold text-green-600 mt-1">{summary.paidCount}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-5 border border-stone-100">
             <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Ready to Pay</p>
             <p className="text-2xl font-bold text-amber-600 mt-1">{summary.readyCount}</p>
-            <p className="text-xs text-stone-400 mt-0.5">{summary.paidCount} paid / {summary.unpaidCount} pending</p>
+            <p className="text-xs text-stone-400 mt-0.5">{summary.unpaidCount} pending</p>
           </div>
         </div>
       )}
@@ -210,8 +210,7 @@ export default function CompensationPage() {
                 <th className="px-4 py-3 cursor-pointer select-none" onClick={() => handleSort('patient')}>Patient {sortIcon('patient')}</th>
                 <th className="px-4 py-3 cursor-pointer select-none" onClick={() => handleSort('service')}>Service {sortIcon('service')}</th>
                 <th className="px-4 py-3">Claim</th>
-                <th className="px-4 py-3 text-right cursor-pointer select-none" onClick={() => handleSort('earned')}>Earned {sortIcon('earned')}</th>
-                <th className="px-4 py-3 text-right">Paid</th>
+                <th className="px-4 py-3 text-right cursor-pointer select-none" onClick={() => handleSort('earned')}>Paid {sortIcon('earned')}</th>
                 <th className="px-4 py-3">Paid Date</th>
                 <th className="px-4 py-3 cursor-pointer select-none" onClick={() => handleSort('status')}>Status {sortIcon('status')}</th>
               </tr>
@@ -224,8 +223,7 @@ export default function CompensationPage() {
                   </td>
                   <td className="px-4 py-2.5 font-medium text-[#091747]">{item.patientLastName}</td>
                   <td className="px-4 py-2.5 text-stone-600">{item.service}</td>
-                  <td className="px-4 py-2.5 text-xs text-stone-400">{item.claimStatus || '—'}</td>
-                  <td className="px-4 py-2.5 text-right font-medium text-[#091747]">{formatCurrency(item.earnedCents)}</td>
+                  <td className="px-4 py-2.5 text-xs text-stone-400">{item.claimStatus ? (item.claimStatus.toLowerCase() === 'paid' ? 'Finalized' : item.claimStatus) : '—'}</td>
                   <td className="px-4 py-2.5 text-right text-green-600">{item.paidCents > 0 ? formatCurrency(item.paidCents) : '—'}</td>
                   <td className="px-4 py-2.5 text-stone-400 text-xs">{item.paidDate ? new Date(item.paidDate + 'T12:00:00').toLocaleDateString() : '—'}</td>
                   <td className="px-4 py-2.5">{statusBadge(item.status)}</td>

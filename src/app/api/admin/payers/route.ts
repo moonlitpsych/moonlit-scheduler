@@ -10,7 +10,7 @@ async function verifyAdminAccess() {
     const supabase = createServerComponentClient({ cookies: () => cookieStore })
     const { data: { user }, error } = await supabase.auth.getUser()
 
-    if (error || !user || !isAdminEmail(user.email || '')) {
+    if (error || !user || !(await isAdminEmail(user.email || ''))) {
       return { authorized: false, user: null }
     }
 
@@ -23,10 +23,30 @@ async function verifyAdminAccess() {
 
 export async function GET(request: NextRequest) {
   try {
-    const { authorized } = await verifyAdminAccess()
+    // GET is read-only payer metadata — allow admins OR active providers
+    // (used by provider-facing Patient Referrals page).
+    const cookieStore = await cookies()
+    const supabase = createServerComponentClient({ cookies: () => cookieStore })
+    const { data: { user } } = await supabase.auth.getUser()
+
+    let authorized = false
+    if (user) {
+      if (await isAdminEmail(user.email || '')) {
+        authorized = true
+      } else {
+        const { data: provider } = await supabaseAdmin
+          .from('providers')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .eq('is_active', true)
+          .maybeSingle()
+        authorized = !!provider
+      }
+    }
+
     if (!authorized) {
       return NextResponse.json(
-        { success: false, error: 'Admin access required' },
+        { success: false, error: 'Authentication required' },
         { status: 403 }
       )
     }

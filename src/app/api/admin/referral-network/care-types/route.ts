@@ -8,18 +8,24 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import type { ReferralCareType, CareTypesResponse } from '@/types/referral-network'
 
-async function verifyAdminAccess() {
+async function verifyReferralAccess() {
   try {
     const supabase = createServerComponentClient({ cookies })
     const { data: { user }, error } = await supabase.auth.getUser()
 
-    if (error || !user || !isAdminEmail(user.email || '')) {
-      return { authorized: false, user: null }
-    }
+    if (error || !user) return { authorized: false, user: null }
+    if (await isAdminEmail(user.email || '')) return { authorized: true, user }
 
-    return { authorized: true, user }
+    const { data: provider } = await supabaseAdmin
+      .from('providers')
+      .select('id')
+      .eq('auth_user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    return { authorized: !!provider, user: provider ? user : null }
   } catch (error) {
-    console.error('Admin verification error:', error)
+    console.error('Referral access verification error:', error)
     return { authorized: false, user: null }
   }
 }
@@ -27,11 +33,10 @@ async function verifyAdminAccess() {
 // GET - List all active care types
 export async function GET(request: NextRequest) {
   try {
-    // Verify admin access
-    const { authorized } = await verifyAdminAccess()
+    const { authorized } = await verifyReferralAccess()
     if (!authorized) {
       return NextResponse.json(
-        { success: false, error: 'Admin access required' },
+        { success: false, error: 'Authentication required' },
         { status: 403 }
       )
     }

@@ -10,36 +10,66 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import { ReferralListPDF } from '@/lib/pdf/ReferralListTemplate'
 import type { GeneratePDFRequest, GeneratePDFResponse, ReferralOrganization } from '@/types/referral-network'
 
-async function verifyAdminAccess() {
+async function verifyReferralAccess() {
   try {
     const supabase = createServerComponentClient({ cookies })
     const { data: { user }, error } = await supabase.auth.getUser()
 
-    if (error || !user || !isAdminEmail(user.email || '')) {
-      return { authorized: false, user: null, email: null }
+    if (error || !user) {
+      return { authorized: false, user: null, email: null, isAdmin: false }
     }
 
-    return { authorized: true, user, email: user.email }
+    const adminFlag = await isAdminEmail(user.email || '')
+    if (adminFlag) {
+      return { authorized: true, user, email: user.email, isAdmin: true }
+    }
+
+    const { data: provider } = await supabaseAdmin
+      .from('providers')
+      .select('id')
+      .eq('auth_user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (provider) {
+      return { authorized: true, user, email: user.email, isAdmin: false }
+    }
+
+    return { authorized: false, user: null, email: null, isAdmin: false }
   } catch (error) {
-    console.error('Admin verification error:', error)
-    return { authorized: false, user: null, email: null }
+    console.error('Referral access verification error:', error)
+    return { authorized: false, user: null, email: null, isAdmin: false }
   }
 }
 
 // POST - Generate PDF document
 export async function POST(request: NextRequest) {
   try {
-    // Verify admin access
-    const { authorized, email } = await verifyAdminAccess()
-    if (!authorized || !email) {
+    const { authorized, user, email, isAdmin } = await verifyReferralAccess()
+    if (!authorized || !email || !user) {
       return NextResponse.json(
-        { success: false, error: 'Admin access required' },
+        { success: false, error: 'Authentication required' },
         { status: 403 }
       )
     }
 
-    const body = await request.json() as GeneratePDFRequest
-    const { search_criteria, organizations, payer_name, care_type_names, specialty_tag_names } = body
+    const body = await request.json() as GeneratePDFRequest & { impersonated_provider_id?: string }
+    const { search_criteria, organizations, payer_name, care_type_names, specialty_tag_names, impersonated_provider_id } = body
+
+    // Resolve the provider the PDF is "for" (for audit). If the real caller is a provider,
+    // that's their own provider record. If an admin is impersonating, it's the impersonated one.
+    let actingProviderId: string | null = null
+    if (isAdmin && impersonated_provider_id) {
+      actingProviderId = impersonated_provider_id
+    } else if (!isAdmin) {
+      const { data: ownProvider } = await supabaseAdmin
+        .from('providers')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle()
+      actingProviderId = ownProvider?.id || null
+    }
 
     // Validate required fields
     if (!search_criteria || !organizations || !payer_name || !care_type_names) {
@@ -124,7 +154,14 @@ export async function POST(request: NextRequest) {
         contact_count: contactCount,
         output_format: 'pdf',
         pdf_storage_path: uploadError ? null : storagePath,
-        search_criteria: search_criteria
+        search_criteria: {
+          ...search_criteria,
+          _audit: {
+            auth_user_id: user.id,
+            acting_provider_id: actingProviderId,
+            impersonated: isAdmin && !!impersonated_provider_id,
+          },
+        },
       })
       .select('id')
       .single()

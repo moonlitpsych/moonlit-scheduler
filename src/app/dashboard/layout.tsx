@@ -13,6 +13,7 @@ import {
   FileSignature,
   Home,
   LogOut,
+  FileText,
   Menu,
   Network,
   Settings,
@@ -56,8 +57,17 @@ export default function DashboardLayout({
           return
         }
 
-        // Check if user is admin
-        const isAdmin = isAdminEmail(user.email || '')
+        // Check if user is admin (isAdminEmail is async — must await,
+        // otherwise the returned Promise is always truthy and every user
+        // appears to be an admin).
+        const isAdmin = await isAdminEmail(user.email || '')
+
+        // Defensive: if the user is NOT an admin, drop any stale
+        // impersonation context that may have been left in sessionStorage
+        // by a previous admin session in the same browser tab.
+        if (!isAdmin) {
+          providerImpersonationManager.clearImpersonation()
+        }
 
         // Check for impersonation context
         const impersonation = providerImpersonationManager.getImpersonatedProvider()
@@ -115,11 +125,12 @@ export default function DashboardLayout({
   // When admin is viewing as a provider, hide all admin features
   // This ensures they see exactly what the provider sees
   const isAdmin = false // Never show admin features in provider dashboard
-  const isPractitioner = provider && ['practitioner', 'psychiatrist', 'psychiatry_resident', 'provider'].includes(provider.role)
+  const isPractitioner = provider && ['practitioner', 'psychiatrist', 'psychiatry_resident', 'provider'].includes((provider.role || '').toLowerCase())
 
   const navigation = [
     { name: 'My Compensation', href: '/dashboard/compensation', icon: DollarSign, show: isPractitioner },
     { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
+    { name: 'Patient Referrals', href: '/dashboard/referrals', icon: FileText, show: isPractitioner },
     { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
   ].filter(item => item.show)
 
@@ -141,7 +152,7 @@ export default function DashboardLayout({
         {/* Practitioner Header with Provider Selector for Admins */}
         <PractitionerHeader>
           {isAdminViewing && (
-            <div className="ml-4">
+            <div className="bg-[#091747] rounded-lg">
               <ProviderSelector />
             </div>
           )}
