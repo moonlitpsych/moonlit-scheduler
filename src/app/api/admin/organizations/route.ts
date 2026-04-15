@@ -13,7 +13,7 @@ async function verifyAdminAccess() {
     const supabase = createServerComponentClient({ cookies })
     const { data: { user }, error } = await supabase.auth.getUser()
     
-    if (error || !user || !isAdminEmail(user.email || '')) {
+    if (error || !user || !(await isAdminEmail(user.email || ''))) {
       return { authorized: false, user: null }
     }
     

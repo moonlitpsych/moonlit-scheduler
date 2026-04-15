@@ -42,7 +42,7 @@ export async function POST(
     }
 
     // 2. Verify user is admin or provider with access to this patient
-    const isAdmin = isAdminEmail(user.email || '')
+    const isAdmin = await isAdminEmail(user.email || '')
 
     if (!isAdmin) {
       // Check if user is a provider assigned to this patient

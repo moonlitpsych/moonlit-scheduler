@@ -41,13 +41,15 @@ export default function ContextSwitcher() {
     try {
       authContextManager.setActiveContext(newContext)
 
+      const userIsAdmin = !!authContext.user && (await isAdminEmail(authContext.user.email || ''))
+
       // If switching to provider dashboard and user is admin, route to provider selector
-      if (newContext === 'provider' && authContext.user && isAdminEmail(authContext.user.email || '')) {
+      if (newContext === 'provider' && userIsAdmin) {
         // Clear any existing impersonation
         providerImpersonationManager.clearImpersonation()
         partnerImpersonationManager.clearImpersonation()
         router.push('/dashboard/select-provider')
-      } else if (newContext === 'partner' && authContext.user && isAdminEmail(authContext.user.email || '')) {
+      } else if (newContext === 'partner' && userIsAdmin) {
         // If switching to partner dashboard and user is admin, route to partner selector
         providerImpersonationManager.clearImpersonation()
         partnerImpersonationManager.clearImpersonation()

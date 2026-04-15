@@ -19,7 +19,7 @@ export function useAdminAudit() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const isAdmin = isAdminEmail(user.email || '')
+    const isAdmin = await isAdminEmail(user.email || '')
     const impersonation = providerImpersonationManager.getImpersonatedProvider()
 
     setIsAdminViewing(isAdmin && !!impersonation)

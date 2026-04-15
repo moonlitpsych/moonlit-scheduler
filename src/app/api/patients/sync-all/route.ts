@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     // 2. Get provider and verify access
     // Support admin impersonation
-    const isAdmin = isAdminEmail(user.email || '')
+    const isAdmin = await isAdminEmail(user.email || '')
     let providerId: string
     let providerName: string
 

@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is admin
-    if (!isAdminEmail(user.email || '')) {
+    if (!(await isAdminEmail(user.email || ''))) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
 

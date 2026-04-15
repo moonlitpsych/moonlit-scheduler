@@ -33,7 +33,7 @@ export default function PatientsPage() {
         }
 
         // Check for admin impersonation first
-        const isAdmin = isAdminEmail(user.email || '')
+        const isAdmin = await isAdminEmail(user.email || '')
         const impersonation = providerImpersonationManager.getImpersonatedProvider()
 
         if (isAdmin && impersonation) {

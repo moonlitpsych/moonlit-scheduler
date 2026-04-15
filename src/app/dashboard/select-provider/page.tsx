@@ -44,7 +44,7 @@ export default function SelectProviderPage() {
     try {
       // Verify user is admin
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user || !isAdminEmail(user.email || '')) {
+      if (!user || !(await isAdminEmail(user.email || ''))) {
         router.replace('/dashboard/compensation')
         return
       }

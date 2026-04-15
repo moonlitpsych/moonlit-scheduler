@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     console.log('🔧 User:', user.email)
 
     // Check if user is admin
-    const isAdmin = isAdminEmail(user.email || '')
+    const isAdmin = await isAdminEmail(user.email || '')
 
     // Load provider for verification and logging
     const { data: provider, error: providerError } = await supabaseAdmin
@@ -200,7 +200,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is admin
-    const isAdmin = isAdminEmail(user.email || '')
+    const isAdmin = await isAdminEmail(user.email || '')
 
     // Load provider for verification
     const { data: provider, error: providerError } = await supabaseAdmin
