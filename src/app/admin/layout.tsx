@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { routeGuardManager } from '@/lib/route-guards'
-import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity, GitBranch, FileText, DollarSign, ClipboardCheck, PenTool, Share2 } from 'lucide-react'
+import { Building2, Users, BarChart3, Settings, LogOut, Shield, Network, Activity, GitBranch, FileText, DollarSign, ClipboardCheck, PenTool, Share2, Repeat } from 'lucide-react'
 import Link from 'next/link'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
@@ -207,6 +207,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <FileText className="h-4 w-4" />
             <span>Provider Credentialing</span>
+          </Link>
+
+          <Link
+            href="/admin/transitions"
+            className={getNavLinkClasses('/admin/transitions')}
+          >
+            <Repeat className="h-4 w-4" />
+            <span>Transitions</span>
           </Link>
 
           <Link

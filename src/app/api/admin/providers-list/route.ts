@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     // Fetch all active providers ordered by name (fix for missing role_title column)
     const { data: providers, error } = await supabaseAdmin
       .from('providers')
-      .select('id, first_name, last_name, email, is_active, specialty, is_bookable')
+      .select('id, first_name, last_name, email, is_active, is_bookable')
       .eq('is_active', true)
       .order('last_name', { ascending: true })
 
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
         email: provider.email || '',
         is_active: provider.is_active || false,
         role_title: '', // Placeholder until column exists
-        specialty: Array.isArray(provider.specialty) ? provider.specialty : []
+        specialty: [] // Column doesn't exist on providers; kept for shape compatibility
       }))
 
     console.log(`✅ Found ${cleanedProviders.length} active providers`)
