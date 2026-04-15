@@ -239,7 +239,6 @@ export function sanitizeProviderData(data: Partial<ProviderInsert | ProviderUpda
     'profile_image_url', 'athena_provider_id', 'caqh_provider_id',
     'auth_user_id', 'role_id', 'npi', 'date_of_birth', 'location_of_birth',
     'provider_sex', 'bank_account_number', 'bank_routing_number',
-    'malpractice_insurance_id', 'malpractice_insurance_expiration',
     'calendar_source_id', 'utah_id', 'personal_booking_url'
   ]
 
