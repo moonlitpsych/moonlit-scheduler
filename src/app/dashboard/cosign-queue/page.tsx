@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/database'
+import { providerImpersonationManager } from '@/lib/provider-impersonation'
 import {
   FileText,
   CheckCircle,
@@ -46,6 +47,14 @@ export default function CosignQueuePage() {
   // Get current user's provider ID on mount
   useEffect(() => {
     const getProviderId = async () => {
+      // Honor admin impersonation: if an admin is viewing as a specific provider,
+      // use that provider's id rather than the admin's own provider record.
+      const impersonation = providerImpersonationManager.getImpersonatedProvider()
+      if (impersonation?.provider?.id) {
+        setProviderId(impersonation.provider.id)
+        return
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: provider } = await supabase

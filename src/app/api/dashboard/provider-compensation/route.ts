@@ -3,6 +3,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
 import { Database } from '@/types/database'
+import { isAdminEmail } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,22 +18,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get provider record for this user
-    const { data: provider } = await supabaseAdmin
-      .from('providers')
-      .select('id, first_name, last_name')
-      .eq('auth_user_id', user.id)
-      .eq('is_active', true)
-      .single()
-
-    if (!provider) {
-      return NextResponse.json({ success: false, error: 'Provider not found' }, { status: 404 })
-    }
-
     // Parse filters
     const { searchParams } = new URL(request.url)
     const filter = searchParams.get('filter') || 'all'
     const search = searchParams.get('search')?.toLowerCase()
+    const requestedProviderId = searchParams.get('providerId')
+
+    // Resolve target provider. Admins may view any provider via ?providerId=
+    // (used by the impersonation system). Otherwise, use the caller's own provider record.
+    let provider: { id: string; first_name: string | null; last_name: string | null } | null = null
+
+    if (requestedProviderId && isAdminEmail(user.email || '')) {
+      const { data } = await supabaseAdmin
+        .from('providers')
+        .select('id, first_name, last_name')
+        .eq('id', requestedProviderId)
+        .single()
+      provider = data
+    } else {
+      const { data } = await supabaseAdmin
+        .from('providers')
+        .select('id, first_name, last_name')
+        .eq('auth_user_id', user.id)
+        .eq('is_active', true)
+        .single()
+      provider = data
+    }
+
+    if (!provider) {
+      return NextResponse.json({ success: false, error: 'Provider not found' }, { status: 404 })
+    }
 
     // Query provider_earnings — the authoritative source for all provider compensation
     // This includes ALL appointments (PracticeQ-synced, scheduler-booked, etc.)

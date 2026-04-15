@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { DollarSign, RefreshCw, Download, Search, CheckCircle, Clock, ArrowUpRight } from 'lucide-react'
+import { providerImpersonationManager } from '@/lib/provider-impersonation'
 
 interface CompItem {
   appointmentId: string
@@ -50,6 +51,8 @@ export default function CompensationPage() {
       const params = new URLSearchParams()
       if (filter !== 'all') params.set('filter', filter)
       if (search) params.set('search', search)
+      const impersonation = providerImpersonationManager.getImpersonatedProvider()
+      if (impersonation?.provider?.id) params.set('providerId', impersonation.provider.id)
 
       const res = await fetch(`/api/dashboard/provider-compensation?${params}`)
       const json = await res.json()
