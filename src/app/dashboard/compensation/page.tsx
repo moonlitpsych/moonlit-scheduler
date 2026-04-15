@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { DollarSign, RefreshCw, Download, Search, CheckCircle, Clock, ArrowUpRight } from 'lucide-react'
+import { RefreshCw, Download, Calendar, DollarSign, CheckCircle, Clock } from 'lucide-react'
 import { providerImpersonationManager } from '@/lib/provider-impersonation'
 
 interface CompItem {
@@ -27,20 +27,19 @@ interface Summary {
   readyCount: number
 }
 
-type StatusFilter = 'all' | 'paid' | 'unpaid' | 'ready'
+type PayFilter = 'all' | 'paid' | 'unpaid' | 'next_pay_cycle'
 type SortField = 'date' | 'patient' | 'service' | 'earned' | 'status'
 type SortDir = 'asc' | 'desc'
 
 function formatCurrency(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents || 0) / 100)
 }
 
 export default function CompensationPage() {
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<CompItem[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
-  const [providerName, setProviderName] = useState('')
-  const [filter, setFilter] = useState<StatusFilter>('all')
+  const [filter, setFilter] = useState<PayFilter>('all')
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -49,7 +48,9 @@ export default function CompensationPage() {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (filter !== 'all') params.set('filter', filter)
+      // 'next_pay_cycle' is a UI alias for the API's 'ready' filter
+      const apiFilter = filter === 'next_pay_cycle' ? 'ready' : filter
+      if (apiFilter !== 'all') params.set('filter', apiFilter)
       if (search) params.set('search', search)
       const impersonation = providerImpersonationManager.getImpersonatedProvider()
       if (impersonation?.provider?.id) params.set('providerId', impersonation.provider.id)
@@ -59,7 +60,6 @@ export default function CompensationPage() {
       if (json.success) {
         setItems(json.items)
         setSummary(json.summary)
-        setProviderName(json.provider?.name || '')
       }
     } catch (err) {
       console.error('Failed to load compensation:', err)
@@ -80,7 +80,7 @@ export default function CompensationPage() {
   }
 
   const sortIcon = (field: SortField) => {
-    if (sortField !== field) return <span className="text-stone-300 ml-1">↕</span>
+    if (sortField !== field) return <span className="text-slate-300 ml-1">↕</span>
     return <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
   }
 
@@ -92,7 +92,7 @@ export default function CompensationPage() {
         case 'date': cmp = a.date.localeCompare(b.date); break
         case 'patient': cmp = a.patientLastName.localeCompare(b.patientLastName); break
         case 'service': cmp = a.service.localeCompare(b.service); break
-        case 'earned': cmp = a.earnedCents - b.earnedCents; break
+        case 'earned': cmp = a.paidCents - b.paidCents; break
         case 'status': cmp = a.status.localeCompare(b.status); break
       }
       return sortDir === 'asc' ? cmp : -cmp
@@ -115,33 +115,49 @@ export default function CompensationPage() {
     URL.revokeObjectURL(url)
   }
 
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case 'paid': return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><CheckCircle className="w-3 h-3" /> Paid</span>
-      case 'ready': return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><ArrowUpRight className="w-3 h-3" /> Ready to Pay</span>
-      case 'unpaid': return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-500"><Clock className="w-3 h-3" /> Pending</span>
-      default: return null
+  const claimChip = (claim: string | null) => {
+    if (!claim) return <span className="text-slate-400">—</span>
+    const lower = claim.toLowerCase()
+    if (lower === 'paid') {
+      return <span className="text-xs px-2 py-0.5 rounded font-medium bg-emerald-100 text-emerald-700">Finalized</span>
     }
+    if (lower === 'accepted') {
+      return <span className="text-xs px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-700">{claim}</span>
+    }
+    if (lower === 'denied' || lower === 'rejected') {
+      return <span className="text-xs px-2 py-0.5 rounded font-medium bg-red-100 text-red-700">{claim}</span>
+    }
+    return <span className="text-xs px-2 py-0.5 rounded font-medium bg-slate-100 text-slate-600">{claim}</span>
   }
 
+  const statusChip = (status: string) => {
+    if (status === 'paid') return <span className="text-xs px-2 py-0.5 rounded font-medium bg-emerald-100 text-emerald-700">Paid</span>
+    if (status === 'ready') return <span className="text-xs px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-700">Next Pay Cycle</span>
+    return <span className="text-xs px-2 py-0.5 rounded font-medium bg-slate-100 text-slate-500">Unpaid</span>
+  }
+
+  const filters: { value: PayFilter; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'unpaid', label: 'Unpaid' },
+    { value: 'next_pay_cycle', label: 'Next Pay Cycle' },
+  ]
+
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-full mx-auto p-6 lg:p-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-[#091747] font-['Newsreader']">
-            My Compensation
-          </h1>
-          <p className="text-stone-600 mt-2">
-            Track your earnings and payment status
-          </p>
+          <h1 className="text-2xl font-bold text-[#091747] font-['Newsreader']">My Compensation</h1>
+          <p className="text-[#091747]/60 mt-1">Your appointment-level compensation</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleExport} disabled={items.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-stone-600 bg-white border rounded-lg hover:bg-stone-50 disabled:opacity-50">
-            <Download className="w-4 h-4" /> Export
+        <div className="flex gap-2">
+          <button onClick={handleExport} disabled={loading || !sorted.length}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-300 rounded-lg hover:bg-stone-50 transition-colors disabled:opacity-50">
+            <Download className="w-4 h-4" /> Export CSV
           </button>
           <button onClick={loadData} disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-white bg-[#BF9C73] rounded-lg hover:bg-[#BF9C73]/90 disabled:opacity-50">
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-300 rounded-lg hover:bg-stone-50 transition-colors disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </div>
@@ -150,89 +166,117 @@ export default function CompensationPage() {
       {/* Summary cards */}
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-stone-100">
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Appointments</p>
-            <p className="text-2xl font-bold text-[#091747] mt-1">{summary.totalAppointments}</p>
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Calendar className="w-4 h-4 text-slate-500" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Appointments</p>
+            </div>
+            <p className="text-2xl font-bold text-[#091747]">{summary.totalAppointments}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-stone-100">
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Total Paid</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">{formatCurrency(summary.totalPaidCents)}</p>
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="w-4 h-4 text-emerald-500" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Paid</p>
+            </div>
+            <p className="text-2xl font-bold text-emerald-600">{formatCurrency(summary.totalPaidCents)}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-stone-100">
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Paid</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">{summary.paidCount}</p>
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle className="w-4 h-4 text-emerald-500" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Paid</p>
+            </div>
+            <p className="text-2xl font-bold text-emerald-600">{summary.paidCount}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5 border border-stone-100">
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Ready to Pay</p>
-            <p className="text-2xl font-bold text-amber-600 mt-1">{summary.readyCount}</p>
-            <p className="text-xs text-stone-400 mt-0.5">{summary.unpaidCount} pending</p>
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Clock className="w-4 h-4 text-amber-500" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Unpaid</p>
+            </div>
+            <p className="text-2xl font-bold text-amber-600">{summary.unpaidCount}</p>
           </div>
         </div>
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="flex bg-white border rounded-lg overflow-hidden">
-          {(['all', 'paid', 'unpaid', 'ready'] as StatusFilter[]).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                filter === f ? 'bg-[#091747] text-white' : 'text-stone-600 hover:bg-stone-50'
-              }`}>
-              {f === 'all' ? 'All' : f === 'paid' ? 'Paid' : f === 'unpaid' ? 'Pending' : 'Ready to Pay'}
-            </button>
-          ))}
-        </div>
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+      <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
+        <div className="flex flex-wrap items-center gap-3">
           <input
             type="text"
-            placeholder="Search patient or service..."
+            placeholder="Search patient, service..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 border rounded-lg text-sm bg-white"
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/50"
           />
+
+          <div className="flex rounded-lg border border-slate-300 overflow-hidden">
+            {filters.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setFilter(f.value)}
+                className={`px-3 py-2 text-xs font-medium transition-colors ${
+                  filter === f.value
+                    ? 'bg-[#091747] text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {summary && (
+            <p className="text-xs text-slate-500 ml-auto">
+              Showing {sorted.length} of {summary.totalAppointments} appointments
+            </p>
+          )}
         </div>
       </div>
 
       {/* Table */}
-      {loading && items.length === 0 ? (
-        <div className="text-center py-12 text-stone-400">Loading...</div>
-      ) : sorted.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-8 text-center text-stone-400">
-          No appointments match your filters.
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl shadow-sm overflow-x-auto border border-stone-100">
-          <table className="w-full text-sm">
-            <thead className="bg-stone-50 border-b border-stone-100">
-              <tr className="text-left text-xs uppercase tracking-wider text-stone-400">
-                <th className="px-4 py-3 cursor-pointer select-none" onClick={() => handleSort('date')}>Date {sortIcon('date')}</th>
-                <th className="px-4 py-3 cursor-pointer select-none" onClick={() => handleSort('patient')}>Patient {sortIcon('patient')}</th>
-                <th className="px-4 py-3 cursor-pointer select-none" onClick={() => handleSort('service')}>Service {sortIcon('service')}</th>
-                <th className="px-4 py-3">Claim</th>
-                <th className="px-4 py-3 text-right cursor-pointer select-none" onClick={() => handleSort('earned')}>Paid {sortIcon('earned')}</th>
-                <th className="px-4 py-3">Paid Date</th>
-                <th className="px-4 py-3 cursor-pointer select-none" onClick={() => handleSort('status')}>Status {sortIcon('status')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((item, index) => (
-                <tr key={`${item.appointmentId}-${index}`} className="border-t border-stone-50 hover:bg-stone-50/50">
-                  <td className="px-4 py-2.5 whitespace-nowrap text-stone-700">
-                    {new Date(item.date + 'T12:00:00').toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-2.5 font-medium text-[#091747]">{item.patientLastName}</td>
-                  <td className="px-4 py-2.5 text-stone-600">{item.service}</td>
-                  <td className="px-4 py-2.5 text-xs text-stone-400">{item.claimStatus ? (item.claimStatus.toLowerCase() === 'paid' ? 'Finalized' : item.claimStatus) : '—'}</td>
-                  <td className="px-4 py-2.5 text-right text-green-600">{item.paidCents > 0 ? formatCurrency(item.paidCents) : '—'}</td>
-                  <td className="px-4 py-2.5 text-stone-400 text-xs">{item.paidDate ? new Date(item.paidDate + 'T12:00:00').toLocaleDateString() : '—'}</td>
-                  <td className="px-4 py-2.5">{statusBadge(item.status)}</td>
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        {loading && items.length === 0 ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="w-8 h-8 animate-spin text-slate-400" />
+          </div>
+        ) : sorted.length === 0 ? (
+          <p className="text-center text-slate-500 py-12">No appointments match your filters</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-stone-50 border-b border-stone-200">
+                <tr>
+                  <th className="text-left px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('date')}>Date {sortIcon('date')}</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('patient')}>Patient {sortIcon('patient')}</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('service')}>Service {sortIcon('service')}</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#091747]">Claim Status</th>
+                  <th className="text-right px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('earned')}>Paid {sortIcon('earned')}</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#091747]">Paid Date</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('status')}>Status {sortIcon('status')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {sorted.map((item, i) => (
+                  <tr key={`${item.appointmentId}-${i}`} className="hover:bg-stone-50">
+                    <td className="px-4 py-3 text-[#091747]">
+                      {item.date ? new Date(item.date + 'T12:00:00').toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-[#091747]">{item.patientLastName || '—'}</td>
+                    <td className="px-4 py-3 text-[#091747]/70 max-w-[240px] truncate" title={item.service}>{item.service || '—'}</td>
+                    <td className="px-4 py-3">{claimChip(item.claimStatus)}</td>
+                    <td className="px-4 py-3 text-right text-emerald-600 font-medium">
+                      {item.paidCents > 0 ? formatCurrency(item.paidCents) : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 text-xs">
+                      {item.paidDate ? new Date(item.paidDate + 'T12:00:00').toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-4 py-3">{statusChip(item.status)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

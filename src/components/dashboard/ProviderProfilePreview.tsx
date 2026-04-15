@@ -338,9 +338,23 @@ function InlineModalContent({ provider }: { provider: Provider }) {
             <div>
               <h3 className="text-lg font-['Newsreader'] text-[#091747] font-medium mb-3">Residency</h3>
               {provider.residency_org ? (
-                <p className="text-[#091747]/80 font-['Newsreader'] font-medium">
-                  {provider.residency_org}
-                </p>
+                <div className="text-[#091747]/80 font-['Newsreader']">
+                  <p className="font-medium">{provider.residency_org}</p>
+                  {(() => {
+                    const y = provider.residency_grad_year
+                    const m = provider.residency_grad_month
+                    if (!y) return null
+                    // Hide if graduation date is in the future (still in residency).
+                    // Month is used only for the in-progress check, not displayed.
+                    const gradDate = m ? new Date(y, m - 1, 1) : new Date(y, 11, 31)
+                    if (gradDate > new Date()) return null
+                    return (
+                      <p className="text-sm text-[#091747]/60 mt-1">
+                        Graduated {y}
+                      </p>
+                    )
+                  })()}
+                </div>
               ) : (
                 <p className="text-[#091747]/70 font-['Newsreader'] italic">
                   Information coming soon

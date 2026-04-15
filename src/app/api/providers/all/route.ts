@@ -26,6 +26,8 @@ export async function GET() {
                 med_school_org,
                 med_school_grad_year,
                 residency_org,
+                residency_grad_year,
+                residency_grad_month,
                 provider_licenses(license_type, issuing_state)
             `)
             .eq('is_active', true)
@@ -114,7 +116,9 @@ export async function GET() {
             med_school_org: provider.med_school_org,
             med_school_grad_year: provider.med_school_grad_year,
             residency_org: provider.residency_org,
-            
+            residency_grad_year: provider.residency_grad_year,
+            residency_grad_month: provider.residency_grad_month,
+
             // Transform license data to state_licenses array for compatibility
             state_licenses: provider.provider_licenses?.map(license => 
                 `${license.issuing_state} ${license.license_type}`

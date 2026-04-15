@@ -24,6 +24,8 @@ export interface Provider {
     med_school_org?: string // Medical school
     med_school_grad_year?: number // Graduation year
     residency_org?: string // Residency organization
+    residency_grad_year?: number // Residency graduation year
+    residency_grad_month?: number // Residency graduation month (1-12)
     specialty?: string // Single specialty (from some APIs)
     specialties?: string[] // Multiple specialties array
     languages_spoken?: string[]
