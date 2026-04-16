@@ -10,7 +10,9 @@ import ProviderSelector from '@/components/admin/ProviderSelector'
 import {
   Calendar,
   DollarSign,
+  ExternalLink,
   FileSignature,
+  FlaskConical,
   Home,
   LogOut,
   FileText,
@@ -130,8 +132,9 @@ export default function DashboardLayout({
   const navigation = [
     { name: 'My Compensation', href: '/dashboard/compensation', icon: DollarSign, show: isPractitioner },
     { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
-    { name: 'Patient Referrals', href: '/dashboard/referrals', icon: FileText, show: isPractitioner },
+    { name: 'Patient Referrals', href: '/dashboard/referrals', icon: FileText, show: isPractitioner, beta: true },
     { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
+    { name: 'Lab Orders', href: 'https://lab-requisition-tool.vercel.app', icon: FlaskConical, show: isPractitioner, external: true },
   ].filter(item => item.show)
 
   // Show loading state
@@ -219,14 +222,18 @@ export default function DashboardLayout({
               <nav className="flex-1 px-4 py-6 space-y-2">
                 {navigation.map((item) => {
                   const isActive = pathname === item.href
+                  const linkProps = item.external
+                    ? { target: '_blank', rel: 'noopener noreferrer' }
+                    : {}
                   return (
                     <Link
                       key={item.name}
                       href={item.href}
+                      {...linkProps}
                       className={`
                         flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group
-                        ${isActive 
-                          ? 'bg-gradient-to-r from-[#BF9C73] to-[#F6B398] text-white shadow-lg' 
+                        ${isActive
+                          ? 'bg-gradient-to-r from-[#BF9C73] to-[#F6B398] text-white shadow-lg'
                           : 'text-[#091747] hover:bg-gradient-to-r hover:from-[#BF9C73]/10 hover:to-[#F6B398]/10 hover:shadow-md'
                         }
                       `}
@@ -236,12 +243,15 @@ export default function DashboardLayout({
                       <span className={`font-medium ${isActive ? 'text-white' : 'text-[#091747]'}`}>
                         {item.name}
                       </span>
+                      {item.external && (
+                        <ExternalLink className="ml-auto h-4 w-4 text-[#BF9C73] opacity-60" />
+                      )}
                       {item.beta && (
                         <span className="ml-2 px-2 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs rounded-full font-medium">
                           Beta
                         </span>
                       )}
-                      {isActive && (
+                      {isActive && !item.external && (
                         <div className="ml-auto w-2 h-2 bg-white rounded-full opacity-80" />
                       )}
                     </Link>

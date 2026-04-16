@@ -23,18 +23,22 @@ class GoogleSheetsClient {
     if (this.sheets) return this.sheets
 
     let credentials: object
-    const credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS_JSON
-    if (credentialsJson) {
-      credentials = JSON.parse(credentialsJson)
+    // Prefer credentials file for local dev (env var from Vercel can have escaping issues)
+    const credentialsPath = process.env.GOOGLE_SHEETS_CREDENTIALS_FILE || './google-sheets-credentials.json'
+    const abs = path.resolve(process.cwd(), credentialsPath)
+
+    if (fs.existsSync(abs)) {
+      credentials = JSON.parse(fs.readFileSync(abs, 'utf8'))
     } else {
-      const credentialsPath = process.env.GOOGLE_SHEETS_CREDENTIALS_FILE || './google-sheets-credentials.json'
-      const abs = path.resolve(process.cwd(), credentialsPath)
-      if (!fs.existsSync(abs)) {
+      const credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS_JSON
+      if (!credentialsJson) {
         throw new Error(
           `Google Sheets credentials not configured. Set GOOGLE_SHEETS_CREDENTIALS_JSON (Vercel) or place the credentials file at: ${abs}`
         )
       }
-      credentials = JSON.parse(fs.readFileSync(abs, 'utf8'))
+      // Handle escaped newlines from Vercel env vars
+      const unescaped = credentialsJson.replace(/\\n/g, '\n')
+      credentials = JSON.parse(unescaped)
     }
 
     const auth = new google.auth.GoogleAuth({
