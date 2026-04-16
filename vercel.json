@@ -11,6 +11,10 @@
   ],
   "rewrites": [
     {
+      "source": "/labs/api/:path*",
+      "destination": "https://lab-requisition-tool.vercel.app/api/:path*"
+    },
+    {
       "source": "/labs",
       "destination": "https://lab-requisition-tool.vercel.app/labs"
     },
