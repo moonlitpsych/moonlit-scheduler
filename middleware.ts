@@ -9,8 +9,12 @@ export function middleware(request: NextRequest) {
   console.log('[MW]', host, pathname)
 
   // 1. Host redirect: trymoonlit.com → booking.trymoonlit.com (301)
-  // Redirect all traffic from trymoonlit.com to booking.trymoonlit.com preserving path and query
-  if (host === 'trymoonlit.com') {
+  // Redirect all traffic from trymoonlit.com to booking.trymoonlit.com preserving path and query.
+  // NOTE: This redirect appears dormant in production (Vercel edge currently does the OPPOSITE,
+  // booking → trymoonlit, via dashboard primary-domain settings). Kept here in case config
+  // changes again. `/labs/*` is excluded because that path is proxied to the lab-requisition
+  // app via vercel.json rewrites — redirecting would break cross-app SSO.
+  if (host === 'trymoonlit.com' && !pathname.startsWith('/labs')) {
     const redirectUrl = new URL(`https://booking.trymoonlit.com${pathname}${search}`)
     return NextResponse.redirect(redirectUrl, 301)
   }

@@ -8,5 +8,15 @@
       "path": "/api/cron/monthly-provider-transitions",
       "schedule": "0 9 1 * *"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/labs",
+      "destination": "https://lab-requisition-tool.vercel.app/labs"
+    },
+    {
+      "source": "/labs/:path*",
+      "destination": "https://lab-requisition-tool.vercel.app/labs/:path*"
+    }
   ]
 }
