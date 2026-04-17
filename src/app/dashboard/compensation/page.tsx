@@ -14,6 +14,7 @@ interface CompItem {
   paidCents: number
   paidDate: string | null
   reimbursedCents: number
+  projectedCents: number
   status: 'paid' | 'unpaid' | 'ready'
 }
 
@@ -21,6 +22,7 @@ interface Summary {
   totalAppointments: number
   totalEarnedCents: number
   totalPaidCents: number
+  totalProjectedCents: number
   totalOwedCents: number
   paidCount: number
   unpaidCount: number
@@ -28,7 +30,7 @@ interface Summary {
 }
 
 type PayFilter = 'all' | 'paid' | 'unpaid' | 'next_pay_cycle'
-type SortField = 'date' | 'patient' | 'service' | 'earned' | 'status'
+type SortField = 'date' | 'patient' | 'service' | 'earned' | 'projected' | 'status'
 type SortDir = 'asc' | 'desc'
 
 function formatCurrency(cents: number): string {
@@ -93,6 +95,7 @@ export default function CompensationPage() {
         case 'patient': cmp = a.patientLastName.localeCompare(b.patientLastName); break
         case 'service': cmp = a.service.localeCompare(b.service); break
         case 'earned': cmp = a.paidCents - b.paidCents; break
+        case 'projected': cmp = a.projectedCents - b.projectedCents; break
         case 'status': cmp = a.status.localeCompare(b.status); break
       }
       return sortDir === 'asc' ? cmp : -cmp
@@ -101,9 +104,9 @@ export default function CompensationPage() {
   }, [items, sortField, sortDir])
 
   const handleExport = () => {
-    const header = 'Date,Patient,Service,Claim Status,Paid,Paid Date,Status'
+    const header = 'Date,Patient,Service,Claim Status,Projected,Paid,Paid Date,Status'
     const rows = sorted.map(i =>
-      `${i.date},"${i.patientLastName}","${i.service}",${i.claimStatus || ''},${(i.paidCents / 100).toFixed(2)},${i.paidDate || ''},${i.status}`
+      `${i.date},"${i.patientLastName}","${i.service}",${i.claimStatus || ''},${i.projectedCents > 0 ? (i.projectedCents / 100).toFixed(2) : ''},${(i.paidCents / 100).toFixed(2)},${i.paidDate || ''},${i.status}`
     )
     const csv = [header, ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -142,6 +145,11 @@ export default function CompensationPage() {
     { value: 'unpaid', label: 'Unpaid' },
     { value: 'next_pay_cycle', label: 'Next Pay Cycle' },
   ]
+
+  const projectedTotalCents = useMemo(
+    () => sorted.reduce((s, r) => s + (r.projectedCents || 0), 0),
+    [sorted]
+  )
 
   return (
     <div className="max-w-full mx-auto p-6 lg:p-8">
@@ -225,9 +233,17 @@ export default function CompensationPage() {
           </div>
 
           {summary && (
-            <p className="text-xs text-slate-500 ml-auto">
-              Showing {sorted.length} of {summary.totalAppointments} appointments
-            </p>
+            <div className="ml-auto flex items-center gap-4 text-xs text-slate-500">
+              {projectedTotalCents > 0 && (
+                <p>
+                  Projected total:{' '}
+                  <span className="font-semibold text-[#091747]">{formatCurrency(projectedTotalCents)}</span>
+                </p>
+              )}
+              <p>
+                Showing {sorted.length} of {summary.totalAppointments} appointments
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -249,6 +265,7 @@ export default function CompensationPage() {
                   <th className="text-left px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('patient')}>Patient {sortIcon('patient')}</th>
                   <th className="text-left px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('service')}>Service {sortIcon('service')}</th>
                   <th className="text-left px-4 py-3 font-semibold text-[#091747]">Claim Status</th>
+                  <th className="text-right px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('projected')}>Projected {sortIcon('projected')}</th>
                   <th className="text-right px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('earned')}>Paid {sortIcon('earned')}</th>
                   <th className="text-left px-4 py-3 font-semibold text-[#091747]">Paid Date</th>
                   <th className="text-left px-4 py-3 font-semibold text-[#091747] cursor-pointer select-none" onClick={() => handleSort('status')}>Status {sortIcon('status')}</th>
@@ -263,6 +280,9 @@ export default function CompensationPage() {
                     <td className="px-4 py-3 font-medium text-[#091747]">{item.patientLastName || '—'}</td>
                     <td className="px-4 py-3 text-[#091747]/70 max-w-[240px] truncate" title={item.service}>{item.service || '—'}</td>
                     <td className="px-4 py-3">{claimChip(item.claimStatus)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-[#091747]/70">
+                      {item.projectedCents > 0 ? formatCurrency(item.projectedCents) : <span className="text-slate-300">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-right text-emerald-600 font-medium">
                       {item.paidCents > 0 ? formatCurrency(item.paidCents) : <span className="text-slate-300">—</span>}
                     </td>

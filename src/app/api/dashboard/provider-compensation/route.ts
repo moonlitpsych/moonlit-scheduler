@@ -111,6 +111,7 @@ export async function GET(request: NextRequest) {
       const paidAmount = parseAmount(row['ProviderPaidAmt'])
       const paidDateRaw = (row['ProviderPaidDate'] || '').trim()
       const reimbursement = parseAmount(row['ReimbursementAmount'])
+      const projectedAmount = parseAmount(row['ProviderExpectedPay'])
       const claimStatus = (row['ClaimStatus'] || '').trim() || null
 
       let status: 'paid' | 'unpaid' | 'ready'
@@ -128,6 +129,7 @@ export async function GET(request: NextRequest) {
         paidCents: Math.round(paidAmount * 100),
         paidDate: paidDateRaw ? parseDate(paidDateRaw) : null,
         reimbursedCents: Math.round(reimbursement * 100),
+        projectedCents: Math.round(projectedAmount * 100),
         status,
       })
     }
@@ -137,6 +139,7 @@ export async function GET(request: NextRequest) {
     // Summary computed from the full filtered set (before search/status filtering)
     const totalEarnedCents = items.reduce((s, i) => s + i.earnedCents, 0)
     const totalPaidCents = items.reduce((s, i) => s + i.paidCents, 0)
+    const totalProjectedCents = items.reduce((s, i) => s + i.projectedCents, 0)
     const totalOwedCents = totalEarnedCents - totalPaidCents
     const paidCount = items.filter(i => i.status === 'paid').length
     const readyCount = items.filter(i => i.status === 'ready').length
@@ -161,6 +164,7 @@ export async function GET(request: NextRequest) {
         totalAppointments,
         totalEarnedCents,
         totalPaidCents,
+        totalProjectedCents,
         totalOwedCents,
         paidCount,
         unpaidCount: totalAppointments - paidCount,
