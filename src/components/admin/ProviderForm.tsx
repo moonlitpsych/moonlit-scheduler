@@ -225,7 +225,8 @@ export default function ProviderForm({ mode, provider, onSuccess, onCancel }: Pr
           setValidationErrors(result.validationErrors)
           setError('Please fix the validation errors below')
         } else {
-          setError(result.error || 'Failed to save provider')
+          const detail = result.details ? ` — ${result.details}` : ''
+          setError((result.error || 'Failed to save provider') + detail)
         }
         setLoading(false)
         return

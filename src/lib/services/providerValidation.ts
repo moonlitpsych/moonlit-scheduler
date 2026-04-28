@@ -231,6 +231,14 @@ export function sanitizeProviderData(data: Partial<ProviderInsert | ProviderUpda
     }
   }
 
+  // Fields with unique constraints — empty string must become null to avoid
+  // constraint violations when multiple providers have no value set.
+  const uniqueIdFields = [
+    'athena_provider_id', 'caqh_provider_id', 'npi', 'utah_id',
+    'personal_booking_url', 'auth_user_id', 'role_id',
+    'malpractice_insurance_id', 'calendar_source_id',
+  ]
+
   // Copy other fields as-is
   const otherFields = [
     'is_active', 'is_bookable', 'list_on_provider_page', 'accepts_new_patients',
@@ -244,7 +252,9 @@ export function sanitizeProviderData(data: Partial<ProviderInsert | ProviderUpda
 
   for (const field of otherFields) {
     if (data[field as keyof typeof data] !== undefined) {
-      sanitized[field] = data[field as keyof typeof data]
+      const value = data[field as keyof typeof data]
+      // Coerce empty string to null for unique-constraint fields
+      sanitized[field] = (uniqueIdFields.includes(field) && value === '') ? null : value
     }
   }
 
