@@ -17,6 +17,8 @@ import {
   LogOut,
   FileText,
   Menu,
+  BookOpen,
+  Stethoscope,
   Network,
   Settings,
   User,
@@ -135,6 +137,8 @@ export default function DashboardLayout({
     { name: 'Patient Referrals', href: '/dashboard/referrals', icon: FileText, show: isPractitioner, beta: true },
     { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
     { name: 'Lab Orders', href: 'https://trymoonlit.com/labs', icon: FlaskConical, show: isPractitioner, external: true },
+    { name: 'EHR', href: 'https://intakeq.com/', icon: Stethoscope, show: isPractitioner, external: true },
+    { name: 'Moonlit Wiki', href: 'https://drive.google.com/drive/folders/1ZAy6aJu9pUmvytGtuwVbByuQ-B1AMdOj?usp=drive_link', icon: BookOpen, show: isPractitioner, external: true },
   ].filter(item => item.show)
 
   // Show loading state
