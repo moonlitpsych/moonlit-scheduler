@@ -34,6 +34,15 @@ interface ServiceInstance {
   active: boolean
 }
 
+interface PayerPlanInput {
+  id?: string
+  plan_name: string
+  plan_type?: string | null
+  is_default?: boolean
+  is_active?: boolean
+  notes?: string | null
+}
+
 interface CreateWithContractRequest {
   payerUpdates: {
     name?: string
@@ -50,6 +59,7 @@ interface CreateWithContractRequest {
   providerContracts: ProviderContract[]
   supervisionSetup: SupervisionSetup[]
   serviceInstances?: ServiceInstance[]
+  payerPlans?: PayerPlanInput[]
   practiceQMapping: PracticeQMapping | null
   auditNote: string
   runValidation?: boolean
@@ -84,6 +94,7 @@ export async function POST(request: NextRequest) {
       serviceInstancesCreated: 0,
       serviceInstancesUpdated: 0,
       serviceInstancesDeleted: 0,
+      plansCreated: 0,
       practiceQMapped: false,
       validationResults: null as any,
       warnings: [] as string[]
@@ -233,6 +244,42 @@ export async function POST(request: NextRequest) {
             before: null,
             after: created,
             note: `Service instance created via new payer: ${body.auditNote}`
+          })
+        }
+      }
+    }
+
+    // 4b. CREATE PAYER PLANS
+    if (body.payerPlans && body.payerPlans.length > 0) {
+      for (const plan of body.payerPlans) {
+        if (!plan.plan_name?.trim()) continue
+
+        const { data: created, error: planError } = await supabase
+          .from('payer_plans')
+          .insert({
+            payer_id: payerId,
+            plan_name: plan.plan_name.trim(),
+            plan_type: plan.plan_type || null,
+            is_default: plan.is_default || false,
+            is_active: plan.is_active !== false,
+            notes: plan.notes || null
+          })
+          .select()
+          .single()
+
+        if (planError) {
+          console.error('❌ Failed to create payer plan:', planError)
+          results.warnings.push(`Failed to create plan "${plan.plan_name}": ${planError.message}`)
+        } else {
+          results.plansCreated++
+          auditEntries.push({
+            actorUserId: 'admin',
+            action: 'create_payer_plan',
+            entity: 'payer_plans',
+            entityId: created.id,
+            before: null,
+            after: created,
+            note: `Plan created via new payer: ${body.auditNote}`
           })
         }
       }

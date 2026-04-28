@@ -34,6 +34,15 @@ interface ServiceInstance {
   active: boolean
 }
 
+interface PayerPlanInput {
+  id?: string
+  plan_name: string
+  plan_type?: string | null
+  is_default?: boolean
+  is_active?: boolean
+  notes?: string | null
+}
+
 interface ApplyContractRequest {
   payerUpdates: {
     status_code?: string
@@ -47,6 +56,7 @@ interface ApplyContractRequest {
   providerContracts: ProviderContract[]
   supervisionSetup: SupervisionSetup[]
   serviceInstances?: ServiceInstance[]
+  payerPlans?: PayerPlanInput[]
   practiceQMapping: PracticeQMapping | null
   auditNote: string
   runValidation?: boolean
@@ -80,6 +90,9 @@ export async function POST(
       serviceInstancesCreated: 0,
       serviceInstancesUpdated: 0,
       serviceInstancesDeleted: 0,
+      plansCreated: 0,
+      plansUpdated: 0,
+      plansDeleted: 0,
       practiceQMapped: false,
       validationResults: null as any,
       warnings: [] as string[]
@@ -454,6 +467,108 @@ export async function POST(
               before: null,
               after: created,
               note: `Service instance created via payer contract: ${body.auditNote}`
+            })
+          }
+        }
+      }
+    }
+
+    // 4b. MANAGE PAYER PLANS (CREATE, UPDATE, DELETE)
+    if (body.payerPlans) {
+      console.log(`📋 Processing ${body.payerPlans.length} payer plans...`)
+
+      const { data: existingPlans } = await supabase
+        .from('payer_plans')
+        .select('*')
+        .eq('payer_id', payerId)
+
+      // Delete plans that exist in DB but not in submission (matched by id)
+      if (existingPlans && existingPlans.length > 0) {
+        for (const existing of existingPlans) {
+          const stillExists = body.payerPlans.find(p => p.id === existing.id)
+          if (!stillExists) {
+            const { error: deleteError } = await supabase
+              .from('payer_plans')
+              .delete()
+              .eq('id', existing.id)
+
+            if (!deleteError) {
+              results.plansDeleted++
+              auditEntries.push({
+                actorUserId: 'admin',
+                action: 'delete_payer_plan',
+                entity: 'payer_plans',
+                entityId: existing.id,
+                before: existing,
+                after: null,
+                note: `Plan deleted via payer contract: ${body.auditNote}`
+              })
+            }
+          }
+        }
+      }
+
+      // Upsert plans from submission
+      for (const plan of body.payerPlans) {
+        if (!plan.plan_name?.trim()) continue
+
+        if (plan.id) {
+          const { data: updated, error: updateError } = await supabase
+            .from('payer_plans')
+            .update({
+              plan_name: plan.plan_name.trim(),
+              plan_type: plan.plan_type || null,
+              is_default: plan.is_default || false,
+              is_active: plan.is_active !== false,
+              notes: plan.notes || null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', plan.id)
+            .select()
+            .single()
+
+          if (updateError) {
+            console.error('❌ Failed to update payer plan:', updateError)
+            results.warnings.push(`Failed to update plan "${plan.plan_name}": ${updateError.message}`)
+          } else {
+            results.plansUpdated++
+            auditEntries.push({
+              actorUserId: 'admin',
+              action: 'update_payer_plan',
+              entity: 'payer_plans',
+              entityId: plan.id,
+              before: null,
+              after: updated,
+              note: `Plan updated via payer contract: ${body.auditNote}`
+            })
+          }
+        } else {
+          const { data: created, error: createError } = await supabase
+            .from('payer_plans')
+            .insert({
+              payer_id: payerId,
+              plan_name: plan.plan_name.trim(),
+              plan_type: plan.plan_type || null,
+              is_default: plan.is_default || false,
+              is_active: plan.is_active !== false,
+              notes: plan.notes || null
+            })
+            .select()
+            .single()
+
+          if (createError) {
+            console.error('❌ Failed to create payer plan:', createError)
+            results.warnings.push(`Failed to create plan "${plan.plan_name}": ${createError.message}`)
+          } else {
+            results.plansCreated++
+            auditEntries.push({
+              actorUserId: 'admin',
+              action: 'create_payer_plan',
+              entity: 'payer_plans',
+              entityId: created.id,
+              before: null,
+              after: created,
+              note: `Plan created via payer contract: ${body.auditNote}`
             })
           }
         }
