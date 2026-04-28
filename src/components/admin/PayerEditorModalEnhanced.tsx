@@ -258,8 +258,9 @@ export default function PayerEditorModalEnhanced({
         ? '/api/admin/payers/create-with-contract'
         : `/api/admin/payers/${payer.id}/apply-contract`
 
-      // Only send fields that exist in the payers table
-      const cleanPayerUpdates = {
+      // Only send fields that exist in the payers table.
+      // For new payers, include name/payer_type/state since the row doesn't exist yet.
+      const cleanPayerUpdates: Record<string, any> = {
         status_code: formData.status_code,
         effective_date: formData.effective_date,
         allows_supervised: formData.allows_supervised,
@@ -267,6 +268,11 @@ export default function PayerEditorModalEnhanced({
         requires_attending: formData.requires_attending,
         requires_individual_contract: formData.requires_individual_contract,
         intakeq_location_id: formData.intakeq_location_id
+      }
+      if (isNewPayer) {
+        cleanPayerUpdates.name = formData.name
+        cleanPayerUpdates.payer_type = formData.payer_type
+        cleanPayerUpdates.state = formData.state
       }
 
       const response = await fetch(endpoint, {
