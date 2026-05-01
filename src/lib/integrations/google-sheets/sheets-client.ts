@@ -6,9 +6,10 @@ import path from 'path'
  * Google Sheets client for reading the Moonlit P&L spreadsheet.
  * Reuses the same service account credentials as moonlit-rcm.
  *
- * Env vars (one of):
- *   GOOGLE_SHEETS_CREDENTIALS_JSON — service account JSON (stringified; required on Vercel)
+ * Env vars (one of, in order of preference):
  *   GOOGLE_SHEETS_CREDENTIALS_FILE — path to credentials file (local dev)
+ *   GOOGLE_SHEETS_CREDENTIALS_B64  — base64-encoded service account JSON (recommended on Vercel)
+ *   GOOGLE_SHEETS_CREDENTIALS_JSON — raw service account JSON (legacy; fragile due to newline escaping)
  * Plus:
  *   GOOGLE_SHEETS_SPREADSHEET_ID   — P&L spreadsheet id
  */
@@ -29,16 +30,16 @@ class GoogleSheetsClient {
 
     if (fs.existsSync(abs)) {
       credentials = JSON.parse(fs.readFileSync(abs, 'utf8'))
-    } else {
-      const credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS_JSON
-      if (!credentialsJson) {
-        throw new Error(
-          `Google Sheets credentials not configured. Set GOOGLE_SHEETS_CREDENTIALS_JSON (Vercel) or place the credentials file at: ${abs}`
-        )
-      }
-      // Handle escaped newlines from Vercel env vars
-      const unescaped = credentialsJson.replace(/\\n/g, '\n')
+    } else if (process.env.GOOGLE_SHEETS_CREDENTIALS_B64) {
+      const decoded = Buffer.from(process.env.GOOGLE_SHEETS_CREDENTIALS_B64, 'base64').toString('utf8')
+      credentials = JSON.parse(decoded)
+    } else if (process.env.GOOGLE_SHEETS_CREDENTIALS_JSON) {
+      const unescaped = process.env.GOOGLE_SHEETS_CREDENTIALS_JSON.replace(/\\n/g, '\n')
       credentials = JSON.parse(unescaped)
+    } else {
+      throw new Error(
+        `Google Sheets credentials not configured. Set GOOGLE_SHEETS_CREDENTIALS_B64 (Vercel) or place the credentials file at: ${abs}`
+      )
     }
 
     const auth = new google.auth.GoogleAuth({
