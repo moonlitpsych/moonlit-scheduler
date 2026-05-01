@@ -44,6 +44,19 @@ GOOGLE_WORKSPACE_DOMAIN=trymoonlit.com
 ```
 **⚠️ IMPORTANT:** The service account key is a JSON object. In Vercel, paste the entire JSON as a single line.
 
+### 5b. Google Sheets (provider compensation dashboard)
+```bash
+GOOGLE_SHEETS_SPREADSHEET_ID=<moonlit-pnl-spreadsheet-id>
+GOOGLE_SHEETS_CREDENTIALS_B64=<base64-encoded-service-account-json>
+```
+**⚠️ IMPORTANT:** Use the **B64** variant on Vercel — the legacy `GOOGLE_SHEETS_CREDENTIALS_JSON` variant repeatedly broke due to newline escaping in the `private_key` field.
+
+To generate the value, run locally:
+```bash
+base64 -i google-sheets-credentials.json | pbcopy
+```
+Then paste into Vercel. Local dev uses `google-sheets-credentials.json` at the project root (gitignored).
+
 ### 6. Public URLs
 ```bash
 NEXT_PUBLIC_APP_URL=https://booking.trymoonlit.com
