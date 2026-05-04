@@ -58,7 +58,7 @@ INSERT INTO providers (
     date_of_birth, location_of_birth, address,
     caqh_provider_id, languages_spoken,
     med_school_org, med_school_grad_year, residency_org,
-    is_active, list_on_provider_page, accepts_new_patients, availability,
+    is_active, list_on_provider_page, accepts_new_patients, availability, is_bookable,
     profile_completed, telehealth_enabled,
     engagement_type, business_entity_id,
     created_date, modified_date
@@ -73,7 +73,7 @@ SELECT
     '16381084',
     ARRAY['English'],
     'University of Houston', 2023, 'University of Utah',
-    FALSE, FALSE, FALSE, FALSE,                -- not bookable until onboarding completes
+    FALSE, FALSE, FALSE, FALSE, FALSE,         -- not bookable until onboarding completes
     FALSE, NULL,
     'mso_client', be.id,
     NOW(), NOW()
