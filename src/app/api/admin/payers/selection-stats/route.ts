@@ -206,6 +206,9 @@ export async function GET(request: NextRequest) {
     let providerApplications = new Set<string>()
     let providerContracts = new Set<string>()
     let providerIsAttending = false
+    let providerIsCredentialingEligibleAsAttending = false
+    let providerExpectedAttendingDate: string | null = null
+    let providerMonthsUntilAttending: number | null = null
     const providerContractDetails = new Map<string, any>()
     const providerBookabilityMap = new Map<string, any>()
 
@@ -213,12 +216,31 @@ export async function GET(request: NextRequest) {
       // Check if provider is attending (role-based)
       const { data: provider } = await supabaseAdmin
         .from('providers')
-        .select('role')
+        .select('role, provider_type, residency_grad_month, residency_grad_year')
         .eq('id', providerId)
         .single()
 
       providerIsAttending = provider?.role?.toLowerCase().includes('psychiatrist') &&
                             !provider?.role?.toLowerCase().includes('resident')
+
+      // Compute expected attending start date from residency graduation
+      // (residencies end in their grad month; attending begins the 1st of the following month)
+      const gradMonth = provider?.residency_grad_month
+      const gradYear = provider?.residency_grad_year
+      if (gradMonth && gradYear) {
+        const expected = new Date(Date.UTC(gradYear, gradMonth, 1))
+        providerExpectedAttendingDate = expected.toISOString().slice(0, 10)
+        const now = new Date()
+        providerMonthsUntilAttending =
+          (expected.getUTCFullYear() - now.getUTCFullYear()) * 12 +
+          (expected.getUTCMonth() - now.getUTCMonth())
+      }
+
+      // Eligible as attending for credentialing purposes if: actually attending,
+      // OR within 4 months of their attending start (or already past it).
+      providerIsCredentialingEligibleAsAttending =
+        providerIsAttending ||
+        (providerMonthsUntilAttending !== null && providerMonthsUntilAttending <= 4)
 
       // Get provider applications
       const { data: applications } = await supabaseAdmin
@@ -292,7 +314,7 @@ export async function GET(request: NextRequest) {
 
         already_credentialing: providerApplications.has(payer.id),
         already_contracted: providerContracts.has(payer.id),
-        is_recommended: providerIsAttending && payer.requires_attending,
+        is_recommended: providerIsCredentialingEligibleAsAttending && payer.requires_attending,
 
         // Contract details
         existing_contract: contract ? {
@@ -327,7 +349,10 @@ export async function GET(request: NextRequest) {
       data: stats,
       provider: providerId ? {
         id: providerId,
-        is_attending: providerIsAttending
+        is_attending: providerIsAttending,
+        is_credentialing_eligible_as_attending: providerIsCredentialingEligibleAsAttending,
+        expected_attending_date: providerExpectedAttendingDate,
+        months_until_attending: providerMonthsUntilAttending
       } : null
     })
 

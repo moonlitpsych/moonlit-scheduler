@@ -68,6 +68,8 @@ export default function PayerSelectionPanel({
   const [sortDesc, setSortDesc] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [providerIsAttending, setProviderIsAttending] = useState<boolean>(true) // Default to attending
+  const [providerIsCredentialingEligible, setProviderIsCredentialingEligible] = useState<boolean>(true)
+  const [monthsUntilAttending, setMonthsUntilAttending] = useState<number | null>(null)
 
   useEffect(() => {
     loadPayerStats()
@@ -93,6 +95,10 @@ export default function PayerSelectionPanel({
       // Extract provider info if available
       if (data.provider) {
         setProviderIsAttending(data.provider.is_attending)
+        setProviderIsCredentialingEligible(
+          data.provider.is_credentialing_eligible_as_attending ?? data.provider.is_attending
+        )
+        setMonthsUntilAttending(data.provider.months_until_attending ?? null)
       }
     } catch (err: any) {
       console.error('Error loading payer stats:', err)
@@ -102,13 +108,23 @@ export default function PayerSelectionPanel({
     }
   }
 
-  // Check if payer is applicable for this provider
+  // Check if payer is applicable for this provider.
+  // Residents within 4 months of their attending start date are treated as eligible
+  // so we can begin credentialing early. Effective dates are still set manually per contract.
   const isPayerApplicable = (payer: PayerStat) => {
-    // If provider is a resident and payer requires attending, not applicable
-    if (!providerIsAttending && payer.requires_attending) {
+    if (!providerIsCredentialingEligible && payer.requires_attending) {
       return false
     }
     return true
+  }
+
+  // True when applicable only via the "within 4 months" early-eligibility path.
+  const isPayerEarlyEligible = (payer: PayerStat) => {
+    return (
+      !providerIsAttending &&
+      providerIsCredentialingEligible &&
+      payer.requires_attending
+    )
   }
 
   // Check if payer is selectable (applicable + not already contracted)
@@ -469,6 +485,17 @@ export default function PayerSelectionPanel({
                           <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 border border-gray-300 rounded inline-flex items-center gap-1 w-fit">
                             <AlertTriangle className="w-3 h-3" />
                             Not Applicable - Requires Attending
+                          </span>
+                        )}
+                        {isApplicable && isPayerEarlyEligible(payer) && (
+                          <span
+                            className="px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-800 border border-amber-300 rounded inline-flex items-center gap-1 w-fit"
+                            title="Resident within 4 months of attending start — credentialing can begin early. Set effective date manually per contract."
+                          >
+                            <Clock className="w-3 h-3" />
+                            {monthsUntilAttending !== null && monthsUntilAttending > 0
+                              ? `Eligible early – attending in ${monthsUntilAttending}mo`
+                              : 'Eligible early – attending start imminent'}
                           </span>
                         )}
                       </div>
