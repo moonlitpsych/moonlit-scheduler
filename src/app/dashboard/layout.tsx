@@ -135,6 +135,7 @@ export default function DashboardLayout({
     { name: 'My Compensation', href: '/dashboard/compensation', icon: DollarSign, show: isPractitioner },
     { name: 'My Profile', href: '/dashboard/profile', icon: User, show: isPractitioner },
     { name: 'Patient Referrals', href: '/dashboard/referrals', icon: FileText, show: isPractitioner, beta: true },
+    { name: 'Patient Letters', href: '/dashboard/letters', icon: FileSignature, show: isPractitioner, beta: true },
     { name: 'Network & Coverage', href: '/dashboard/bookability', icon: Network, show: isPractitioner },
     { name: 'Lab Orders', href: 'https://trymoonlit.com/labs', icon: FlaskConical, show: isPractitioner, external: true },
     { name: 'EHR', href: 'https://intakeq.com/', icon: Stethoscope, show: isPractitioner, external: true },
