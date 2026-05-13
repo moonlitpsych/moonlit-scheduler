@@ -1,3 +1,9 @@
+// MIRROR: keep in sync with moonlit-rcm/src/lib/outcome-measures.ts.
+// Both apps read from the same Supabase outcome_measures table, so
+// PHQ-9/GAD-7 thresholds, severity labels, question text, and color
+// mappings must match across repos. If you change something here,
+// change it there too.
+
 export type MeasureType = 'PHQ-9' | 'GAD-7'
 export type SeverityLevel = 'minimal' | 'mild' | 'moderate' | 'moderately_severe' | 'severe'
 

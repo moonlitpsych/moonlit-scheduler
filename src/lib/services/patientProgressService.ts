@@ -1,3 +1,8 @@
+// Reads the Supabase `outcome_measures` table. Rows are inserted by the
+// CSV upload flow that lives in the moonlit-rcm app:
+//   moonlit-rcm/src/app/api/dashboard/patient-progress/upload/route.ts
+// If a patient is "missing" from a provider's panel, check there first.
+
 import { supabaseAdmin } from '@/lib/supabase'
 import {
   REMISSION_THRESHOLD,
