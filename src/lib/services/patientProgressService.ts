@@ -1,12 +1,11 @@
 import { supabaseAdmin } from '@/lib/supabase'
-import type {
-  MeasureType,
-  PatientOutcomeSummary,
-  PatientProgressData,
-  SeverityLevel,
+import {
+  REMISSION_THRESHOLD,
+  type MeasureType,
+  type PatientOutcomeSummary,
+  type PatientProgressData,
+  type SeverityLevel,
 } from '@/lib/outcome-measures'
-
-const REMISSION_THRESHOLD = 5
 
 export interface GetPatientProgressParams {
   providerId: string

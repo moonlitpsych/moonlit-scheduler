@@ -3,6 +3,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin-auth'
+import type { MeasureType } from '@/lib/outcome-measures'
 
 export type ProviderResolution =
   | { ok: true; providerId: string; isAdmin: boolean }
@@ -15,9 +16,10 @@ export type ProviderResolution =
  */
 export async function resolveProviderForRequest(request: NextRequest): Promise<ProviderResolution> {
   const cookieStore = await cookies()
-  // The auth-helpers lib calls .get() synchronously on the returned value, so this
-  // must stay a sync getter even though the lib's types claim it expects a Promise.
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore as never })
+  // Sync getter intentional: @supabase/auth-helpers-nextjs calls .get() directly on
+  // the return value at runtime. The lib's types claim Promise but wrapping in async
+  // breaks runtime. Matches the pattern in api/provider-dashboard/patients/search.
+  const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return { ok: false, status: 401, error: 'Authentication required' }
 
@@ -39,4 +41,27 @@ export async function resolveProviderForRequest(request: NextRequest): Promise<P
     return { ok: false, status: 403, error: 'No provider context found for this account' }
   }
   return { ok: true, providerId: ownProvider.id, isAdmin }
+}
+
+/**
+ * Parse the `measureType` query param. Accepts a MeasureType or the sentinel
+ * 'all' (or missing) → returns null meaning "no filter".
+ */
+export function parseMeasureTypeParam(request: NextRequest): MeasureType | null {
+  const raw = new URL(request.url).searchParams.get('measureType')
+  return raw && raw !== 'all' ? (raw as MeasureType) : null
+}
+
+/**
+ * True iff the patient has at least one appointment with this provider.
+ * Authoritative check for "this patient is in this provider's panel."
+ */
+export async function isPatientInPanel(providerId: string, patientId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('appointments')
+    .select('id')
+    .eq('provider_id', providerId)
+    .eq('patient_id', patientId)
+    .limit(1)
+  return !!data && data.length > 0
 }

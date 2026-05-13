@@ -3,7 +3,7 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import React from 'react'
 import fs from 'node:fs'
 import path from 'node:path'
-import { resolveProviderForRequest } from '../../_resolveProvider'
+import { resolveProviderForRequest, isPatientInPanel } from '../../_resolveProvider'
 import { supabaseAdmin } from '@/lib/supabase'
 import type { MeasureType, SeverityLevel } from '@/lib/outcome-measures'
 import { PatientReport } from './PatientReport'
@@ -33,15 +33,7 @@ export async function GET(
 
   try {
     const { patientId } = await params
-
-    // Authorize: patient must be in this provider's panel.
-    const { data: apptCheck } = await supabaseAdmin
-      .from('appointments')
-      .select('id')
-      .eq('provider_id', resolved.providerId)
-      .eq('patient_id', patientId)
-      .limit(1)
-    if (!apptCheck || apptCheck.length === 0) {
+    if (!(await isPatientInPanel(resolved.providerId, patientId))) {
       return NextResponse.json({ error: 'Patient not in your panel' }, { status: 403 })
     }
 

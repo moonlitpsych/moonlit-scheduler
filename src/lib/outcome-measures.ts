@@ -50,12 +50,46 @@ export function questionText(measureType: MeasureType, questionNumber: number): 
   return list[questionNumber - 1] || `Question ${questionNumber}`
 }
 
-export const PHQ9_MAX = 27
-export const GAD7_MAX = 21
+export interface SeverityBand {
+  from: number
+  to: number
+  level: SeverityLevel
+}
+
+// Score-range → severity bands. Single source of truth for both severity
+// classification and chart shading. If a threshold changes, change it here.
+export const PHQ9_BANDS: SeverityBand[] = [
+  { from: 0, to: 4, level: 'minimal' },
+  { from: 5, to: 9, level: 'mild' },
+  { from: 10, to: 14, level: 'moderate' },
+  { from: 15, to: 19, level: 'moderately_severe' },
+  { from: 20, to: 27, level: 'severe' },
+]
+export const GAD7_BANDS: SeverityBand[] = [
+  { from: 0, to: 4, level: 'minimal' },
+  { from: 5, to: 9, level: 'mild' },
+  { from: 10, to: 14, level: 'moderate' },
+  { from: 15, to: 21, level: 'severe' },
+]
+
+export function severityBands(measureType: MeasureType): SeverityBand[] {
+  return measureType === 'PHQ-9' ? PHQ9_BANDS : GAD7_BANDS
+}
+
+export function severityForScore(measureType: MeasureType, score: number): SeverityLevel {
+  const bands = severityBands(measureType)
+  for (const b of bands) if (score >= b.from && score <= b.to) return b.level
+  return bands[bands.length - 1].level
+}
+
+export const PHQ9_MAX = PHQ9_BANDS[PHQ9_BANDS.length - 1].to
+export const GAD7_MAX = GAD7_BANDS[GAD7_BANDS.length - 1].to
 
 export function maxScore(measureType: MeasureType): number {
   return measureType === 'PHQ-9' ? PHQ9_MAX : GAD7_MAX
 }
+
+export const REMISSION_THRESHOLD = 5
 
 export interface PatientOutcomeScore {
   date: string

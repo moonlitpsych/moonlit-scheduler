@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { resolveProviderForRequest } from './_resolveProvider'
+import { resolveProviderForRequest, parseMeasureTypeParam } from './_resolveProvider'
 import { getPatientProgressData } from '@/lib/services/patientProgressService'
-import type { MeasureType } from '@/lib/outcome-measures'
 
 export const maxDuration = 60
 
@@ -12,13 +11,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { searchParams } = new URL(request.url)
-    const measureRaw = searchParams.get('measureType')
-    const measureType: MeasureType | null =
-      measureRaw && measureRaw !== 'all' ? (measureRaw as MeasureType) : null
     const data = await getPatientProgressData({
       providerId: resolved.providerId,
-      measureType,
+      measureType: parseMeasureTypeParam(request),
     })
     return NextResponse.json(data)
   } catch (error) {

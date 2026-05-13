@@ -16,6 +16,17 @@ import { providerImpersonationManager } from '@/lib/provider-impersonation'
 type SortField = 'patientName' | 'firstScore' | 'lastScore' | 'scoreChange'
 type SortDir = 'asc' | 'desc'
 
+// Case- and accent-insensitive normalization for fuzzy name search.
+// Strips combining diacritical marks and non-alphanumeric characters.
+function normalizeForSearch(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
 export default function PatientProgressPage() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<PatientProgressData | null>(null)
@@ -79,13 +90,11 @@ export default function PatientProgressPage() {
       return sortDir === 'asc' ? cmp : -cmp
     })
 
-    const norm = (s: string) =>
-      s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
-    const tokens = norm(searchQuery).split(/\s+/).filter(Boolean)
+    const tokens = normalizeForSearch(searchQuery).split(/\s+/).filter(Boolean)
     if (tokens.length === 0) return sorted
 
     return sorted.filter(p => {
-      const name = norm(p.patientName)
+      const name = normalizeForSearch(p.patientName)
       return tokens.every(t => name.includes(t))
     })
   }, [data, sortField, sortDir, searchQuery])

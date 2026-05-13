@@ -17,7 +17,9 @@ import {
   maxScore,
   severityColor,
   severityLabel,
+  severityBands,
   questionText,
+  REMISSION_THRESHOLD,
   type MeasureType,
   type SeverityLevel,
 } from '@/lib/outcome-measures'
@@ -27,30 +29,6 @@ import type { PatientAssessment, PatientDetailResponse } from '@/app/api/provide
 interface Props {
   patientId: string | null
   onClose: () => void
-}
-
-interface SeverityBand {
-  from: number
-  to: number
-  level: SeverityLevel
-}
-
-const PHQ9_BANDS: SeverityBand[] = [
-  { from: 0, to: 4, level: 'minimal' },
-  { from: 5, to: 9, level: 'mild' },
-  { from: 10, to: 14, level: 'moderate' },
-  { from: 15, to: 19, level: 'moderately_severe' },
-  { from: 20, to: 27, level: 'severe' },
-]
-const GAD7_BANDS: SeverityBand[] = [
-  { from: 0, to: 4, level: 'minimal' },
-  { from: 5, to: 9, level: 'mild' },
-  { from: 10, to: 14, level: 'moderate' },
-  { from: 15, to: 21, level: 'severe' },
-]
-
-function bandsFor(m: MeasureType): SeverityBand[] {
-  return m === 'PHQ-9' ? PHQ9_BANDS : GAD7_BANDS
 }
 
 function fmtDate(iso: string): string {
@@ -72,9 +50,10 @@ export default function PatientDetailDrawer({ patientId, onClose }: Props) {
     setError(null)
     setLoading(true)
     setExpanded(new Set())
+    const ctrl = new AbortController()
     const impersonation = providerImpersonationManager.getImpersonatedProvider()
     const qs = impersonation?.provider?.id ? `?providerId=${encodeURIComponent(impersonation.provider.id)}` : ''
-    fetch(`/api/provider/patient-progress/${patientId}${qs}`)
+    fetch(`/api/provider/patient-progress/${patientId}${qs}`, { signal: ctrl.signal })
       .then(async r => {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}))
@@ -83,8 +62,14 @@ export default function PatientDetailDrawer({ patientId, onClose }: Props) {
         return r.json()
       })
       .then((d: PatientDetailResponse) => setData(d))
-      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load'))
-      .finally(() => setLoading(false))
+      .catch(e => {
+        if (e instanceof DOMException && e.name === 'AbortError') return
+        setError(e instanceof Error ? e.message : 'Failed to load')
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false)
+      })
+    return () => ctrl.abort()
   }, [patientId])
 
   // Close on Escape
@@ -204,7 +189,7 @@ interface MeasureSectionProps {
 
 function MeasureSection({ measureType, assessments, expanded, onToggle }: MeasureSectionProps) {
   const max = maxScore(measureType)
-  const bands = bandsFor(measureType)
+  const bands = severityBands(measureType)
   const chartData = assessments.map(a => ({
     date: a.date,
     label: fmtDate(a.date),
@@ -248,7 +233,7 @@ function MeasureSection({ measureType, assessments, expanded, onToggle }: Measur
                 ifOverflow="extendDomain"
               />
             ))}
-            <ReferenceLine y={5} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: 'Remission', position: 'right', fontSize: 10, fill: '#64748b' }} />
+            <ReferenceLine y={REMISSION_THRESHOLD} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: 'Remission', position: 'right', fontSize: 10, fill: '#64748b' }} />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
             <YAxis domain={[0, max]} tick={{ fontSize: 11, fill: '#64748b' }} />
             <Tooltip
