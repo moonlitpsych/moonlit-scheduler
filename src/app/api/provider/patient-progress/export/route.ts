@@ -19,10 +19,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const measureType = new URL(request.url).searchParams.get('measureType') as MeasureType | null
+    const measureRaw = new URL(request.url).searchParams.get('measureType')
+    const measureType: MeasureType | null =
+      measureRaw && measureRaw !== 'all' ? (measureRaw as MeasureType) : null
     const data = await getPatientProgressData({
       providerId: resolved.providerId,
-      measureType: measureType && measureType !== 'all' ? measureType : null,
+      measureType,
     })
 
     if (data.patients.length === 0) {

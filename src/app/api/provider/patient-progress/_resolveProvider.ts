@@ -15,7 +15,9 @@ export type ProviderResolution =
  */
 export async function resolveProviderForRequest(request: NextRequest): Promise<ProviderResolution> {
   const cookieStore = await cookies()
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+  // The auth-helpers lib calls .get() synchronously on the returned value, so this
+  // must stay a sync getter even though the lib's types claim it expects a Promise.
+  const supabase = createRouteHandlerClient({ cookies: () => cookieStore as never })
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return { ok: false, status: 401, error: 'Authentication required' }
 

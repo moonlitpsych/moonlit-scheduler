@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { RefreshCw, Download, FileText, TrendingDown, TrendingUp, Minus, Search } from 'lucide-react'
+import { RefreshCw, Download, TrendingDown, TrendingUp, Minus, Search } from 'lucide-react'
 import {
   severityLabel,
   severityColor,
@@ -10,6 +10,7 @@ import {
   type PatientOutcomeSummary,
 } from '@/lib/outcome-measures'
 import ScoreSparkline from './components/ScoreSparkline'
+import PatientDetailDrawer from './components/PatientDetailDrawer'
 import { providerImpersonationManager } from '@/lib/provider-impersonation'
 
 type SortField = 'patientName' | 'firstScore' | 'lastScore' | 'scoreChange'
@@ -20,6 +21,7 @@ export default function PatientProgressPage() {
   const [data, setData] = useState<PatientProgressData | null>(null)
   const [measureFilter, setMeasureFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
+  const [openPatientId, setOpenPatientId] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>('patientName')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
@@ -92,24 +94,6 @@ export default function PatientProgressPage() {
     window.open(`/api/provider/patient-progress/export?${buildQuery()}`, '_blank')
   }
 
-  const handleExportPdf = async () => {
-    const res = await fetch(`/api/provider/patient-progress/pdf?${buildQuery()}`)
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      alert(body?.error || 'Failed to generate PDF')
-      return
-    }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `patient-progress-${new Date().toISOString().slice(0, 10)}.pdf`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  }
-
   const statusBadge = (p: PatientOutcomeSummary) => {
     if (p.scores.length < 2) return <span className="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-500">New</span>
     if (p.remissionAchieved) return <span className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700">In Remission</span>
@@ -138,14 +122,6 @@ export default function PatientProgressPage() {
           <p className="text-sm text-slate-500 mt-1">PHQ-9 &amp; GAD-7 trends for your patients</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportPdf}
-            disabled={!data || data.patients.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#BF9C73] text-white rounded text-sm font-medium hover:bg-[#a8865f] disabled:opacity-50"
-            title="One-page PDF for your records"
-          >
-            <FileText className="w-4 h-4" /> Export PDF
-          </button>
           <button
             onClick={handleExportCsv}
             disabled={!data || data.patients.length === 0}
@@ -234,7 +210,11 @@ export default function PatientProgressPage() {
               </thead>
               <tbody>
                 {visiblePatients.map(p => (
-                  <tr key={`${p.patientId}-${p.measureType}`} className="border-t hover:bg-slate-50">
+                  <tr
+                    key={`${p.patientId}-${p.measureType}`}
+                    onClick={() => setOpenPatientId(p.patientId)}
+                    className="border-t hover:bg-[#FEF8F1] cursor-pointer transition-colors"
+                  >
                     <td className="px-4 py-2 font-medium text-[#091747]">{p.patientName}</td>
                     <td className="px-4 py-2">{p.measureType}</td>
                     <td className="px-4 py-2">
@@ -268,6 +248,11 @@ export default function PatientProgressPage() {
           </div>
         </>
       )}
+
+      <PatientDetailDrawer
+        patientId={openPatientId}
+        onClose={() => setOpenPatientId(null)}
+      />
     </div>
   )
 }
