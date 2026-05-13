@@ -616,160 +616,23 @@ Use debug endpoints (/api/debug/...) for provider-payer relationships, availabil
 
 ---
 
-## ⏸️ TEMPORARILY DISABLED: ROI Contacts / Extra Contact Persons (Oct 27, 2025)
+## 🗑️ REMOVED: ROI Contacts in booking flow (May 2026)
 
-**STATUS:** ⏸️ DISABLED - Feature temporarily removed from booking flow
+The booking-flow ROI Contacts feature (UI under `ROIView.tsx`, `appointments.roi_contacts` column, `BookingService.ts` orphan, and the analysis report) was removed because it was never wired to a backend and Moonlit uses PracticeQ's infrastructure for release-of-information tracking instead. Migration `085-drop-orphan-appointments-roi-contacts-column.sql` drops the column when run.
 
-### Why Disabled:
+**NOT to be confused with:** `patient_organization_affiliations.roi_contacts` — a live partner-dashboard column used by `api/org/affiliations` and `api/org/patients` to track which third-party contacts a partner is authorized to share patient info with. That feature is unaffected.
 
-The ROI (Release of Information) contacts feature was collecting user data but **not saving it to the database or IntakeQ**. To avoid misleading users, this step has been removed from the booking flow until the backend implementation is complete.
-
-### What Was Built (UI Only):
-
-**Frontend Components:**
-- ✅ `/src/components/booking/views/ROIView.tsx` - Fully functional UI for collecting multiple contacts
-- ✅ React state management in `BookingFlow.tsx` - Data flows correctly through components
-- ✅ User can add name, email, relationship, organization for each contact
-- ✅ ROI agreement checkbox and validation
-
-**Database Schema:**
-- ✅ `appointments.roi_contacts` JSONB column exists and ready to use (see `src/types/database.ts:32`)
-
-**What's Missing (Backend):**
-- ❌ BookingFlow.tsx doesn't send `roiContacts` in API payload
-- ❌ `/api/patient-booking/book/route.ts` doesn't accept or save ROI contacts
-- ❌ IntakeQ integration can only handle ONE contact via scalar fields, not an array
-
-### Current State of Booking Flow:
-
-```
-Insurance Info → ⏭️ ROI (SKIPPED) → Appointment Summary → Confirmation
-```
-
-**Modified file:** `src/components/booking/BookingFlow.tsx:193-196`
-- Changed `goToStep('roi')` to `goToStep('appointment-summary')`
-- Added comment explaining temporary disable
-- ROIView.tsx component still exists but is not rendered
-
-### How to Re-Enable:
-
-**See full implementation guide:** `ROI_CONTACTS_ANALYSIS_REPORT.md`
-
-**Quick Steps (2-6 hours):**
-
-1. **BookingFlow.tsx:196** - Change back to `goToStep('roi')`
-
-2. **BookingFlow.tsx:233-254** - Add to payload:
-   ```typescript
-   roiContacts: state.roiContacts
-   ```
-
-3. **book/route.ts:27-50** - Add to interface:
-   ```typescript
-   interface IntakeBookingRequest {
-     // ... existing fields ...
-     roiContacts?: ROIContact[]
-   }
-   ```
-
-4. **book/route.ts:212** - Extract from body:
-   ```typescript
-   const { roiContacts = [], ... } = body
-   ```
-
-5. **book/route.ts:495-516** - Add to appointment insert:
-   ```typescript
-   roi_contacts: roiContacts || []
-   ```
-
-6. **OPTIONAL (IntakeQ sync)** - Refactor `intakeqClientUpsert.ts` to handle contact arrays
-
-### Files to Review for Re-Implementation:
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `src/components/booking/views/ROIView.tsx` | UI for collecting contacts | ✅ Ready to use |
-| `src/components/booking/BookingFlow.tsx:193-196` | Re-enable step navigation | ⏸️ Commented out |
-| `src/app/api/patient-booking/book/route.ts` | Add backend persistence | ❌ Not implemented |
-| `src/lib/services/intakeqClientUpsert.ts:34-36` | IntakeQ sync (optional) | ⚠️ Only handles one contact |
-| `ROI_CONTACTS_ANALYSIS_REPORT.md` | Full technical analysis | ✅ Complete reference |
-
-### Database Schema (Ready to Use):
-
-```sql
--- appointments table already has this column
-appointments.roi_contacts JSONB NULL
-
--- Example data structure:
-[
-  {
-    "name": "John Smith",
-    "email": "john@example.com",
-    "relationship": "Case Manager",
-    "organization": "First Step House"
-  },
-  {
-    "name": "Jane Doe",
-    "email": "jane@example.com",
-    "relationship": "Mother",
-    "organization": null
-  }
-]
-```
-
-### IntakeQ Integration Notes:
-
-The `intakeqClientUpsert.ts` service currently supports ONE contact via:
-- `contactName` (string)
-- `contactEmail` (string)
-- `contactPhone` (string)
-
-These get saved to IntakeQ's `AdditionalInformation` field and a pinned note.
-
-To sync multiple ROI contacts to IntakeQ, refactor to loop through array and concatenate all contacts into the `AdditionalInformation` field. See `ROI_CONTACTS_ANALYSIS_REPORT.md` Option 2 for details.
-
-### Testing Checklist (When Re-Enabled):
-
-- [ ] Book with 0 contacts (skip button works)
-- [ ] Book with 1 contact
-- [ ] Book with 3 contacts
-- [ ] Verify data saves to `appointments.roi_contacts` in Supabase
-- [ ] Verify IntakeQ sync (if implemented)
-- [ ] Confirmation email includes contacts (if implemented)
+If the booking-flow concept ever returns, start fresh — git history has the prior UI for reference.
 
 ---
 
-## 🔮 FUTURE: Google Meet Integration Infrastructure (Nov 3, 2025)
+## 🗑️ REMOVED: Google Meet Link Generation (May 2026)
 
-**STATUS:** 🔮 INFRASTRUCTURE ONLY - Not yet implemented
+Moonlit no longer generates its own Google Meet links — IntakeQ creates them automatically. The previous `googleMeetService.ts` and its call sites in `book/route.ts` and `practiceQSyncService.ts` were dormant (returned null when env vars were unset) and have been removed.
 
-### Context:
+If the requirement returns (e.g. switching off IntakeQ, or needing the link in DB before IntakeQ sync runs), see `docs/GOOGLE_MEET_FUTURE.md` for the prior setup instructions and `git log -- src/lib/services/googleMeetService.ts` for the working code.
 
-**Infrastructure exists but is not active:**
-- `/src/lib/services/googleMeetService.ts` - Service ready for Google Calendar API integration
-- Booking route has code to generate and save meeting URLs
-- Database has `meeting_url` field on appointments table
-
-**Why it's disabled:**
-- IntakeQ currently generates meeting links automatically
-- Google Calendar API integration requires OAuth setup and service account configuration
-- Not needed for MVP since IntakeQ handles this
-
-**What would be needed to enable:**
-1. Set up Google Cloud project with Calendar API enabled
-2. Create service account with calendar.events scope
-3. Share calendar with service account
-4. Add environment variables:
-   - `GOOGLE_CALENDAR_ID`
-   - `GOOGLE_SERVICE_ACCOUNT_KEY`
-5. Test meet link generation
-
-**Current behavior:**
-- Telehealth appointments rely on IntakeQ-generated meeting links
-- Google Meet code paths are present but return null when env vars missing
-- System continues without Google Meet links - not a blocking error
-
-**Note for developers:** The infrastructure is intentionally left in place for future use. Do not remove the Google Meet code - it will be activated when needed.
+The `meeting_url` column on `appointments` is still in use — it just gets populated by IntakeQ now, and the `GoogleMeetLinkEditor` component (misleadingly named, but generic) lets admins edit whatever's there.
 
 ---
 

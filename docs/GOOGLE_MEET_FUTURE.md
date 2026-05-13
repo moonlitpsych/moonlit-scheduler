@@ -1,13 +1,22 @@
-# Google Meet Link Generation Setup Guide
+# Google Meet Integration — Future Reference
 
-**Date:** October 27, 2025
-**Status:** Ready for Configuration
+**Status:** Not implemented. Infrastructure was removed in May 2026 because IntakeQ generates meeting links automatically and our own generation path was never activated in production.
+
+This doc preserves the prior setup instructions so the integration can be rebuilt if needed. The original service lived at `src/lib/services/googleMeetService.ts` and was called from `book/route.ts` and `practiceQSyncService.ts`; see git history for the working code.
+
+## When you'd want this
+
+- Moonlit moves off IntakeQ to an EHR that doesn't generate meeting links.
+- A compliance requirement mandates that meeting events live on a Google Calendar Moonlit owns.
+- You need the meeting link in the database immediately at booking time (IntakeQ's link only appears after IntakeQ's sync runs).
+
+If none of those apply, don't rebuild this — IntakeQ already handles it.
 
 ---
 
 ## 🎯 Overview
 
-We've built a system to automatically generate Google Meet links for telehealth appointments. Since IntakeQ's API doesn't expose the Google Meet links they show in their UI, we generate our own using the Google Meet REST API.
+The prior implementation generated Google Meet links via the Google Meet REST API. IntakeQ's API doesn't expose the Google Meet links it creates, so we generated our own in parallel.
 
 ---
 

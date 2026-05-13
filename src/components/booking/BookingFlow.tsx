@@ -1,6 +1,6 @@
 'use client'
 
-import { InsuranceInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
+import { InsuranceInfo, Payer, TimeSlot } from '@/types/database'
 import { useState, useEffect } from 'react'
 
 // Import view components (ensure these match your actual imports)
@@ -12,7 +12,6 @@ import InsuranceInfoView from './views/InsuranceInfoView'
 import InsuranceNotAcceptedView from './views/InsuranceNotAcceptedView'
 import PayerSearchView from './views/PayerSearchView'
 import ProviderInsuranceMismatchView from './views/ProviderInsuranceMismatchView'
-import ROIView from './views/ROIView'
 import WaitlistConfirmationView from './views/WaitlistConfirmationView'
 import WelcomeView from './views/WelcomeView'
 
@@ -25,7 +24,6 @@ export type BookingStep =
     | 'waitlist-confirmation'
     | 'calendar'
     | 'insurance-info'
-    | 'roi'
     | 'appointment-summary'
     | 'confirmation'
     | 'booking-error' // NEW: for PracticeQ sync failures
@@ -42,7 +40,6 @@ export interface BookingState {
     selectedProvider?: { id: string, name: string } // NEW: for provider-specific booking
     selectedTimeSlot?: TimeSlot
     insuranceInfo?: InsuranceInfo
-    roiContacts: ROIContact[]
     appointmentId?: string
     intent: BookingIntent // NEW: user's intent (book vs explore)
     // NEW: Third-party booking detection
@@ -83,7 +80,6 @@ export default function BookingFlow({
     const [state, setState] = useState<BookingState>({
         step: 'payer-search', // NEW: Always start with insurance selection
         bookingScenario: preselectedScenario || 'self', // Default to 'self' but will be determined later
-        roiContacts: [],
         intent: intent,
         bookingForSomeoneElse: false, // Default to booking for self
         thirdPartyType: preselectedScenario === 'case-manager' ? 'case-manager' : undefined
@@ -193,14 +189,6 @@ export default function BookingFlow({
             bookingScenario: newScenario
         })
 
-        // TEMPORARILY DISABLED (Oct 27, 2025): ROI contacts feature
-        // UI collects data but backend doesn't persist it - see ROI_CONTACTS_ANALYSIS_REPORT.md
-        // To re-enable: change 'appointment-summary' back to 'roi' and implement backend save
-        goToStep('appointment-summary')  // Skip ROI step until backend is ready
-    }
-
-    const handleROISubmitted = async (roiContacts: ROIContact[]) => {
-        updateState({ roiContacts })
         goToStep('appointment-summary')
     }
 
@@ -332,7 +320,6 @@ export default function BookingFlow({
                 console.log('✅ Found existing appointment, treating as success')
                 updateState({
                     appointmentId: result.data.appointmentId,
-                    roiContacts: state.roiContacts
                 })
                 goToStep('confirmation')
                 return
@@ -384,7 +371,6 @@ export default function BookingFlow({
             })
             updateState({
                 appointmentId: result.data.appointmentId,  // Use DB ID as primary
-                roiContacts: state.roiContacts
             })
             goToStep('confirmation') // Only on success
 
@@ -456,7 +442,6 @@ export default function BookingFlow({
         setState({
             step: 'welcome',
             bookingScenario: 'self',
-            roiContacts: [],
             intent: state.intent // Preserve the original intent
         })
     }
@@ -641,28 +626,17 @@ export default function BookingFlow({
                     />
                 )
 
-            case 'roi':
-                return (
-                    <ROIView
-                        bookingScenario={state.bookingScenario}
-                        onSubmit={handleROISubmitted}
-                        onBack={() => goToStep('insurance-info')}
-                    />
-                )
-
             case 'appointment-summary':
                 return (
                     <AppointmentSummaryView
                         selectedPayer={state.selectedPayer}
                         selectedTimeSlot={state.selectedTimeSlot}
                         insuranceInfo={state.insuranceInfo}
-                        roiContacts={state.roiContacts}
                         bookingScenario={state.bookingScenario}
                         onConfirmBooking={handleAppointmentConfirmed}
                         onEditInsurance={() => goToStep('insurance-info')}
                         onEditTimeSlot={() => goToStep('calendar')}
-                        onEditROI={() => goToStep('roi')}
-                        onBack={() => goToStep('roi')}
+                        onBack={() => goToStep('insurance-info')}
                         isSubmitting={state.isSubmitting}
                         progressMessage={state.progressMessage}
                         showRetryButton={state.showRetryButton}

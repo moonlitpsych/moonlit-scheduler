@@ -18,7 +18,6 @@ import { getIntakeqPractitionerId } from '@/lib/integrations/providerMap'
 import { getIntakeqServiceId } from '@/lib/integrations/serviceInstanceMap'
 import { ensureClient, syncClientInsurance, createAppointment } from '@/lib/intakeq/client'
 import { emailService } from '@/lib/services/emailService'
-import { googleMeetService } from '@/lib/services/googleMeetService'
 import { sendIntakeQuestionnaire } from '@/lib/services/intakeqQuestionnaire'
 import { sanitizePatientForLogging } from '@/lib/validation/bookingSchema'
 
@@ -1050,101 +1049,10 @@ This is a non-critical error - the appointment is valid and the patient has been
             console.error('⚠️ Questionnaire sending error (non-blocking):', questionnaireError.message)
         }
 
-        // Step 8.6: Generate Google Meet link for telehealth appointments
-        // This runs in PARALLEL with IntakeQ's Google Meet integration (both create links)
-        // Our link is stored in database and visible in all dashboards
-        // IntakeQ's link is visible in IntakeQ UI only
-        if (locationType === 'telehealth') {
-            console.log('🔗 Generating Google Meet link for telehealth appointment...')
-            try {
-                // Get patient name for meeting title
-                const { data: patientInfo } = await supabaseAdmin
-                    .from('patients')
-                    .select('first_name, last_name')
-                    .eq('id', patientId)
-                    .single()
-
-                const patientName = patientInfo ? `${patientInfo.first_name} ${patientInfo.last_name}` : 'Patient'
-
-                // Get provider name for meeting title
-                const { data: providerInfo } = await supabaseAdmin
-                    .from('providers')
-                    .select('first_name, last_name')
-                    .eq('id', providerId)
-                    .single()
-
-                const providerName = providerInfo ? `Dr. ${providerInfo.last_name}` : 'Provider'
-
-                // Generate Google Meet link (organized by hello@trymoonlit.com, OPEN access)
-                const meetingUrl = await googleMeetService.generateMeetingLink(
-                    appointmentId,
-                    patientName,
-                    providerName,
-                    startDate
-                )
-
-                if (meetingUrl) {
-                    console.log(`✅ Google Meet link created: ${meetingUrl}`)
-
-                    // Update appointment with meeting URL
-                    const { error: meetingUrlError } = await supabaseAdmin
-                        .from('appointments')
-                        .update({
-                            meeting_url: meetingUrl,
-                            location_info: {
-                                locationType: 'telehealth',
-                                placeOfService: '02',
-                                meetingUrl: meetingUrl
-                            }
-                        })
-                        .eq('id', appointmentId)
-
-                    if (meetingUrlError) {
-                        console.error('⚠️ Failed to save meeting URL to database:', meetingUrlError)
-                        // V3.2: Add compensation - update appointment notes with failure
-                        await supabaseAdmin
-                            .from('appointments')
-                            .update({
-                                notes: (notes || '') + `\n\n[COMPENSATION NOTE ${new Date().toISOString()}]\nFailed to save meeting URL: ${meetingUrlError.message}\nGoogle Meet URL: ${meetingUrl}\nRequires manual update.`
-                            })
-                            .eq('id', appointmentId)
-                            .then(({ error }) => {
-                                if (error) console.error('Failed to update appointment notes:', error)
-                            })
-
-                        // Send admin notification about missing meeting URL
-                        await emailService.sendEmail({
-                            to: 'hello@trymoonlit.com',
-                            subject: `⚠️ Meeting URL Not Saved - Appointment ${appointmentId}`,
-                            body: `
-⚠️ MEETING URL NOT SAVED - MANUAL UPDATE NEEDED
-
-Appointment ID: ${appointmentId}
-Google Meet URL: ${meetingUrl}
-
-ISSUE:
-Telehealth appointment was created successfully but the Google Meet URL
-couldn't be saved to the database.
-
-ACTION REQUIRED:
-UPDATE appointments SET meeting_url = '${meetingUrl}' WHERE id = '${appointmentId}';
-
-This is important - patient/provider need this link to join the appointment.
-                            `.trim()
-                        }).catch(err => console.error('Failed to send meeting URL notification:', err))
-                    } else {
-                        console.log('✅ Meeting URL saved to database')
-                    }
-                } else {
-                    console.warn('⚠️ Google Meet link generation returned null (check service configuration)')
-                }
-
-            } catch (meetError: any) {
-                // Don't fail the booking if Google Meet link generation fails
-                console.error('⚠️ Google Meet link generation failed (non-blocking):', meetError.message)
-                console.error('   Appointment still created successfully, just without our meeting link')
-            }
-        }
+        // Meeting links for telehealth appointments are generated by IntakeQ
+        // (see PRACTICEQ_ENRICH_ENABLED flag). Moonlit no longer generates its
+        // own Google Meet links — if that requirement returns, see
+        // docs/GOOGLE_MEET_FUTURE.md for the prior infrastructure approach.
 
         // Get provider name for response
         const { data: providerData } = await supabaseAdmin

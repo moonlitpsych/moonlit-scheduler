@@ -1,6 +1,6 @@
 'use client'
 
-import { InsuranceInfo, Payer, ROIContact, TimeSlot } from '@/types/database'
+import { InsuranceInfo, Payer, TimeSlot } from '@/types/database'
 import { useEffect, useState } from 'react'
 import { BookingScenario } from '../BookingFlow'
 import { LEGAL_VERSION } from '@/lib/constants'
@@ -23,13 +23,11 @@ interface AppointmentSummaryViewProps {
     selectedPayer?: Payer
     selectedTimeSlot?: TimeSlot
     insuranceInfo?: InsuranceInfo
-    roiContacts: ROIContact[]
     bookingScenario: BookingScenario
     provider?: Provider
     onConfirmBooking: () => void
     onEditInsurance: () => void
     onEditTimeSlot: () => void
-    onEditROI: () => void
     onBack: () => void
     isSubmitting?: boolean
     progressMessage?: string
@@ -40,13 +38,11 @@ export default function AppointmentSummaryView({
     selectedPayer,
     selectedTimeSlot,
     insuranceInfo,
-    roiContacts,
     bookingScenario,
     provider,
     onConfirmBooking,
     onEditInsurance,
     onEditTimeSlot,
-    onEditROI,
     onBack,
     isSubmitting = false,
     progressMessage,
@@ -424,43 +420,6 @@ export default function AppointmentSummaryView({
                                         <p className="text-sm text-[#091747]/60 font-['Newsreader']">Date of Birth</p>
                                         <p className="text-[#091747] font-['Newsreader']">{insuranceInfo.dob}</p>
                                     </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* ROI Information Section */}
-                        {roiContacts.length > 0 && (
-                            <div className="p-6 sm:p-8 border-b border-gray-200">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h2 className="text-xl sm:text-2xl font-bold text-[#091747] font-['Newsreader']">Release of Information</h2>
-                                    <button
-                                        type="button"
-                                        onClick={onEditROI}
-                                        className="text-[#BF9C73] hover:text-[#A8865F] text-sm font-medium transition-colors font-['Newsreader']"
-                                    >
-                                        Edit ROI
-                                    </button>
-                                </div>
-
-                                <div className="space-y-4">
-                                    {roiContacts.map((contact, index) => (
-                                        <div key={index} className="border border-gray-200 rounded-lg p-4">
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div>
-                                                    <p className="text-sm text-[#091747]/60 font-['Newsreader']">Name</p>
-                                                    <p className="text-[#091747] font-['Newsreader']">{contact.name}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm text-[#091747]/60 font-['Newsreader']">Relationship</p>
-                                                    <p className="text-[#091747] font-['Newsreader']">{contact.relationship}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm text-[#091747]/60 font-['Newsreader']">Contact</p>
-                                                    <p className="text-[#091747] font-['Newsreader']">{contact.phone || contact.email}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
                                 </div>
                             </div>
                         )}
