@@ -52,17 +52,20 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
                 query.toLowerCase().includes('uhc') ||
                 query.toLowerCase().includes('united health')
 
+            // Tokenize query so "blue cross" matches "BlueCross" (each token ANDed)
+            const tokens = query.trim().split(/\s+/).filter(Boolean)
+            const nameTokenSearch = () => {
+                let q = supabase.from('payers').select('*')
+                for (const t of tokens) q = q.ilike('name', `%${t}%`)
+                return q.order('name').limit(10)
+            }
+
             let payers: any[] = []
 
             if (isRegenceSearch) {
                 // For Regence searches, also include HMHI-BHN since many Regence members use it
                 const [nameResults, hmhiResults] = await Promise.all([
-                    supabase
-                        .from('payers')
-                        .select('*')
-                        .ilike('name', `%${query}%`)
-                        .order('name')
-                        .limit(10),
+                    nameTokenSearch(),
                     supabase
                         .from('payers')
                         .select('*')
@@ -85,12 +88,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
             } else if (isUnitedSearch) {
                 // For United Healthcare searches, also include Optum Commercial since many UHC members use it for BH
                 const [nameResults, optumResults] = await Promise.all([
-                    supabase
-                        .from('payers')
-                        .select('*')
-                        .ilike('name', `%${query}%`)
-                        .order('name')
-                        .limit(10),
+                    nameTokenSearch(),
                     supabase
                         .from('payers')
                         .select('*')
@@ -111,12 +109,7 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
             } else if (isMedicaidSearch) {
                 // For medicaid searches, get both name matches AND all medicaid-type payers
                 const [nameResults, medicaidResults] = await Promise.all([
-                    supabase
-                        .from('payers')
-                        .select('*')
-                        .ilike('name', `%${query}%`)
-                        .order('name')
-                        .limit(10),
+                    nameTokenSearch(),
                     supabase
                         .from('payers')
                         .select('*')
@@ -145,13 +138,8 @@ export default function PayerSearchView({ onPayerSelected, bookingScenario, inte
 
                 payers = Array.from(combinedMap.values())
             } else {
-                // Normal name-based search
-                const { data, error } = await supabase
-                    .from('payers')
-                    .select('*')
-                    .ilike('name', `%${query}%`)
-                    .order('name')
-                    .limit(10)
+                // Normal name-based search (tokenized)
+                const { data, error } = await nameTokenSearch()
 
                 if (error) throw error
                 payers = data || []

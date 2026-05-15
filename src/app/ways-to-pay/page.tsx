@@ -418,11 +418,12 @@ export default function WaysToPayPage() {
   // Fuzzy search effect
   useEffect(() => {
     if (searchTerm.length > 1) {
-      const filtered = allPayers.filter(payer => 
-        payer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        payer.payer_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        payer.state.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      // Tokenize so "blue cross" matches "BlueCross" (each token must appear somewhere)
+      const tokens = searchTerm.toLowerCase().trim().split(/\s+/).filter(Boolean)
+      const filtered = allPayers.filter(payer => {
+        const haystack = `${payer.name} ${payer.payer_type} ${payer.state}`.toLowerCase()
+        return tokens.every(t => haystack.includes(t))
+      })
       setSearchResults(filtered)
       setShowSearch(true)
     } else {
