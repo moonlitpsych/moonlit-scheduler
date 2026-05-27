@@ -64,7 +64,7 @@ class AuthContextManager {
         .select('*')
         .eq('auth_user_id', user.id)
         .eq('is_active', true)
-        .single()
+        .maybeSingle()
 
       if (!error && providerData) {
         availableRoles.push({
@@ -114,7 +114,7 @@ class AuthContextManager {
         `)
         .eq('auth_user_id', user.id)
         .eq('is_active', true)
-        .single()
+        .maybeSingle()
 
       if (!error && partnerData) {
         availableRoles.push({

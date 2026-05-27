@@ -89,7 +89,7 @@ export default function DashboardLayout({
             .select('*')
             .eq('auth_user_id', user.id)
             .eq('is_active', true)
-            .single()
+            .maybeSingle()
 
           if (ownProviderData) {
             // Admin is also a provider - show their own dashboard
@@ -112,7 +112,7 @@ export default function DashboardLayout({
             .select('*')
             .eq('auth_user_id', user.id)
             .eq('is_active', true)
-            .single()
+            .maybeSingle()
 
           setProvider(providerData)
           setLoading(false)
