@@ -13,7 +13,8 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { Users, Search, Download, RotateCcw, Plus, Edit, Eye, Archive, Upload, Loader2 } from 'lucide-react'
+import { Users, Search, Download, RotateCcw, Plus, Edit, Eye, Archive, Upload, Loader2, Wand2 } from 'lucide-react'
+import Link from 'next/link'
 import { useResizableColumns } from '@/hooks/useResizableColumns'
 import { exportToCSV, formatDateForCSV } from '@/utils/csvExport'
 import { formatPhoneNumber } from '@/lib/utils/phoneNormalizer'
@@ -301,6 +302,14 @@ export default function AdminProviderList({ providers: initialProviders, roles }
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/admin/providers/onboard"
+              className="inline-flex items-center px-4 py-2 border border-moonlit-brown rounded-md shadow-sm text-sm font-medium text-moonlit-brown bg-white hover:bg-moonlit-brown/5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-moonlit-brown"
+              title="Onboard providers from the intake form CSV (creates row + auth + licenses)"
+            >
+              <Wand2 className="w-4 h-4 mr-2" />
+              Onboard from Form
+            </Link>
             <button
               onClick={() => setShowImportModal(true)}
               className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-moonlit-brown"
