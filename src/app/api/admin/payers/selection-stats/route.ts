@@ -213,34 +213,16 @@ export async function GET(request: NextRequest) {
     const providerBookabilityMap = new Map<string, any>()
 
     if (providerId) {
-      // Check if provider is attending (role-based)
-      const { data: provider } = await supabaseAdmin
-        .from('providers')
-        .select('role, provider_type, residency_grad_month, residency_grad_year')
-        .eq('id', providerId)
-        .single()
-
-      providerIsAttending = provider?.role?.toLowerCase().includes('psychiatrist') &&
-                            !provider?.role?.toLowerCase().includes('resident')
-
-      // Compute expected attending start date from residency graduation
-      // (residencies end in their grad month; attending begins the 1st of the following month)
-      const gradMonth = provider?.residency_grad_month
-      const gradYear = provider?.residency_grad_year
-      if (gradMonth && gradYear) {
-        const expected = new Date(Date.UTC(gradYear, gradMonth, 1))
-        providerExpectedAttendingDate = expected.toISOString().slice(0, 10)
-        const now = new Date()
-        providerMonthsUntilAttending =
-          (expected.getUTCFullYear() - now.getUTCFullYear()) * 12 +
-          (expected.getUTCMonth() - now.getUTCMonth())
-      }
-
-      // Eligible as attending for credentialing purposes if: actually attending,
-      // OR within 4 months of their attending start (or already past it).
-      providerIsCredentialingEligibleAsAttending =
-        providerIsAttending ||
-        (providerMonthsUntilAttending !== null && providerMonthsUntilAttending <= 4)
+      // Credentialing is OPEN for every provider. Billing independence is NOT a
+      // provider-level attribute — it is determined by contract status: a direct
+      // provider_payer_networks row means the provider bills independently with that
+      // payer; a supervision_relationships row means they bill supervised. That is the
+      // single source of truth (see v_bookable_provider_payer). So we never gate which
+      // payers an admin can track credentialing for. `requires_attending` is surfaced
+      // as informational only. We keep these fields true for backward compatibility with
+      // the panel, which treats them as "applicable".
+      providerIsAttending = true
+      providerIsCredentialingEligibleAsAttending = true
 
       // Get provider applications
       const { data: applications } = await supabaseAdmin
@@ -349,7 +331,7 @@ export async function GET(request: NextRequest) {
       data: stats,
       provider: providerId ? {
         id: providerId,
-        is_attending: providerIsAttending,
+        is_attending: providerIsAttending, // always true — credentialing is open (see above)
         is_credentialing_eligible_as_attending: providerIsCredentialingEligibleAsAttending,
         expected_attending_date: providerExpectedAttendingDate,
         months_until_attending: providerMonthsUntilAttending

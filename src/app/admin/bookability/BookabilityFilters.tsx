@@ -248,11 +248,11 @@ export default function BookabilityFilters({
           />
         </div>
 
-        {/* Requires Attending */}
+        {/* Requires Independent Provider */}
         <div>
-          <label className="block text-xs font-medium text-[#091747]/70 mb-1">Requires Attending</label>
+          <label className="block text-xs font-medium text-[#091747]/70 mb-1">Requires Independent</label>
           <SingleSelectDropdown
-            label="Attending"
+            label="Independent"
             value={filters.requiresAttending}
             options={[
               { value: 'all', label: 'All' },

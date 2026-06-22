@@ -404,7 +404,7 @@ export default function PayerEditorModal({
                       className="w-4 h-4 text-[#BF9C73] border-gray-300 rounded focus:ring-[#BF9C73]/20"
                     />
                     <label htmlFor="requires_attending" className="text-sm font-medium text-[#091747]">
-                      Requires Attending Physician
+                      Requires Independent Provider
                     </label>
                   </div>
 

@@ -175,7 +175,7 @@ export default function BookabilityTable({ data, loading }: BookabilityTableProp
               <th className="px-4 py-3 text-left">
                 <SortHeader field="network_status">Path</SortHeader>
               </th>
-              <th className="px-4 py-3 text-left">Requires Attending</th>
+              <th className="px-4 py-3 text-left">Requires Independent</th>
               <th className="px-4 py-3 text-left">Supervision Level</th>
               <th className="px-4 py-3 text-left">Rendering Provider</th>
               <th className="px-4 py-3 text-left">

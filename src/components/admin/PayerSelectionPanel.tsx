@@ -400,7 +400,7 @@ export default function PayerSelectionPanel({
           onClick={handleSelectRecommended}
           disabled={!providerIsAttending}
           className="px-3 py-2 border border-yellow-300 bg-yellow-50 text-yellow-700 rounded-lg text-sm hover:bg-yellow-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-          title={providerIsAttending ? "Select payers that require attending physicians" : "Only available for attending physicians"}
+          title={providerIsAttending ? "Select payers that require an independently-licensed provider" : "Only available for independently-licensed providers"}
         >
           <span>⭐</span>
           Select Recommended
@@ -479,12 +479,12 @@ export default function PayerSelectionPanel({
                       <div className="flex flex-col gap-1">
                         <span className="font-medium text-gray-900">{payer.name}</span>
                         {payer.is_recommended && (
-                          <span className="text-xs text-yellow-700 font-medium">⭐ Recommended for Attendings</span>
+                          <span className="text-xs text-yellow-700 font-medium">⭐ Recommended for Independent Providers</span>
                         )}
                         {!isApplicable && (
                           <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 border border-gray-300 rounded inline-flex items-center gap-1 w-fit">
                             <AlertTriangle className="w-3 h-3" />
-                            Not Applicable - Requires Attending
+                            Not Applicable - Requires Independent Provider
                           </span>
                         )}
                         {isApplicable && isPayerEarlyEligible(payer) && (
@@ -515,7 +515,7 @@ export default function PayerSelectionPanel({
                         )}
                         {payer.requires_attending && (
                           <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 border border-blue-300 rounded">
-                            Attending Required
+                            Independent Provider Required
                           </span>
                         )}
                         {payer.allows_supervised && (

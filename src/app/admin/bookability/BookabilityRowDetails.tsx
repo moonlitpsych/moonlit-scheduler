@@ -274,15 +274,15 @@ export default function BookabilityRowDetails({ row, onClose }: BookabilityRowDe
               <p className="text-[#091747] font-medium mb-2">{row.payer_name}</p>
               
               <div className="flex items-center space-x-2">
-                <span className="text-sm text-[#091747]/70">Requires Attending:</span>
+                <span className="text-sm text-[#091747]/70">Requires Independent:</span>
                 <Chip variant={row.requires_attending ? 'yes' : 'no'}>
                   {row.requires_attending ? 'Yes' : 'No'}
                 </Chip>
               </div>
-              
+
               {row.requires_attending && (
                 <p className="text-xs text-[#091747]/60 mt-2">
-                  This payer requires attending physician oversight for residents
+                  This payer requires an independently-licensed provider (no supervised or trainee billing)
                 </p>
               )}
             </div>
