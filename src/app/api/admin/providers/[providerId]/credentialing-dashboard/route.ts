@@ -50,6 +50,10 @@ interface PayerCredentialingProgress {
   // only — booking is payer-level). e.g. the UUHP group plans.
   covered_plans?: string[]
 
+  // Expected decision date: the stored value if present, otherwise derived from
+  // the submission date + the payer's typical approval turnaround.
+  expected_decision_date?: string | null
+
   // Workflow details (Phase 2 enhancement)
   workflow?: {
     portal_url: string | null
@@ -62,6 +66,7 @@ interface PayerCredentialingProgress {
     form_template_url: string | null
     form_template_filename: string | null
     detailed_instructions: any | null
+    typical_approval_days: number | null
   }
 }
 
@@ -133,12 +138,12 @@ export async function GET(
     }
 
     // Step 4: Get payer details
-    const payerIds = [
+    const payerIds: string[] = [
       ...new Set([
         ...(applications?.map(a => a.payer_id) || []),
-        ...(tasks?.map(t => t.payer_id).filter(Boolean) || [])
+        ...(tasks?.map(t => t.payer_id) || [])
       ])
-    ]
+    ].filter((id): id is string => Boolean(id))
 
     const { data: payers, error: payersError } = await supabaseAdmin
       .from('payers')
@@ -169,7 +174,8 @@ export async function GET(
         credentialing_contact_phone,
         form_template_url,
         form_template_filename,
-        detailed_instructions
+        detailed_instructions,
+        typical_approval_days
       `)
       .in('payer_id', payerIds)
 
@@ -192,7 +198,7 @@ export async function GET(
         .from('payers')
         .select('id, name')
         .in('id', handlerIds)
-      handlerPayers?.forEach(p => handlerNameMap.set(p.id, p.name))
+      handlerPayers?.forEach(p => { if (p.name) handlerNameMap.set(p.id, p.name) })
 
       // Fetch any handler workflows not already loaded above.
       const missingWorkflowIds = handlerIds.filter(id => !workflowMap.has(id))
@@ -210,7 +216,8 @@ export async function GET(
             credentialing_contact_phone,
             form_template_url,
             form_template_filename,
-            detailed_instructions
+            detailed_instructions,
+            typical_approval_days
           `)
           .in('payer_id', missingWorkflowIds)
         handlerWorkflows?.forEach(w => workflowMap.set(w.payer_id, w))
@@ -279,6 +286,16 @@ export async function GET(
         ? { id: handlerId, name: handlerNameMap.get(handlerId) || payerMap.get(handlerId)?.name || 'Another payer' }
         : null
 
+      // Expected decision date: prefer a stored value; otherwise derive it from
+      // the submission date plus the payer's typical approval turnaround.
+      const typicalDays = workflow?.typical_approval_days ?? null
+      let expectedDecisionDate: string | null = application?.expected_decision_date || null
+      if (!expectedDecisionDate && application?.application_submitted_date && typicalDays && typicalDays > 0) {
+        const d = new Date(application.application_submitted_date)
+        d.setDate(d.getDate() + typicalDays)
+        expectedDecisionDate = d.toISOString().slice(0, 10)
+      }
+
       // Calculate task statistics
       const totalTasks = payerTasks.length
       const completedTasks = payerTasks.filter(t => t.task_status === 'completed').length
@@ -312,6 +329,7 @@ export async function GET(
 
         credentialing_handled_by: handledBy,
         covered_plans: coveredPlansMap.get(payerId) || [],
+        expected_decision_date: expectedDecisionDate,
 
         // Include workflow data (Phase 2 enhancement)
         workflow: workflow ? {
@@ -324,7 +342,8 @@ export async function GET(
           contact_phone: workflow.credentialing_contact_phone,
           form_template_url: workflow.form_template_url,
           form_template_filename: workflow.form_template_filename,
-          detailed_instructions: workflow.detailed_instructions
+          detailed_instructions: workflow.detailed_instructions,
+          typical_approval_days: workflow.typical_approval_days ?? null
         } : undefined
       })
     })

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Circle, Clock, AlertCircle, Ban, Calendar, FileText, ExternalLink, ChevronDown, ChevronRight, Mail, Download, Globe, List, Building2, Layers } from 'lucide-react'
+import { CheckCircle2, Circle, Clock, AlertCircle, Ban, Calendar, FileText, ExternalLink, ChevronDown, ChevronRight, Mail, Download, Globe, List, Building2, Layers, Hourglass, CalendarClock } from 'lucide-react'
 
 interface CredentialingTask {
   id: string
@@ -28,6 +28,7 @@ interface PayerTaskGroup {
   tasks: CredentialingTask[]
   credentialing_handled_by?: { id: string; name: string } | null
   covered_plans?: string[]
+  expected_decision_date?: string | null
   workflow?: {
     portal_url: string | null
     submission_method: string | null
@@ -39,6 +40,7 @@ interface PayerTaskGroup {
     form_template_url: string | null
     form_template_filename: string | null
     detailed_instructions: any | null
+    typical_approval_days?: number | null
   }
 }
 
@@ -231,7 +233,7 @@ export default function CredentialingTaskList({
             {/* Payer-level credentialing info: delegation, covered plans, and
                 workflow/instructions. Rendered once per payer (not per task) so
                 it shows even when a payer has no generated tasks yet. */}
-            {isExpanded && (group.credentialing_handled_by || (group.covered_plans && group.covered_plans.length > 0) || group.workflow) && (
+            {isExpanded && (group.credentialing_handled_by || (group.covered_plans && group.covered_plans.length > 0) || group.workflow || group.expected_decision_date) && (
               <div className="px-6 py-4 border-b border-gray-200 bg-white space-y-3">
                 {/* Delegated credentialing badge */}
                 {group.credentialing_handled_by && (
@@ -253,6 +255,29 @@ export default function CredentialingTaskList({
                       <span className="text-gray-900">{group.covered_plans.join(', ')}</span>
                       <p className="text-xs text-gray-500 mt-0.5">One credentialing/contract covers all listed plans.</p>
                     </div>
+                  </div>
+                )}
+
+                {/* Timeline: typical turnaround + expected decision */}
+                {((group.workflow?.typical_approval_days ?? 0) > 0 || group.expected_decision_date) && (
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                    {(group.workflow?.typical_approval_days ?? 0) > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Hourglass className="w-4 h-4 text-gray-500" />
+                        <span className="text-gray-600">Typical processing:</span>
+                        <span className="text-gray-900 font-medium">
+                          ~{Math.round((group.workflow!.typical_approval_days as number) / 7)} weeks
+                          <span className="text-gray-500 font-normal"> ({group.workflow!.typical_approval_days} days)</span>
+                        </span>
+                      </div>
+                    )}
+                    {group.expected_decision_date && (
+                      <div className="flex items-center gap-2">
+                        <CalendarClock className="w-4 h-4 text-gray-500" />
+                        <span className="text-gray-600">Expected decision:</span>
+                        <span className="text-gray-900 font-medium">{formatDate(group.expected_decision_date)}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 

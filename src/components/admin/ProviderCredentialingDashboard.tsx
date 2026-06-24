@@ -45,6 +45,7 @@ interface PayerTaskGroup {
   tasks: any[]
   credentialing_handled_by?: { id: string; name: string } | null
   covered_plans?: string[]
+  expected_decision_date?: string | null
   workflow?: any
 }
 
