@@ -49,10 +49,11 @@ export default function SupervisionSetupPanel({
   const [defaultAttending, setDefaultAttending] = useState<string>('')
   const [showAppliedMessage, setShowAppliedMessage] = useState(false)
 
-  // Load providers on component mount
+  // Load providers whenever the payer changes — eligible supervisors are
+  // payer-specific (they must be in-network for this payer).
   useEffect(() => {
     fetchProviders()
-  }, [])
+  }, [payerId])
 
   // Update parent when mappings change
   useEffect(() => {
@@ -62,12 +63,33 @@ export default function SupervisionSetupPanel({
   const fetchProviders = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/admin/providers', {
-        credentials: 'include' // Include cookies for auth
-      })
-      const result = await response.json()
 
-      if (response.ok && result.success) {
+      // Who can supervise is determined by contract status, not provider type:
+      // any provider with a direct in-network contract for THIS payer bills
+      // independently and can therefore supervise others under it. This mirrors
+      // v_bookable_provider_payer (the canonical source of truth) — see CLAUDE.md
+      // "billing independence is a contract, not a provider attribute". Fetch the
+      // provider list and this payer's contracts together.
+      const [providersResponse, contractsResponse] = await Promise.all([
+        fetch('/api/admin/providers', { credentials: 'include' }),
+        payerId && payerId !== 'new'
+          ? fetch(`/api/admin/payers/${payerId}/contracts`, { credentials: 'include' })
+          : Promise.resolve(null)
+      ])
+
+      const result = await providersResponse.json()
+
+      // Set of provider IDs holding a direct in-network contract for this payer.
+      // These are the eligible supervisors.
+      const inNetworkProviderIds = new Set<string>()
+      if (contractsResponse?.ok) {
+        const contractsResult = await contractsResponse.json()
+        for (const c of contractsResult.data || []) {
+          if (c.status === 'in_network') inNetworkProviderIds.add(c.provider_id)
+        }
+      }
+
+      if (providersResponse.ok && result.success) {
         // Map provider data from API format
         const providers: Provider[] = (result.data || []).map((p: any) => ({
           id: p.id,
@@ -84,36 +106,32 @@ export default function SupervisionSetupPanel({
         console.log('📋 All providers:', providers.map(p => ({
           name: `${p.first_name} ${p.last_name}`,
           provider_type: p.provider_type,
-          role: p.role
+          in_network: inNetworkProviderIds.has(p.id)
         })))
 
-        // Filter residents (those who need supervision) - use provider_type field
-        // Exclude test accounts (Miriam Admin, Test Practitioner)
-        const residentList = providers.filter(p => {
-          const isTestAccount =
-            p.first_name === 'Miriam' && p.last_name === 'Admin' ||
-            p.first_name === 'Test' && p.last_name === 'Practitioner'
+        const isTestAccount = (p: Provider) =>
+          (p.first_name === 'Miriam' && p.last_name === 'Admin') ||
+          (p.first_name === 'Test' && p.last_name === 'Practitioner')
 
-          return p.is_active &&
-            p.provider_type === 'resident physician' &&
-            !isTestAccount
-        })
+        // Supervisors: active providers with an in-network contract for this payer.
+        const attendingList = providers.filter(p =>
+          p.is_active && inNetworkProviderIds.has(p.id) && !isTestAccount(p)
+        )
 
-        // Filter attendings (those who can supervise) - use provider_type field
-        const attendingList = providers.filter(p => {
-          return p.is_active && p.provider_type === 'attending physician'
-        })
+        // Supervisees: active providers WITHOUT an in-network contract for this
+        // payer (they need supervision to bill under it). This is the dual of the
+        // supervisor rule, so the two lists are always disjoint — no provider can
+        // appear as both, and self-supervision is impossible.
+        const residentList = providers.filter(p =>
+          p.is_active && !inNetworkProviderIds.has(p.id) && !isTestAccount(p)
+        )
 
-        console.log(`✅ Found ${residentList.length} residents and ${attendingList.length} attendings`)
-        console.log('👨‍⚕️ Attendings:', attendingList.map(a => `${a.first_name} ${a.last_name} (${a.provider_type})`))
-        console.log('👨‍🎓 Residents:', residentList.map(r => `${r.first_name} ${r.last_name} (${r.provider_type})`))
+        console.log(`✅ Found ${residentList.length} potential supervisees and ${attendingList.length} eligible supervisors (in-network for this payer)`)
+        console.log('🩺 Supervisors:', attendingList.map(a => `${a.first_name} ${a.last_name} (${a.provider_type})`))
+        console.log('🧑‍⚕️ Supervisees:', residentList.map(r => `${r.first_name} ${r.last_name} (${r.provider_type})`))
 
         if (attendingList.length === 0) {
-          console.warn('⚠️ No attending physicians found. Please check that providers have provider_type = "attending physician"')
-        }
-
-        if (residentList.length === 0) {
-          console.warn('⚠️ No resident physicians found. Please check that providers have provider_type = "resident physician"')
+          console.warn('⚠️ No eligible supervisors found. A supervisor must have an in-network contract with this payer. Add the supervising provider\'s contract first.')
         }
 
         setResidents(residentList)
@@ -124,20 +142,12 @@ export default function SupervisionSetupPanel({
           setDefaultAttending(attendingList[0].id)
         }
 
-        // Initialize mappings from existing data
-        if (existingSupervision.length === 0 && allowsSupervised) {
-          // Auto-select all residents if this is a new setup
-          const initialMappings = residentList.map(resident => ({
-            resident_id: resident.id,
-            resident_name: `${resident.first_name} ${resident.last_name}`,
-            attending_id: defaultAttending || attendingList[0]?.id || '',
-            attending_name: attendingList[0] ? `${attendingList[0].first_name} ${attendingList[0].last_name}` : '',
-            supervision_type: 'general',
-            start_date: effectiveDate || new Date().toISOString().split('T')[0]
-          }))
-          setSupervisionMappings(initialMappings)
-          setSelectAll(true)
-        }
+        // Do NOT auto-select supervisees. The supervisee list is now "every
+        // active provider without an in-network contract for this payer," which
+        // is a broad set — auto-mapping all of them would silently create a flood
+        // of supervision relationships just by opening the editor. The admin picks
+        // supervisees explicitly (existing relationships are preloaded via the
+        // initial state from `existingSupervision`).
       }
     } catch (error) {
       console.error('❌ Error fetching providers:', error)
@@ -195,7 +205,7 @@ export default function SupervisionSetupPanel({
       // Select all with default attending
       const attending = attendings.find(a => a.id === defaultAttending) || attendings[0]
       if (!attending) {
-        alert('Please select a default attending first')
+        alert('Please select a default supervisor first')
         return
       }
 
@@ -214,7 +224,7 @@ export default function SupervisionSetupPanel({
 
   const applyDefaultAttendingToSelected = () => {
     if (!defaultAttending) {
-      alert('Please select a default attending first')
+      alert('Please select a default supervisor first')
       return
     }
 
@@ -266,7 +276,7 @@ export default function SupervisionSetupPanel({
             <div>
               <h3 className="font-semibold text-[#091747]">Supervision Setup</h3>
               <p className="text-sm text-gray-600">
-                Configure which residents can book under supervising attendings
+                Configure which providers can book under a supervising provider
               </p>
             </div>
           </div>
@@ -301,7 +311,7 @@ export default function SupervisionSetupPanel({
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-gray-700">Bulk Actions</h4>
                   <div className="text-sm text-gray-600">
-                    {supervisionMappings.length} of {residents.length} residents selected
+                    {supervisionMappings.length} of {residents.length} supervisees selected
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
@@ -314,13 +324,13 @@ export default function SupervisionSetupPanel({
                   </button>
 
                   <div className="flex items-center space-x-2">
-                    <label className="text-sm text-gray-600">Default Attending:</label>
+                    <label className="text-sm text-gray-600">Default Supervisor:</label>
                     <select
                       value={defaultAttending}
                       onChange={(e) => setDefaultAttending(e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
                     >
-                      <option value="">Select attending...</option>
+                      <option value="">Select supervisor...</option>
                       {attendings.map(attending => (
                         <option key={attending.id} value={attending.id}>
                           Dr. {attending.first_name} {attending.last_name}
@@ -386,13 +396,14 @@ export default function SupervisionSetupPanel({
 
               {/* Residents List */}
               <div className="space-y-2">
-                <h4 className="font-medium text-gray-700 mb-2">Add Resident Assignments</h4>
+                <h4 className="font-medium text-gray-700 mb-2">Add Supervisee Assignments</h4>
 
                 {residents.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-gray-600 font-medium mb-2">No active providers found</p>
+                    <p className="text-gray-600 font-medium mb-2">No supervisees available</p>
                     <p className="text-sm text-gray-500">
-                      No active providers were found in your database.
+                      Every active provider already has an in-network contract with this payer,
+                      so there is no one who needs supervision under it.
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       Check the browser console for details about available providers.
