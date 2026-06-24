@@ -41,6 +41,15 @@ interface PayerCredentialingProgress {
   // Tasks list
   tasks: CredentialingTask[]
 
+  // Delegated credentialing: when this payer's credentialing is performed via
+  // another payer's process (e.g. HealthyU (UUHP) -> UUHP). The workflow below is
+  // inherited from the handler. Contract/booking remain independent.
+  credentialing_handled_by?: { id: string; name: string } | null
+
+  // Plans covered by a single credentialing/contract with this payer (tracking
+  // only — booking is payer-level). e.g. the UUHP group plans.
+  covered_plans?: string[]
+
   // Workflow details (Phase 2 enhancement)
   workflow?: {
     portal_url: string | null
@@ -133,7 +142,7 @@ export async function GET(
 
     const { data: payers, error: payersError } = await supabaseAdmin
       .from('payers')
-      .select('id, name, payer_type, requires_individual_contract')
+      .select('id, name, payer_type, requires_individual_contract, credentialing_handled_by_payer_id')
       .in('id', payerIds)
 
     if (payersError) {
@@ -165,6 +174,63 @@ export async function GET(
       .in('payer_id', payerIds)
 
     const workflowMap = new Map(workflows?.map(w => [w.payer_id, w]))
+
+    // Step 4c: Resolve delegated credentialing. Some payers have their
+    // credentialing performed via another payer (credentialing_handled_by_payer_id,
+    // e.g. HealthyU (UUHP) -> UUHP). Such payers inherit the handler's workflow.
+    const handlerIds = [
+      ...new Set(
+        (payers || [])
+          .map(p => p.credentialing_handled_by_payer_id)
+          .filter((id): id is string => Boolean(id))
+      )
+    ]
+
+    const handlerNameMap = new Map<string, string>()
+    if (handlerIds.length > 0) {
+      const { data: handlerPayers } = await supabaseAdmin
+        .from('payers')
+        .select('id, name')
+        .in('id', handlerIds)
+      handlerPayers?.forEach(p => handlerNameMap.set(p.id, p.name))
+
+      // Fetch any handler workflows not already loaded above.
+      const missingWorkflowIds = handlerIds.filter(id => !workflowMap.has(id))
+      if (missingWorkflowIds.length > 0) {
+        const { data: handlerWorkflows } = await supabaseAdmin
+          .from('payer_credentialing_workflows')
+          .select(`
+            payer_id,
+            portal_url,
+            submission_method,
+            submission_email,
+            contact_type,
+            credentialing_contact_name,
+            credentialing_contact_email,
+            credentialing_contact_phone,
+            form_template_url,
+            form_template_filename,
+            detailed_instructions
+          `)
+          .in('payer_id', missingWorkflowIds)
+        handlerWorkflows?.forEach(w => workflowMap.set(w.payer_id, w))
+      }
+    }
+
+    // Step 4d: Plans covered by a single credentialing/contract per payer
+    // (tracking only — booking is payer-level).
+    const { data: payerPlans } = await supabaseAdmin
+      .from('payer_plans')
+      .select('payer_id, plan_name')
+      .in('payer_id', payerIds)
+      .eq('is_active', true)
+
+    const coveredPlansMap = new Map<string, string[]>()
+    payerPlans?.forEach(pl => {
+      const list = coveredPlansMap.get(pl.payer_id) || []
+      list.push(pl.plan_name)
+      coveredPlansMap.set(pl.payer_id, list)
+    })
 
     // Step 5: Group tasks by payer
     const tasksByPayer = new Map<string, CredentialingTask[]>()
@@ -205,7 +271,13 @@ export async function GET(
 
       const application = applications?.find(a => a.payer_id === payerId)
       const payerTasks = tasksByPayer.get(payerId) || []
-      const workflow = workflowMap.get(payerId)
+
+      // A delegated payer inherits its handler's workflow; otherwise use its own.
+      const handlerId = payer.credentialing_handled_by_payer_id
+      const workflow = handlerId ? workflowMap.get(handlerId) : workflowMap.get(payerId)
+      const handledBy = handlerId
+        ? { id: handlerId, name: handlerNameMap.get(handlerId) || payerMap.get(handlerId)?.name || 'Another payer' }
+        : null
 
       // Calculate task statistics
       const totalTasks = payerTasks.length
@@ -237,6 +309,9 @@ export async function GET(
         completion_percentage: completionPercentage,
 
         tasks: payerTasks,
+
+        credentialing_handled_by: handledBy,
+        covered_plans: coveredPlansMap.get(payerId) || [],
 
         // Include workflow data (Phase 2 enhancement)
         workflow: workflow ? {

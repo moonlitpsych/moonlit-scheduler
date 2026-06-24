@@ -20081,6 +20081,7 @@ export type Database = {
         Row: {
           allows_supervised: boolean
           behavioral_health_payer_id: string | null
+          credentialing_handled_by_payer_id: string | null
           change_of_address_status:
             | Database["public"]["Enums"]["change_of_address_status"]
             | null
@@ -20108,6 +20109,7 @@ export type Database = {
         Insert: {
           allows_supervised?: boolean
           behavioral_health_payer_id?: string | null
+          credentialing_handled_by_payer_id?: string | null
           change_of_address_status?:
             | Database["public"]["Enums"]["change_of_address_status"]
             | null
@@ -20135,6 +20137,7 @@ export type Database = {
         Update: {
           allows_supervised?: boolean
           behavioral_health_payer_id?: string | null
+          credentialing_handled_by_payer_id?: string | null
           change_of_address_status?:
             | Database["public"]["Enums"]["change_of_address_status"]
             | null

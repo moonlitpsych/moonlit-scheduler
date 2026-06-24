@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Circle, Clock, AlertCircle, Ban, Calendar, FileText, ExternalLink, ChevronDown, ChevronRight, Mail, Download, Globe, List } from 'lucide-react'
+import { CheckCircle2, Circle, Clock, AlertCircle, Ban, Calendar, FileText, ExternalLink, ChevronDown, ChevronRight, Mail, Download, Globe, List, Building2, Layers } from 'lucide-react'
 
 interface CredentialingTask {
   id: string
@@ -26,6 +26,8 @@ interface PayerTaskGroup {
   total_tasks: number
   completed_tasks: number
   tasks: CredentialingTask[]
+  credentialing_handled_by?: { id: string; name: string } | null
+  covered_plans?: string[]
   workflow?: {
     portal_url: string | null
     submission_method: string | null
@@ -226,6 +228,103 @@ export default function CredentialingTaskList({
               </div>
             </button>
 
+            {/* Payer-level credentialing info: delegation, covered plans, and
+                workflow/instructions. Rendered once per payer (not per task) so
+                it shows even when a payer has no generated tasks yet. */}
+            {isExpanded && (group.credentialing_handled_by || (group.covered_plans && group.covered_plans.length > 0) || group.workflow) && (
+              <div className="px-6 py-4 border-b border-gray-200 bg-white space-y-3">
+                {/* Delegated credentialing badge */}
+                {group.credentialing_handled_by && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <Building2 className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-amber-900">
+                      Credentialing handled by <span className="font-medium">{group.credentialing_handled_by.name}</span>
+                      {' '}— follow that process below. This is a separate contract &amp; fee schedule.
+                    </p>
+                  </div>
+                )}
+
+                {/* Covered plans */}
+                {group.covered_plans && group.covered_plans.length > 0 && (
+                  <div className="flex items-start gap-2 text-sm">
+                    <Layers className="w-4 h-4 text-indigo-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="text-gray-600">Covered plans: </span>
+                      <span className="text-gray-900">{group.covered_plans.join(', ')}</span>
+                      <p className="text-xs text-gray-500 mt-0.5">One credentialing/contract covers all listed plans.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Workflow info */}
+                {group.workflow && (
+                  <div className="space-y-2">
+                    {group.workflow.contact_email && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Mail className="w-4 h-4 text-indigo-600" />
+                        <span className="text-gray-600">Contact:</span>
+                        <a
+                          href={`mailto:${group.workflow.contact_email}`}
+                          className="text-indigo-600 hover:text-indigo-700 hover:underline"
+                        >
+                          {group.workflow.contact_name ? `${group.workflow.contact_name} (${group.workflow.contact_email})` : group.workflow.contact_email}
+                        </a>
+                      </div>
+                    )}
+
+                    {group.workflow.portal_url && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Globe className="w-4 h-4 text-blue-600" />
+                        <span className="text-gray-600">Portal:</span>
+                        <a
+                          href={group.workflow.portal_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                        >
+                          {group.workflow.portal_url}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    )}
+
+                    {group.workflow.form_template_url && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Download className="w-4 h-4 text-green-600" />
+                        <span className="text-gray-600">Form:</span>
+                        <a
+                          href={group.workflow.form_template_url}
+                          download={group.workflow.form_template_filename}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-green-600 hover:text-green-700 hover:underline flex items-center gap-1"
+                        >
+                          {group.workflow.form_template_filename}
+                          <Download className="w-3 h-3" />
+                        </a>
+                      </div>
+                    )}
+
+                    {group.workflow.detailed_instructions && Array.isArray(group.workflow.detailed_instructions) && (
+                      <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <List className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-blue-900 mb-1">Instructions:</p>
+                            <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                              {group.workflow.detailed_instructions.map((instruction: string, idx: number) => (
+                                <li key={idx}>{instruction}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Task list */}
             {isExpanded && (
               <div className="divide-y divide-gray-200">
@@ -253,77 +352,6 @@ export default function CredentialingTaskList({
                               </h4>
                               {task.description && (
                                 <p className="text-sm text-gray-600 mt-1">{task.description}</p>
-                              )}
-
-                              {/* Workflow Info */}
-                              {group.workflow && (
-                                <div className="mt-3 space-y-2">
-                                  {/* Contact Email */}
-                                  {group.workflow.contact_email && (
-                                    <div className="flex items-center gap-2 text-sm">
-                                      <Mail className="w-4 h-4 text-indigo-600" />
-                                      <span className="text-gray-600">Contact:</span>
-                                      <a
-                                        href={`mailto:${group.workflow.contact_email}`}
-                                        className="text-indigo-600 hover:text-indigo-700 hover:underline"
-                                      >
-                                        {group.workflow.contact_name ? `${group.workflow.contact_name} (${group.workflow.contact_email})` : group.workflow.contact_email}
-                                      </a>
-                                    </div>
-                                  )}
-
-                                  {/* Portal URL */}
-                                  {group.workflow.portal_url && (
-                                    <div className="flex items-center gap-2 text-sm">
-                                      <Globe className="w-4 h-4 text-blue-600" />
-                                      <span className="text-gray-600">Portal:</span>
-                                      <a
-                                        href={group.workflow.portal_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
-                                      >
-                                        {group.workflow.portal_url}
-                                        <ExternalLink className="w-3 h-3" />
-                                      </a>
-                                    </div>
-                                  )}
-
-                                  {/* Form Download - PDFs/Excel from Supabase Storage */}
-                                  {group.workflow.form_template_url && (
-                                    <div className="flex items-center gap-2 text-sm">
-                                      <Download className="w-4 h-4 text-green-600" />
-                                      <span className="text-gray-600">Form:</span>
-                                      <a
-                                        href={group.workflow.form_template_url}
-                                        download={group.workflow.form_template_filename}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-green-600 hover:text-green-700 hover:underline flex items-center gap-1"
-                                      >
-                                        {group.workflow.form_template_filename}
-                                        <Download className="w-3 h-3" />
-                                      </a>
-                                    </div>
-                                  )}
-
-                                  {/* Detailed Instructions */}
-                                  {group.workflow.detailed_instructions && Array.isArray(group.workflow.detailed_instructions) && (
-                                    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                      <div className="flex items-start gap-2">
-                                        <List className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                                        <div className="flex-1">
-                                          <p className="text-sm font-medium text-blue-900 mb-1">Instructions:</p>
-                                          <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                                            {group.workflow.detailed_instructions.map((instruction: string, idx: number) => (
-                                              <li key={idx}>{instruction}</li>
-                                            ))}
-                                          </ol>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
                               )}
 
                               {/* Dates */}

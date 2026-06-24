@@ -43,6 +43,9 @@ interface PayerTaskGroup {
   blocked_tasks: number
   completion_percentage: number
   tasks: any[]
+  credentialing_handled_by?: { id: string; name: string } | null
+  covered_plans?: string[]
+  workflow?: any
 }
 
 export default function ProviderCredentialingDashboard({
