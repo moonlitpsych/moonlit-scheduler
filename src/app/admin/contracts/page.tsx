@@ -62,12 +62,34 @@ export default function ContractsPage() {
   const [showPayerSelector, setShowPayerSelector] = useState(false)
   const [showPayerEditor, setShowPayerEditor] = useState(false)
   const [selectedPayer, setSelectedPayer] = useState<PayerOption | null>(null)
+  const [editorInitialTab, setEditorInitialTab] = useState<string | undefined>(undefined)
+  const [pendingDeepLink, setPendingDeepLink] = useState<{ payerId: string; tab?: string } | null>(null)
   const [lastRebuildTime, setLastRebuildTime] = useState<string | null>(null)
 
   // Fetch data
   useEffect(() => {
     fetchData()
   }, [])
+
+  // Deep link from /admin/bookability/coverage: ?payerId=...&tab=supervision opens
+  // the editor for that payer on the requested tab (read URL on the client only).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const payerId = params.get('payerId')
+    if (payerId) setPendingDeepLink({ payerId, tab: params.get('tab') || undefined })
+  }, [])
+
+  useEffect(() => {
+    if (pendingDeepLink && payers.length > 0) {
+      const payer = payers.find(p => p.id === pendingDeepLink.payerId)
+      if (payer) {
+        setSelectedPayer(payer)
+        setEditorInitialTab(pendingDeepLink.tab)
+        setShowPayerEditor(true)
+      }
+      setPendingDeepLink(null)
+    }
+  }, [pendingDeepLink, payers])
 
   const fetchData = async () => {
     try {
@@ -133,6 +155,7 @@ export default function ContractsPage() {
   const handlePayerEditorClose = () => {
     setShowPayerEditor(false)
     setSelectedPayer(null)
+    setEditorInitialTab(undefined)
   }
 
   const handleContractUpdate = () => {
@@ -140,6 +163,7 @@ export default function ContractsPage() {
     fetchData() // Refresh the contracts list
     setShowPayerEditor(false)
     setSelectedPayer(null)
+    setEditorInitialTab(undefined)
   }
 
   const filteredContracts = contracts.filter(contract => {
@@ -521,6 +545,7 @@ export default function ContractsPage() {
           isOpen={showPayerEditor}
           onClose={handlePayerEditorClose}
           onUpdate={handleContractUpdate}
+          initialTab={editorInitialTab as any}
         />
       )}
     </div>

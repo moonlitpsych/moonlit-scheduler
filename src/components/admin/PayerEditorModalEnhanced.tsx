@@ -37,12 +37,15 @@ interface Contract {
 }
 
 interface SupervisionMapping {
+  id?: string
   resident_id: string
   resident_name: string
   attending_id: string
   attending_name: string
   supervision_type: string
   start_date: string
+  end_date?: string | null
+  is_active?: boolean
 }
 
 interface PayerEditorModalEnhancedProps {
@@ -50,6 +53,7 @@ interface PayerEditorModalEnhancedProps {
   isOpen: boolean
   onClose: () => void
   onUpdate: () => void
+  initialTab?: TabType
 }
 
 const PAYER_TYPES = [
@@ -81,7 +85,8 @@ export default function PayerEditorModalEnhanced({
   payer,
   isOpen,
   onClose,
-  onUpdate
+  onUpdate,
+  initialTab
 }: PayerEditorModalEnhancedProps) {
   const [formData, setFormData] = useState<Payer>(payer)
   const [contracts, setContracts] = useState<Contract[]>([])
@@ -95,7 +100,7 @@ export default function PayerEditorModalEnhanced({
   const [initialPlanCount, setInitialPlanCount] = useState<number>(0)
   const [practiceQMapping, setPracticeQMapping] = useState<PracticeQMapping | null>(null)
   const [validationResults, setValidationResults] = useState<SanityCheckResults | null>(null)
-  const [activeTab, setActiveTab] = useState<TabType>('basic')
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'basic')
   const [loading, setLoading] = useState(false)
   const [showConfirmation, setShowConfirmation] = useState(false)
 
@@ -171,8 +176,23 @@ export default function PayerEditorModalEnhanced({
       if (supervisionResponse.ok) {
         const supervisionResult = await supervisionResponse.json()
         if (supervisionResult.success && supervisionResult.data) {
-          setInitialSupervisionCount(supervisionResult.data.length)
-          console.log(`📊 Loaded ${supervisionResult.data.length} existing supervision relationships`)
+          // Preload existing relationships into the editable state so the Supervision
+          // tab SHOWS reality (supervisor, dates, active status) instead of a blank
+          // panel. Without this the panel can't manage what already exists.
+          const mapped: SupervisionMapping[] = supervisionResult.data.map((r: any) => ({
+            id: r.id,
+            resident_id: r.supervised_provider_id,
+            resident_name: r.supervised_provider_name,
+            attending_id: r.supervising_provider_id,
+            attending_name: r.supervising_provider_name,
+            supervision_type: r.supervision_type || 'general',
+            start_date: r.start_date || r.effective_date || '',
+            end_date: r.end_date ?? null,
+            is_active: r.is_active ?? true
+          }))
+          setSupervisionMappings(mapped)
+          setInitialSupervisionCount(mapped.length)
+          console.log(`📊 Loaded ${mapped.length} existing supervision relationships`)
         }
       }
 

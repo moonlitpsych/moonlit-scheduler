@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, UserCheck, AlertCircle, ChevronDown, ChevronUp, CheckSquare, Square, X } from 'lucide-react'
+import { Users, UserCheck, AlertCircle, Plus, X, Calendar } from 'lucide-react'
 
 interface Provider {
   id: string
@@ -10,17 +10,18 @@ interface Provider {
   role: string
   provider_type: string | null
   is_active: boolean
-  is_bookable: boolean
-  accepts_new_patients: boolean
 }
 
 interface SupervisionMapping {
-  resident_id: string
+  id?: string                 // existing relationship id; absent = new/unsaved row
+  resident_id: string         // supervisee
   resident_name: string
-  attending_id: string
+  attending_id: string        // supervisor
   attending_name: string
   supervision_type: string
   start_date: string
+  end_date?: string | null    // null/'' = ongoing
+  is_active?: boolean         // false = ended/retired
 }
 
 interface SupervisionSetupPanelProps {
@@ -29,8 +30,15 @@ interface SupervisionSetupPanelProps {
   allowsSupervised: boolean
   supervisionLevel: string | null
   onSupervisionChange: (mappings: SupervisionMapping[]) => void
+  // Controlled value: the parent owns the list and preloads existing relationships.
   existingSupervision?: SupervisionMapping[]
 }
+
+const isTestAccount = (p: Provider) =>
+  (p.first_name === 'Miriam' && p.last_name === 'Admin') ||
+  (p.first_name === 'Test' && p.last_name === 'Practitioner')
+
+const today = () => new Date().toISOString().split('T')[0]
 
 export default function SupervisionSetupPanel({
   payerId,
@@ -40,214 +48,119 @@ export default function SupervisionSetupPanel({
   onSupervisionChange,
   existingSupervision = []
 }: SupervisionSetupPanelProps) {
-  const [residents, setResidents] = useState<Provider[]>([])
-  const [attendings, setAttendings] = useState<Provider[]>([])
-  const [supervisionMappings, setSupervisionMappings] = useState<SupervisionMapping[]>(existingSupervision)
+  const [providers, setProviders] = useState<Provider[]>([])
+  // Provider ids holding a direct in-network contract for THIS payer — the only
+  // providers eligible to SUPERVISE under it (billing independence is a contract,
+  // not a provider type; mirrors v_bookable_provider_payer). Date is intentionally
+  // not filtered here: a future-dated in-network contract still makes someone an
+  // eligible supervisor, and the bookability engine enforces the supervisor's
+  // contract dates at booking time.
+  const [eligibleSupervisorIds, setEligibleSupervisorIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState(true)
-  const [selectAll, setSelectAll] = useState(false)
-  const [defaultAttending, setDefaultAttending] = useState<string>('')
-  const [showAppliedMessage, setShowAppliedMessage] = useState(false)
 
-  // Load providers whenever the payer changes — eligible supervisors are
-  // payer-specific (they must be in-network for this payer).
+  // Draft for the "add relationship" form
+  const [draftSupervisee, setDraftSupervisee] = useState('')
+  const [draftSupervisor, setDraftSupervisor] = useState('')
+  const [draftStart, setDraftStart] = useState('')
+  const [draftEnd, setDraftEnd] = useState('')
+
+  // Controlled value + mutators — the parent is the single source of truth.
+  const value = existingSupervision
+  const updateRow = (index: number, patch: Partial<SupervisionMapping>) =>
+    onSupervisionChange(value.map((m, i) => (i === index ? { ...m, ...patch } : m)))
+  // For a SAVED row (has id) the ✗ ends it (deactivate + end-date today) — this
+  // persists on Apply. Hard delete is intentionally not available in the UI. For an
+  // unsaved/new row, the ✗ just removes it from the list.
+  const endOrRemove = (index: number) => {
+    const m = value[index]
+    if (m.id) {
+      updateRow(index, { is_active: false, end_date: m.end_date || today() })
+    } else {
+      onSupervisionChange(value.filter((_, i) => i !== index))
+    }
+  }
+
   useEffect(() => {
-    fetchProviders()
+    fetchData()
   }, [payerId])
 
-  // Update parent when mappings change
-  useEffect(() => {
-    onSupervisionChange(supervisionMappings)
-  }, [supervisionMappings])
-
-  const fetchProviders = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true)
-
-      // Who can supervise is determined by contract status, not provider type:
-      // any provider with a direct in-network contract for THIS payer bills
-      // independently and can therefore supervise others under it. This mirrors
-      // v_bookable_provider_payer (the canonical source of truth) — see CLAUDE.md
-      // "billing independence is a contract, not a provider attribute". Fetch the
-      // provider list and this payer's contracts together.
-      const [providersResponse, contractsResponse] = await Promise.all([
+      const [providersRes, contractsRes] = await Promise.all([
         fetch('/api/admin/providers', { credentials: 'include' }),
         payerId && payerId !== 'new'
           ? fetch(`/api/admin/payers/${payerId}/contracts`, { credentials: 'include' })
           : Promise.resolve(null)
       ])
 
-      const result = await providersResponse.json()
-
-      // Set of provider IDs holding a direct in-network contract for this payer.
-      // These are the eligible supervisors.
-      const inNetworkProviderIds = new Set<string>()
-      if (contractsResponse?.ok) {
-        const contractsResult = await contractsResponse.json()
-        for (const c of contractsResult.data || []) {
-          if (c.status === 'in_network') inNetworkProviderIds.add(c.provider_id)
-        }
-      }
-
-      if (providersResponse.ok && result.success) {
-        // Map provider data from API format
-        const providers: Provider[] = (result.data || []).map((p: any) => ({
+      const provResult = await providersRes.json()
+      if (providersRes.ok && provResult.success) {
+        setProviders((provResult.data || []).map((p: any) => ({
           id: p.id,
           first_name: p.first_name,
           last_name: p.last_name,
           role: p.role,
           provider_type: p.provider_type || null,
-          is_active: p.is_active ?? true,
-          is_bookable: p.is_bookable ?? true,
-          accepts_new_patients: true // API doesn't return this, assume true for admin
-        }))
-
-        // Log all providers to see what types we have
-        console.log('📋 All providers:', providers.map(p => ({
-          name: `${p.first_name} ${p.last_name}`,
-          provider_type: p.provider_type,
-          in_network: inNetworkProviderIds.has(p.id)
+          is_active: p.is_active ?? true
         })))
-
-        const isTestAccount = (p: Provider) =>
-          (p.first_name === 'Miriam' && p.last_name === 'Admin') ||
-          (p.first_name === 'Test' && p.last_name === 'Practitioner')
-
-        // Supervisors: active providers with an in-network contract for this payer.
-        const attendingList = providers.filter(p =>
-          p.is_active && inNetworkProviderIds.has(p.id) && !isTestAccount(p)
-        )
-
-        // Supervisees: active providers WITHOUT an in-network contract for this
-        // payer (they need supervision to bill under it). This is the dual of the
-        // supervisor rule, so the two lists are always disjoint — no provider can
-        // appear as both, and self-supervision is impossible.
-        const residentList = providers.filter(p =>
-          p.is_active && !inNetworkProviderIds.has(p.id) && !isTestAccount(p)
-        )
-
-        console.log(`✅ Found ${residentList.length} potential supervisees and ${attendingList.length} eligible supervisors (in-network for this payer)`)
-        console.log('🩺 Supervisors:', attendingList.map(a => `${a.first_name} ${a.last_name} (${a.provider_type})`))
-        console.log('🧑‍⚕️ Supervisees:', residentList.map(r => `${r.first_name} ${r.last_name} (${r.provider_type})`))
-
-        if (attendingList.length === 0) {
-          console.warn('⚠️ No eligible supervisors found. A supervisor must have an in-network contract with this payer. Add the supervising provider\'s contract first.')
-        }
-
-        setResidents(residentList)
-        setAttendings(attendingList)
-
-        // Set default attending if there's only one
-        if (attendingList.length === 1) {
-          setDefaultAttending(attendingList[0].id)
-        }
-
-        // Do NOT auto-select supervisees. The supervisee list is now "every
-        // active provider without an in-network contract for this payer," which
-        // is a broad set — auto-mapping all of them would silently create a flood
-        // of supervision relationships just by opening the editor. The admin picks
-        // supervisees explicitly (existing relationships are preloaded via the
-        // initial state from `existingSupervision`).
       }
+
+      const supIds = new Set<string>()
+      if (contractsRes?.ok) {
+        const contractsResult = await contractsRes.json()
+        for (const c of contractsResult.data || []) {
+          if (c.status === 'in_network') supIds.add(c.provider_id)
+        }
+      }
+      setEligibleSupervisorIds(supIds)
     } catch (error) {
-      console.error('❌ Error fetching providers:', error)
+      console.error('❌ Error loading supervision data:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleResidentToggle = (resident: Provider) => {
-    const residentName = `${resident.first_name} ${resident.last_name}`
-    const existingIndex = supervisionMappings.findIndex(m => m.resident_id === resident.id)
-
-    if (existingIndex >= 0) {
-      // Remove from mappings
-      const updated = supervisionMappings.filter(m => m.resident_id !== resident.id)
-      setSupervisionMappings(updated)
-    } else {
-      // Add to mappings with default or selected attending
-      const attending = attendings.find(a => a.id === defaultAttending) || attendings[0]
-      if (attending) {
-        setSupervisionMappings([...supervisionMappings, {
-          resident_id: resident.id,
-          resident_name: residentName,
-          attending_id: attending.id,
-          attending_name: `${attending.first_name} ${attending.last_name}`,
-          supervision_type: 'general',
-          start_date: effectiveDate || new Date().toISOString().split('T')[0]
-        }])
-      }
-    }
+  const nameOf = (id: string) => {
+    const p = providers.find(x => x.id === id)
+    return p ? `${p.first_name} ${p.last_name}` : 'Unknown'
   }
 
-  const handleAttendingChange = (residentId: string, attendingId: string) => {
-    const attending = attendings.find(a => a.id === attendingId)
-    if (!attending) return
+  const activeProviders = providers.filter(p => p.is_active && !isTestAccount(p))
 
-    setSupervisionMappings(supervisionMappings.map(mapping => {
-      if (mapping.resident_id === residentId) {
-        return {
-          ...mapping,
-          attending_id: attendingId,
-          attending_name: `${attending.first_name} ${attending.last_name}`
-        }
-      }
-      return mapping
-    }))
-  }
+  // Eligible supervisors (in-network for this payer). Defensive: always include any
+  // supervisor already referenced by a row so the select renders correctly even if
+  // their contract isn't returned for some reason.
+  const referencedSupervisorIds = new Set(value.map(m => m.attending_id))
+  const supervisorOptions = activeProviders.filter(
+    p => eligibleSupervisorIds.has(p.id) || referencedSupervisorIds.has(p.id)
+  )
 
-  const handleSelectAll = () => {
-    if (selectAll) {
-      // Deselect all
-      setSupervisionMappings([])
-      setSelectAll(false)
-    } else {
-      // Select all with default attending
-      const attending = attendings.find(a => a.id === defaultAttending) || attendings[0]
-      if (!attending) {
-        alert('Please select a default supervisor first')
-        return
-      }
-
-      const allMappings = residents.map(resident => ({
-        resident_id: resident.id,
-        resident_name: `${resident.first_name} ${resident.last_name}`,
-        attending_id: attending.id,
-        attending_name: `${attending.first_name} ${attending.last_name}`,
+  const addRelationship = () => {
+    if (!draftSupervisee || !draftSupervisor) return
+    onSupervisionChange([
+      ...value,
+      {
+        resident_id: draftSupervisee,
+        resident_name: nameOf(draftSupervisee),
+        attending_id: draftSupervisor,
+        attending_name: nameOf(draftSupervisor),
         supervision_type: 'general',
-        start_date: effectiveDate || new Date().toISOString().split('T')[0]
-      }))
-      setSupervisionMappings(allMappings)
-      setSelectAll(true)
-    }
+        start_date: draftStart || effectiveDate || today(),
+        end_date: draftEnd || null,
+        is_active: true
+      }
+    ])
+    setDraftSupervisee('')
+    setDraftSupervisor('')
+    setDraftStart('')
+    setDraftEnd('')
   }
 
-  const applyDefaultAttendingToSelected = () => {
-    if (!defaultAttending) {
-      alert('Please select a default supervisor first')
-      return
-    }
-
-    const attending = attendings.find(a => a.id === defaultAttending)
-    if (!attending) return
-
-    setSupervisionMappings(supervisionMappings.map(mapping => ({
-      ...mapping,
-      attending_id: attending.id,
-      attending_name: `${attending.first_name} ${attending.last_name}`
-    })))
-
-    // Show confirmation message
-    setShowAppliedMessage(true)
-    setTimeout(() => setShowAppliedMessage(false), 3000)
-  }
-
-  const isResidentSelected = (residentId: string) => {
-    return supervisionMappings.some(m => m.resident_id === residentId)
-  }
-
-  const getResidentAttending = (residentId: string) => {
-    return supervisionMappings.find(m => m.resident_id === residentId)?.attending_id || ''
+  const statusLabel = (m: SupervisionMapping) => {
+    if (m.is_active === false) return { text: m.end_date ? `Ended ${m.end_date}` : 'Ended', cls: 'bg-gray-100 text-gray-600' }
+    if (m.end_date) return { text: `Ends ${m.end_date}`, cls: 'bg-amber-100 text-amber-800' }
+    return { text: 'Ongoing', cls: 'bg-green-100 text-green-800' }
   }
 
   if (!allowsSupervised) {
@@ -258,7 +171,7 @@ export default function SupervisionSetupPanel({
           <div>
             <p className="font-medium">Supervision Not Enabled</p>
             <p className="text-sm text-gray-500 mt-1">
-              Enable "Allows Supervised Care" in the payer settings to configure supervision relationships.
+              Enable "Allows Supervised Care" in the Basic Info tab to configure supervision relationships.
             </p>
           </div>
         </div>
@@ -267,186 +180,212 @@ export default function SupervisionSetupPanel({
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Users className="h-5 w-5 text-[#BF9C73]" />
-            <div>
-              <h3 className="font-semibold text-[#091747]">Supervision Setup</h3>
-              <p className="text-sm text-gray-600">
-                Configure which providers can book under a supervising provider
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            {expanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-          </button>
-        </div>
-
-        {expanded && supervisionLevel && (
-          <div className="mt-3 px-3 py-2 bg-blue-50 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>Supervision Level:</strong> {supervisionLevel.replace(/_/g, ' ')}
+      <div className="flex items-start justify-between">
+        <div className="flex items-center space-x-3">
+          <Users className="h-5 w-5 text-[#BF9C73]" />
+          <div>
+            <h3 className="font-semibold text-[#091747]">Supervision Relationships</h3>
+            <p className="text-sm text-gray-600">
+              Who bills under a supervising provider for this payer, and for what date range.
             </p>
           </div>
+        </div>
+        {supervisionLevel && (
+          <span className="px-3 py-1 bg-blue-50 text-blue-800 text-sm rounded-lg whitespace-nowrap">
+            Level: {supervisionLevel.replace(/_/g, ' ')}
+          </span>
         )}
       </div>
 
-      {/* Content */}
-      {expanded && (
-        <div className="p-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#BF9C73]"></div>
-            </div>
-          ) : (
-            <>
-              {/* Bulk Actions */}
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium text-gray-700">Bulk Actions</h4>
-                  <div className="text-sm text-gray-600">
-                    {supervisionMappings.length} of {residents.length} supervisees selected
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <button
-                    onClick={handleSelectAll}
-                    className="flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    {selectAll ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                    <span className="text-sm">{selectAll ? 'Deselect All' : 'Select All'}</span>
-                  </button>
-
-                  <div className="flex items-center space-x-2">
-                    <label className="text-sm text-gray-600">Default Supervisor:</label>
-                    <select
-                      value={defaultAttending}
-                      onChange={(e) => setDefaultAttending(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
-                    >
-                      <option value="">Select supervisor...</option>
-                      {attendings.map(attending => (
-                        <option key={attending.id} value={attending.id}>
-                          Dr. {attending.first_name} {attending.last_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <button
-                    onClick={applyDefaultAttendingToSelected}
-                    disabled={!defaultAttending || supervisionMappings.length === 0}
-                    className="px-3 py-2 bg-[#BF9C73] text-white rounded-lg hover:bg-[#BF9C73]/90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Apply to Selected
-                  </button>
-
-                  {/* Confirmation message */}
-                  {showAppliedMessage && (
-                    <div className="flex items-center space-x-2 text-green-600 text-sm animate-fade-in">
-                      <CheckSquare className="h-4 w-4" />
-                      <span>Applied to {supervisionMappings.length} resident(s)</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Existing Supervision Relationships */}
-              {supervisionMappings.length > 0 && (
-                <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <h4 className="font-medium text-blue-900 mb-3">
-                    Current Supervision Relationships ({supervisionMappings.length})
-                  </h4>
-                  <div className="space-y-2">
-                    {supervisionMappings.map((mapping, index) => (
-                      <div
-                        key={`${mapping.resident_id}-${mapping.attending_id}`}
-                        className="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-200"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <UserCheck className="h-4 w-4 text-blue-600" />
-                          <div>
-                            <span className="font-medium text-[#091747]">{mapping.resident_name}</span>
-                            <span className="text-gray-600 mx-2">→</span>
-                            <span className="text-[#BF9C73]">{mapping.attending_name}</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            // Remove this relationship
-                            const updated = supervisionMappings.filter((_, i) => i !== index)
-                            setSupervisionMappings(updated)
-                          }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                          title="Remove supervision relationship"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Residents List */}
-              <div className="space-y-2">
-                <h4 className="font-medium text-gray-700 mb-2">Add Supervisee Assignments</h4>
-
-                {residents.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-gray-600 font-medium mb-2">No supervisees available</p>
-                    <p className="text-sm text-gray-500">
-                      Every active provider already has an in-network contract with this payer,
-                      so there is no one who needs supervision under it.
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Check the browser console for details about available providers.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid gap-2">
-                    {residents.map(resident => {
-                      const isSelected = isResidentSelected(resident.id)
-                      return (
-                        <div
-                          key={resident.id}
-                          className={`flex items-center justify-between p-3 rounded-lg border ${
-                            isSelected ? 'border-[#BF9C73] bg-[#BF9C73]/5' : 'border-gray-200 bg-white'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-3">
-                            <button
-                              onClick={() => handleResidentToggle(resident)}
-                              className="p-1"
-                            >
-                              {isSelected ? (
-                                <CheckSquare className="h-5 w-5 text-[#BF9C73]" />
-                              ) : (
-                                <Square className="h-5 w-5 text-gray-400" />
-                              )}
-                            </button>
-                            <div>
-                              <div className="font-medium text-[#091747]">
-                                Dr. {resident.first_name} {resident.last_name}
-                              </div>
-                              <div className="text-sm text-gray-600">{resident.role}</div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#BF9C73]" />
         </div>
+      ) : (
+        <>
+          {/* Current relationships */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium text-gray-700">Current relationships ({value.length})</h4>
+              <span className="text-xs text-gray-500">End-date a row to phase a supervisor out — history is preserved.</span>
+            </div>
+
+            {value.length === 0 ? (
+              <div className="text-center py-6 text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg">
+                No supervision relationships for this payer yet. Add one below.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {value.map((m, index) => {
+                  const status = statusLabel(m)
+                  return (
+                    <div
+                      key={m.id || `new-${index}`}
+                      className={`p-3 rounded-lg border ${m.is_active === false ? 'border-gray-200 bg-gray-50' : 'border-gray-200 bg-white'}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <UserCheck className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium text-[#091747]">{m.resident_name || nameOf(m.resident_id)}</span>
+                          {!m.id && (
+                            <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">New</span>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${status.cls}`}>{status.text}</span>
+                          <button
+                            onClick={() => endOrRemove(index)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded-full"
+                            title={m.id ? 'End this relationship (deactivate + end-date today). Saved on Apply.' : 'Remove this unsaved row'}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Supervised by</label>
+                          <select
+                            value={m.attending_id}
+                            onChange={(e) => updateRow(index, { attending_id: e.target.value, attending_name: nameOf(e.target.value) })}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
+                          >
+                            <option value="">Select supervisor…</option>
+                            {supervisorOptions.map(p => (
+                              <option key={p.id} value={p.id}>Dr. {p.first_name} {p.last_name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Start</label>
+                          <input
+                            type="date"
+                            value={m.start_date || ''}
+                            onChange={(e) => updateRow(index, { start_date: e.target.value })}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">End (blank = ongoing)</label>
+                          <div className="flex items-center space-x-1">
+                            <input
+                              type="date"
+                              value={m.end_date || ''}
+                              onChange={(e) => updateRow(index, { end_date: e.target.value || null, is_active: e.target.value ? m.is_active : true })}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Active toggle (retire without a future date) */}
+                      <div className="mt-2 flex items-center justify-end">
+                        <label className="flex items-center space-x-2 text-xs text-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={m.is_active !== false}
+                            onChange={(e) => updateRow(index, {
+                              is_active: e.target.checked,
+                              // Retiring without a future end date stamps end_date today.
+                              end_date: e.target.checked ? m.end_date : (m.end_date || today())
+                            })}
+                            className="w-3.5 h-3.5 text-[#BF9C73] border-gray-300 rounded"
+                          />
+                          <span>Active</span>
+                        </label>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Add relationship */}
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h4 className="font-medium text-gray-700 mb-3 flex items-center space-x-2">
+              <Plus className="h-4 w-4" />
+              <span>Add relationship</span>
+            </h4>
+
+            {supervisorOptions.length === 0 && (
+              <div className="mb-3 flex items-start space-x-2 text-sm text-amber-700 bg-amber-50 p-2 rounded">
+                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span>No eligible supervisors: a supervisor needs a direct in-network contract with this payer. Add their contract in the Provider Contracts tab first.</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Supervisee</label>
+                <select
+                  value={draftSupervisee}
+                  onChange={(e) => setDraftSupervisee(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
+                >
+                  <option value="">Select provider…</option>
+                  {activeProviders.map(p => (
+                    <option key={p.id} value={p.id}>Dr. {p.first_name} {p.last_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Supervised by</label>
+                <select
+                  value={draftSupervisor}
+                  onChange={(e) => setDraftSupervisor(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
+                >
+                  <option value="">Select supervisor…</option>
+                  {supervisorOptions.map(p => (
+                    <option key={p.id} value={p.id}>Dr. {p.first_name} {p.last_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Start</label>
+                <input
+                  type="date"
+                  value={draftStart}
+                  onChange={(e) => setDraftStart(e.target.value)}
+                  placeholder={effectiveDate || ''}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">End (optional)</label>
+                <input
+                  type="date"
+                  value={draftEnd}
+                  onChange={(e) => setDraftEnd(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#BF9C73]/20 focus:border-[#BF9C73]"
+                />
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-xs text-gray-500 flex items-center space-x-1">
+                <Calendar className="h-3.5 w-3.5" />
+                <span>Defaults to the payer effective date ({effectiveDate || 'today'}) if start is blank.</span>
+              </p>
+              <button
+                onClick={addRelationship}
+                disabled={!draftSupervisee || !draftSupervisor}
+                className="px-3 py-1.5 text-sm bg-[#BF9C73] text-white rounded-lg hover:bg-[#BF9C73]/90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-500">
+            Changes are staged here and persisted when you click <strong>Apply Contract</strong>. Ending a relationship
+            (setting an end date or unchecking Active) keeps the row for history — it is never hard-deleted.
+          </p>
+        </>
       )}
     </div>
   )

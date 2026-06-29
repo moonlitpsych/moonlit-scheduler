@@ -11,12 +11,16 @@ const supabase = createClient<Database>(
 )
 
 interface SupervisionSetup {
-  resident_id: string
+  id?: string                       // existing relationship id (update target); absent = create
+  resident_id: string               // supervisee
   resident_name: string
-  attending_id: string
+  attending_id: string              // supervisor
   attending_name: string
   supervision_type: string
   start_date: string
+  end_date?: string | null          // null/absent = ongoing
+  is_active?: boolean               // defaults true; false = retired/ended
+  supervision_level?: string | null // falls back to the payer-level default
 }
 
 interface ProviderContract {
@@ -60,6 +64,11 @@ interface ApplyContractRequest {
   practiceQMapping: PracticeQMapping | null
   auditNote: string
   runValidation?: boolean
+  // Opt-in, NON-destructive supervision reconcile. When true, supervision rows
+  // for this payer that are absent from `supervisionSetup` are END-DATED (not
+  // deleted). Defaults to false so a routine payer save can never remove
+  // supervision. See the supervision section below for the full rationale.
+  reconcileSupervision?: boolean
 }
 
 export async function POST(
@@ -87,6 +96,7 @@ export async function POST(
       contractsCreated: 0,
       contractsUpdated: 0,
       supervisionCreated: 0,
+      supervisionRetired: 0,
       serviceInstancesCreated: 0,
       serviceInstancesUpdated: 0,
       serviceInstancesDeleted: 0,
@@ -227,76 +237,124 @@ export async function POST(
       }
     }
 
-    // 3. MANAGE SUPERVISION RELATIONSHIPS (CREATE, UPDATE, DELETE)
-    // First, handle deletions - get existing relationships and delete any not in the new list
-    const { data: existingSupervision } = await supabase
-      .from('supervision_relationships')
-      .select('*')
-      .eq('payer_id', payerId)
+    // 3. MANAGE SUPERVISION RELATIONSHIPS (CREATE / UPDATE / RETIRE)
+    //
+    // ⚠️ SAFETY (Optum incident, 2026-06-26): this endpoint used to HARD-DELETE any
+    // supervision row whose (supervisor, supervisee) pair was absent from the
+    // submitted `supervisionSetup`. But that list is only a PARTIAL view of a payer's
+    // supervision — the editor lists residents who lack their own contract, and the
+    // modal never even loaded the existing rows — so an empty/partial submission read
+    // as "delete everything." Saving one provider's contract wiped all 8 of Optum's
+    // supervised relationships.
+    //
+    // New rules:
+    //   • Removal is OPT-IN (`reconcileSupervision === true`). A routine payer save
+    //     never removes supervision.
+    //   • Removal is NON-DESTRUCTIVE: we end-date + deactivate the row, preserving
+    //     history and recoverability. Bookability still stops going forward (the
+    //     bookable view requires is_active = true).
+    // Deliberate, date-bound phase-outs should set an explicit end_date through the
+    // supervision editor rather than relying on this reconcile.
+    if (body.reconcileSupervision === true) {
+      const { data: existingSupervision } = await supabase
+        .from('supervision_relationships')
+        .select('*')
+        .eq('payer_id', payerId)
+        .eq('is_active', true)
 
-    if (existingSupervision && existingSupervision.length > 0) {
-      console.log(`📋 Found ${existingSupervision.length} existing supervision relationships`)
-
-      // Find relationships to delete (exist in DB but not in new list)
-      for (const existing of existingSupervision) {
+      const today = new Date().toISOString().split('T')[0]
+      for (const existing of existingSupervision || []) {
         const stillExists = body.supervisionSetup.find(
           s => s.attending_id === existing.supervisor_provider_id &&
                s.resident_id === existing.supervisee_provider_id
         )
 
         if (!stillExists) {
-          console.log(`🗑️ Deleting supervision: ${existing.supervisee_provider_id} → ${existing.supervisor_provider_id}`)
-          const { error: deleteError } = await supabase
-            .from('supervision_relationships')
-            .delete()
-            .eq('id', existing.id)
-
-          if (!deleteError) {
-            results.supervisionDeleted = (results.supervisionDeleted || 0) + 1
-            auditEntries.push({
-              actorUserId: 'admin',
-              action: 'delete_supervision',
-              entity: 'supervision_relationships',
-              entityId: existing.id,
-              before: existing,
-              after: null,
-              note: `Supervision deleted via payer contract: ${body.auditNote}`
-            })
-          }
-        }
-      }
-    }
-
-    // Now create/update relationships from the new list
-    if (body.supervisionSetup.length > 0 && body.payerUpdates.allows_supervised) {
-      console.log(`📝 Processing ${body.supervisionSetup.length} supervision relationships...`)
-
-      for (const supervision of body.supervisionSetup) {
-        // Check if relationship already exists
-        const { data: existing } = await supabase
-          .from('supervision_relationships')
-          .select('*')
-          .eq('supervisor_provider_id', supervision.attending_id)
-          .eq('supervisee_provider_id', supervision.resident_id)
-          .eq('payer_id', payerId)
-          .single()
-
-        if (existing) {
-          // Update existing relationship if needed
-          const { data: updated, error: updateError } = await supabase
+          console.log(`📅 Retiring (end-dating) supervision: ${existing.supervisee_provider_id} → ${existing.supervisor_provider_id}`)
+          const { data: retired, error: retireError } = await supabase
             .from('supervision_relationships')
             .update({
-              supervision_type: supervision.supervision_type,
-              start_date: supervision.start_date,
-              is_active: true,
-              supervision_level: body.payerUpdates.supervision_level || 'sign_off_only',
+              is_active: false,
+              end_date: existing.end_date || today,
               updated_at: new Date().toISOString()
             })
             .eq('id', existing.id)
             .select()
             .single()
 
-          if (!updateError) {
+          if (!retireError) {
+            results.supervisionRetired++
+            auditEntries.push({
+              actorUserId: 'admin',
+              action: 'delete_supervision',
+              entity: 'supervision_relationships',
+              entityId: existing.id,
+              before: existing,
+              after: retired,
+              note: `Supervision retired (end-dated, non-destructive) via payer contract: ${body.auditNote}`
+            })
+          }
+        }
+      }
+    }
+
+    // Now create/update relationships from the submitted list. Each row carries its
+    // own date-bound fields (start_date, end_date, is_active, supervision_level) so a
+    // single save can both phase a supervisor out (set end_date / is_active=false) and
+    // phase another in (future start_date) — the Roller→Kaehler succession case.
+    if (body.supervisionSetup.length > 0 && body.payerUpdates.allows_supervised) {
+      console.log(`📝 Processing ${body.supervisionSetup.length} supervision relationships...`)
+
+      const defaultLevel = body.payerUpdates.supervision_level || 'sign_off_only'
+
+      for (const supervision of body.supervisionSetup) {
+        // Resolve the existing row: prefer the explicit id (precise), else fall back
+        // to the natural key (supervisor, supervisee, payer). maybeSingle() avoids the
+        // error .single() raises when there's no match.
+        let existing: any = null
+        if (supervision.id) {
+          const { data } = await supabase
+            .from('supervision_relationships')
+            .select('*')
+            .eq('id', supervision.id)
+            .maybeSingle()
+          existing = data
+        } else {
+          const { data } = await supabase
+            .from('supervision_relationships')
+            .select('*')
+            .eq('supervisor_provider_id', supervision.attending_id)
+            .eq('supervisee_provider_id', supervision.resident_id)
+            .eq('payer_id', payerId)
+            .maybeSingle()
+          existing = data
+        }
+
+        const rowValues = {
+          supervisor_provider_id: supervision.attending_id,
+          supervisee_provider_id: supervision.resident_id,
+          supervision_type: supervision.supervision_type || 'general',
+          start_date: supervision.start_date,
+          end_date: supervision.end_date ?? null,
+          is_active: supervision.is_active ?? true,
+          supervision_level: supervision.supervision_level || defaultLevel,
+          updated_at: new Date().toISOString()
+        }
+
+        if (existing) {
+          const { data: updated, error: updateError } = await supabase
+            .from('supervision_relationships')
+            .update(rowValues)
+            .eq('id', existing.id)
+            .select()
+            .single()
+
+          if (updateError) {
+            console.error('❌ Failed to update supervision:', updateError)
+            results.warnings.push(
+              `Failed to update supervision for ${supervision.resident_name} under ${supervision.attending_name}`
+            )
+          } else {
             auditEntries.push({
               actorUserId: 'admin',
               action: 'update_supervision',
@@ -308,24 +366,14 @@ export async function POST(
             })
           }
         } else {
-          // Create new supervision relationship
-          // Use the correct column names from the actual database schema
-          const supervisionData: any = {
-            payer_id: payerId,
-            supervisor_provider_id: supervision.attending_id,
-            supervisee_provider_id: supervision.resident_id,
-            supervision_type: supervision.supervision_type,
-            start_date: supervision.start_date,
-            is_active: true,
-            supervision_level: body.payerUpdates.supervision_level || 'sign_off_only',
-            notes: `Created via contract application: ${body.auditNote}`,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-
           const { data: created, error: createError } = await supabase
             .from('supervision_relationships')
-            .insert(supervisionData)
+            .insert({
+              ...rowValues,
+              payer_id: payerId,
+              notes: `Created via contract application: ${body.auditNote}`,
+              created_at: new Date().toISOString()
+            })
             .select()
             .single()
 

@@ -14,7 +14,9 @@ interface CoverageItem {
   effective_date: string | null
   expiration_date: string | null
   bookable_from_date: string | null
-  supervising_attendings?: string[]
+  // For supervised rows: the supervising attending (the view's billing_provider_id).
+  billing_provider_id?: string | null
+  supervisor_name?: string | null
 }
 
 export async function GET(request: NextRequest) {
@@ -63,6 +65,7 @@ export async function GET(request: NextRequest) {
           .select(`
             payer_id,
             network_status,
+            billing_provider_id,
             effective_date,
             expiration_date,
             bookable_from_date
@@ -95,6 +98,7 @@ export async function GET(request: NextRequest) {
         id: row.payer_id,
         name: payerMap.get(row.payer_id) || 'Unknown Payer',
         network_status: row.network_status,
+        billing_provider_id: row.billing_provider_id ?? null,
         effective_date: row.effective_date,
         expiration_date: row.expiration_date,
         bookable_from_date: row.bookable_from_date
@@ -124,6 +128,7 @@ export async function GET(request: NextRequest) {
           .select(`
             provider_id,
             network_status,
+            billing_provider_id,
             effective_date,
             expiration_date,
             bookable_from_date
@@ -156,11 +161,44 @@ export async function GET(request: NextRequest) {
         id: row.provider_id,
         name: providerMap.get(row.provider_id) || 'Unknown Provider',
         network_status: row.network_status,
+        billing_provider_id: row.billing_provider_id ?? null,
         effective_date: row.effective_date,
         expiration_date: row.expiration_date,
         bookable_from_date: row.bookable_from_date
       }))
     }
+
+    // Resolve supervising-attending names — only for supervised rows. (The asof RPC
+    // also populates billing_provider_id on direct rows with the provider's own id, so
+    // we must gate on network_status, not just billing_provider_id being present.)
+    const supervisorIds = [...new Set(
+      coverageData
+        .filter(r => r.network_status === 'supervised')
+        .map(r => r.billing_provider_id)
+        .filter((id): id is string => !!id)
+    )]
+    let supervisorMap = new Map<string, string>()
+    if (supervisorIds.length > 0) {
+      const { data: supervisors } = await supabaseAdmin
+        .from('providers')
+        .select('id, first_name, last_name')
+        .in('id', supervisorIds)
+      supervisorMap = new Map((supervisors || []).map(p => [p.id, `${p.first_name} ${p.last_name}`]))
+    }
+    coverageData = coverageData.map(r => ({
+      ...r,
+      supervisor_name: (r.network_status === 'supervised' && r.billing_provider_id)
+        ? (supervisorMap.get(r.billing_provider_id) || 'Unknown')
+        : null
+    }))
+
+    // Distinct active supervisors across supervised rows — answers "is there an
+    // active supervisor for this payer on this date?" at a glance.
+    const activeSupervisors = [...new Set(
+      coverageData
+        .filter(r => r.network_status === 'supervised' && r.supervisor_name)
+        .map(r => r.supervisor_name as string)
+    )]
 
     console.log(`✅ Successfully fetched ${coverageData.length} coverage relationships`)
 
@@ -174,7 +212,8 @@ export async function GET(request: NextRequest) {
         service_date: serviceDate,
         total_relationships: coverageData.length,
         direct_relationships: coverageData.filter(item => item.network_status === 'in_network').length,
-        supervised_relationships: coverageData.filter(item => item.network_status === 'supervised').length
+        supervised_relationships: coverageData.filter(item => item.network_status === 'supervised').length,
+        active_supervisors: activeSupervisors
       }
     })
 

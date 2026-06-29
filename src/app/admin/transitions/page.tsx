@@ -1,13 +1,16 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, AlertTriangle, RefreshCw, Plus, X, GraduationCap, Users } from 'lucide-react'
+import { Loader2, AlertTriangle, RefreshCw, Plus, X, GraduationCap, Users, Network } from 'lucide-react'
+import SupervisionManagementTab from '@/components/admin/SupervisionManagementTab'
 import {
   ProviderTransitionEnriched,
   TRANSITION_TYPE_LABELS,
   TRANSITION_STATUS_LABELS,
   ProviderTransitionType,
 } from '@/types/provider-transitions'
+
+type TopTab = 'transitions' | 'supervision'
 
 interface SuccessionCandidate {
   id: string
@@ -31,6 +34,7 @@ export default function TransitionsAdminPage() {
   const [error, setError] = useState<string | null>(null)
   const [openModal, setOpenModal] = useState<{ tx: ProviderTransitionEnriched; action: ActionType } | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [tab, setTab] = useState<TopTab>('transitions')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -48,31 +52,6 @@ export default function TransitionsAdminPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
-
-  if (loading && !data) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-[#BF9C73]" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="p-8">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-xl">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-red-800">Error</h3>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
-              <button onClick={load} className="mt-3 px-3 py-1.5 bg-red-600 text-white rounded text-sm">Retry</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   // Group open transitions by month
   const grouped = new Map<string, ProviderTransitionEnriched[]>()
@@ -92,26 +71,58 @@ export default function TransitionsAdminPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-[#091747] font-['Newsreader']">Provider Transitions</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Lifecycle changes (graduations, departures, leaves) — review and act on each.
+            Lifecycle changes (graduations, departures, leaves) and the supervision relationships they affect.
           </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={load} disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-300 rounded-lg hover:bg-stone-50 text-sm">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-          </button>
-          <button onClick={() => setShowNewModal(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-[#091747] text-white rounded-lg text-sm">
-            <Plus className="w-4 h-4" /> New Transition
-          </button>
-        </div>
+        {tab === 'transitions' && (
+          <div className="flex gap-2">
+            <button onClick={load} disabled={loading}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-stone-300 rounded-lg hover:bg-stone-50 text-sm">
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+            <button onClick={() => setShowNewModal(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-[#091747] text-white rounded-lg text-sm">
+              <Plus className="w-4 h-4" /> New Transition
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Top tab nav */}
+      <div className="flex gap-1 border-b border-stone-200 mb-6">
+        {([['transitions', 'Transitions', GraduationCap], ['supervision', 'Supervision', Network]] as const).map(([key, label, Icon]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors ${
+              tab === key ? 'border-[#BF9C73] text-[#BF9C73] font-medium' : 'border-transparent text-stone-600 hover:text-stone-800'
+            }`}>
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'supervision' && <SupervisionManagementTab />}
+
+      {tab === 'transitions' && error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+          <div>
+            <p className="text-sm text-red-700">{error}</p>
+            <button onClick={load} className="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm">Retry</button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'transitions' && loading && !data && (
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-[#BF9C73]" /></div>
+      )}
+
       {/* Open transitions */}
+      {tab === 'transitions' && data && (<>
+
       <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
         <div className="px-5 py-4 border-b border-stone-200 flex items-center gap-2">
           <GraduationCap className="w-4 h-4 text-[#BF9C73]" />
@@ -225,6 +236,8 @@ export default function TransitionsAdminPage() {
           )}
         </div>
       </div>
+
+      </>)}
 
       {openModal && (
         <ActionModal

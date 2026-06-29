@@ -27,9 +27,12 @@ export async function logAdminAudit(entry: AuditLogEntry): Promise<void> {
       timestamp: new Date().toISOString()
     })
 
-    // TODO: When admin_audit_log table is created, uncomment this:
-    /*
-    const { error } = await supabase
+    // Persist to admin_audit_log (migration 094). Best-effort: a logging failure
+    // must never block or roll back the underlying admin operation, so we record
+    // the error but do not throw. If the table is missing (migration not yet run),
+    // this no-ops gracefully via the catch below.
+    // Cast: admin_audit_log (migration 094) is not yet in the generated Database types.
+    const { error } = await (supabase as any)
       .from('admin_audit_log')
       .insert({
         actor_user_id: entry.actorUserId,
@@ -44,11 +47,9 @@ export async function logAdminAudit(entry: AuditLogEntry): Promise<void> {
 
     if (error) {
       console.error('❌ Failed to log audit entry:', error)
-      throw new Error('Audit logging failed')
+    } else {
+      console.log('✅ Audit entry logged successfully')
     }
-    */
-
-    console.log('✅ Audit entry logged successfully')
   } catch (error) {
     console.error('❌ Audit logging error:', error)
     // For now, don't throw to avoid blocking operations

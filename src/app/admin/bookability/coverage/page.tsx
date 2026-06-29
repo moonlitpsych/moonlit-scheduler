@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Users, Building, Calendar, Download } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Search, Users, Building, Calendar, Download, Edit3, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { loadProvidersForCoverageList, loadPayersForCoverageList, ProviderForCoverage } from '@/lib/data/providers'
 
 interface CoverageItem {
@@ -11,6 +12,8 @@ interface CoverageItem {
   effective_date: string | null
   expiration_date: string | null
   bookable_from_date: string | null
+  billing_provider_id?: string | null
+  supervisor_name?: string | null
 }
 
 interface CoverageMetadata {
@@ -21,9 +24,11 @@ interface CoverageMetadata {
   total_relationships: number
   direct_relationships: number
   supervised_relationships: number
+  active_supervisors?: string[]
 }
 
 export default function BookabilityCoveragePage() {
+  const router = useRouter()
   const [activeView, setActiveView] = useState<'provider' | 'payer'>('provider')
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [mode, setMode] = useState<'today' | 'service_date'>('today')
@@ -121,12 +126,13 @@ export default function BookabilityCoveragePage() {
     if (!selectedEntity || coverageData.length === 0) return
 
     const headers = activeView === 'provider'
-      ? ['Payer Name', 'Network Status', 'Effective Date', 'Expiration Date', 'Bookable From']
-      : ['Provider Name', 'Network Status', 'Effective Date', 'Expiration Date', 'Bookable From']
+      ? ['Payer Name', 'Network Status', 'Supervisor', 'Effective Date', 'Expiration Date', 'Bookable From']
+      : ['Provider Name', 'Network Status', 'Supervisor', 'Effective Date', 'Expiration Date', 'Bookable From']
 
     const rows = coverageData.map(item => [
       item.name,
       item.network_status === 'in_network' ? 'Direct' : 'Supervised',
+      item.network_status === 'supervised' ? (item.supervisor_name || 'Unknown') : '',
       item.effective_date ? new Date(item.effective_date).toLocaleDateString() : '',
       item.expiration_date ? new Date(item.expiration_date).toLocaleDateString() : '',
       item.bookable_from_date ? new Date(item.bookable_from_date).toLocaleDateString() : ''
@@ -290,6 +296,15 @@ export default function BookabilityCoveragePage() {
                   }
                 </span>
               </div>
+              {activeView === 'payer' && selectedEntity && (
+                <button
+                  onClick={() => router.push(`/admin/contracts?payerId=${selectedEntity.id}&tab=supervision`)}
+                  className="flex items-center space-x-2 px-3 py-2 text-sm border border-[#BF9C73] text-[#BF9C73] hover:bg-[#BF9C73]/10 rounded-lg transition-colors"
+                >
+                  <Edit3 className="h-4 w-4" />
+                  <span>Edit supervision</span>
+                </button>
+              )}
               {selectedEntity && coverageData.length > 0 && (
                 <button
                   onClick={exportCoverageData}
@@ -356,6 +371,28 @@ export default function BookabilityCoveragePage() {
                 </div>
               )}
 
+              {/* Supervisor-coverage banner (By Payer): answers "is there an active
+                  supervisor for this payer on this date, and who?" */}
+              {activeView === 'payer' && coverageMetadata && (
+                (coverageMetadata.active_supervisors && coverageMetadata.active_supervisors.length > 0) ? (
+                  <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 flex items-start space-x-2 text-sm text-blue-900">
+                    <ShieldCheck className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      <strong>Active supervisor{coverageMetadata.active_supervisors.length > 1 ? 's' : ''}</strong>{' '}
+                      {mode === 'today' ? 'today' : `on ${new Date(selectedDate).toLocaleDateString()}`}:{' '}
+                      {coverageMetadata.active_supervisors.join(', ')}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-start space-x-2 text-sm text-amber-900">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      No active supervisor {mode === 'today' ? 'today' : `on ${new Date(selectedDate).toLocaleDateString()}`} for this payer — no providers are bookable via supervision.
+                    </span>
+                  </div>
+                )
+              )}
+
               {/* Coverage Table */}
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -365,14 +402,15 @@ export default function BookabilityCoveragePage() {
                         {activeView === 'provider' ? 'Payer' : 'Provider'}
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-[#091747]">Network Status</th>
+                      <th className="px-4 py-3 text-left font-medium text-[#091747]">Supervisor</th>
                       <th className="px-4 py-3 text-left font-medium text-[#091747]">Effective Date</th>
                       <th className="px-4 py-3 text-left font-medium text-[#091747]">Expiration Date</th>
                       <th className="px-4 py-3 text-left font-medium text-[#091747]">Bookable From</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-200">
-                    {coverageData.map((item) => (
-                      <tr key={item.id} className="hover:bg-stone-50">
+                    {coverageData.map((item, idx) => (
+                      <tr key={`${item.id}-${item.network_status}-${item.billing_provider_id || 'direct'}-${idx}`} className="hover:bg-stone-50">
                         <td className="px-4 py-3">
                           <div className="font-medium text-[#091747]">{item.name}</div>
                         </td>
@@ -384,6 +422,11 @@ export default function BookabilityCoveragePage() {
                           }`}>
                             {item.network_status === 'in_network' ? 'Direct' : 'Supervised'}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-[#091747]">
+                          {item.network_status === 'supervised'
+                            ? (item.supervisor_name || 'Unknown')
+                            : <span className="text-[#091747]/40">—</span>}
                         </td>
                         <td className="px-4 py-3 text-sm text-[#091747]">
                           {item.effective_date ? new Date(item.effective_date).toLocaleDateString() : '-'}
